@@ -2,71 +2,133 @@
 
 ## Project Overview
 
-PhotoAIdent is a local, privacy-first desktop application for AI-powered face recognition and photo search. It scans a
-local photo library, detects and embeds faces using InsightFace/ArcFace, and provides a PySide6 desktop UI where the
-user progressively labels faces — assigning them to known persons or marking them as anonymous. Over time, the app
-learns who is in the collection and can suggest matches automatically.
+PhotoAIdent is a local, privacy-first desktop application for AI-powered face
+recognition and photo search. It scans a local photo library, detects and embeds
+faces using InsightFace/ArcFace, and provides a PySide6 desktop UI where the user
+progressively labels faces — assigning them to known persons or marking them as
+anonymous. Over time the app learns who is in the collection and surfaces match
+suggestions automatically.
 
 No cloud, no external API calls, no data leaves the machine.
 
+---
+
+## ⚠️ CRITICAL: Image Collection Is Read-Only
+
+**The app must NEVER write to, modify, move, rename, or delete any file in the
+user's image collection.**
+
+This is an absolute, non-negotiable constraint. The original photos are the user's
+irreplaceable personal archive spanning decades.
+
+- All output (databases, thumbnails, caches) goes to XDG directories (see below)
+- The indexer opens image files in read-only mode only
+- No file watcher, sync tool, or any subsystem touches image files
+- Any coding agent working on this project must never write code that performs
+  write operations on paths outside of `~/.local/share/photoaident/` and
+  `~/.cache/photoaident/`
+- If in doubt: **do not touch the image collection**
+
+---
+
+## Scale Characteristics
+
+The target collection is ~80,000 JPEG images spanning ~30 years. Key implications:
+
+- **Estimated face vectors:** ~240,000 (assuming ~3 faces/image average)
+- **FAISS index RAM usage:** ~500 MB (240k × 512 dims × 4 bytes)
+- **Face crop cache:** ~2.4 GB (240k crops × ~10 KB average)
+- **SQLite database:** comfortably small at this row count — no performance concern
+
+`IndexFlatIP` (exact search) is appropriate at this scale. Search over 240k vectors
+takes single-digit milliseconds on CPU. An approximate index (IVF/HNSW) is not
+needed and would only add complexity. Reassess if the collection grows beyond ~5M
+vectors.
+
+The 30-year span means a person's appearance changes dramatically. A single mean
+embedding per person will not work — see the **Embedding Clusters** section.
+
+---
+
+## XDG-Compliant File Locations
+
+PhotoAIdent follows the XDG Base Directory Specification for all runtime data.
+Nothing is written next to the binary or in the image collection.
+
+| Content                             | Path                                           |
+|-------------------------------------|------------------------------------------------|
+| User config (settings, preferences) | `~/.config/photoaident/config.toml`            |
+| SQLite database                     | `~/.local/share/photoaident/db/photoaident.db` |
+| FAISS index                         | `~/.local/share/photoaident/db/faiss.index`    |
+| Face crop thumbnails                | `~/.cache/photoaident/faces/<face_id>.jpg`     |
+| Photo thumbnails                    | `~/.cache/photoaident/thumbs/<image_hash>.jpg` |
+
+`~/.local/share/` is for data that should persist across reboots and is worth
+backing up. `~/.cache/` is for data that can be regenerated — thumbnails and face
+crops can be deleted and rebuilt by re-indexing.
+
+In code, always resolve these paths via a central `AppPaths` helper class rather
+than constructing them inline, so they can be overridden cleanly in tests.
+
+---
+
 ## Core User Workflow
 
-1. **Index** — user points the app at a folder. The app scans all images, detects
-   faces, computes embeddings, and stores everything locally. All faces start as
-   unidentified.
+1. **Index** — user points the app at a folder. The app scans all images
+   read-only, detects faces, computes embeddings, and stores everything in the
+   local database. All faces start as unidentified.
 
-2. **Label** — the app presents unidentified face crops to the user one by one (or
-   in clusters). The user assigns each face to a known person, creates a new person,
-   or marks the face as "anonymous" (a face the user doesn't care about identifying,
-   e.g. strangers in the background).
+2. **Label** — the app presents unidentified face crops to the user. The user
+   assigns each face to a known person, creates a new person, or marks it as
+   "anonymous" (a stranger the user doesn't want to track).
 
-3. **Propagate** — once a face is labelled, the app searches the rest of the index
-   for similar faces and suggests matches. The user confirms or rejects suggestions.
-   Confirmed matches become additional labelled embeddings for that person.
+3. **Propagate** — after a face is labelled, the suggestion engine finds similar
+   unidentified faces and queues them for fast confirm/reject review. Confirmed
+   suggestions grow the person's embedding cluster.
 
-4. **Search** — once persons are established, the user can filter the photo library
-   by person to find all photos containing them.
+4. **Search** — filter the photo library by person, date range, GPS area, and
+   eventually scene tags.
 
-Over many labelling sessions the unidentified face queue shrinks. It never needs to
-reach zero — the user only labels people they care about.
+---
 
-## Why a Single Mean Embedding Per Person Is Not Enough
+## Embedding Clusters (Multi-Era Persons)
 
-The photo collection spans roughly 20 years. A person's appearance changes
-dramatically over that time (babies → teenagers → adults). A single mean embedding
-would average out these differences and produce poor matches at the extremes.
+The 30-year span means a single mean embedding per person fails at the appearance
+extremes (baby → adult). Each person therefore has one or more **embedding
+clusters** — named groups representing distinct life stages or appearances.
 
-Instead, each person has **multiple embedding clusters** — groups of embeddings from
-different life stages or appearances. Matching is done against all clusters, and a
-face matches a person if it is within threshold distance of *any* of their clusters.
+A face matches a person if it is within the similarity threshold of **any** of
+their clusters. Clusters can be named manually ("childhood", "adult") or left
+unlabelled. New clusters can be added at any time as new eras are encountered.
 
-Clusters can be managed manually (user names them, e.g. "Alice — childhood",
-"Alice — adult") or grown automatically as labelled embeddings accumulate.
+---
 
 ## Face States
 
-Every detected face in the database has one of three states:
+- `unidentified` — no person assigned, appears in the labelling queue
+- `identified` — assigned to a person and cluster
+- `anonymous` — permanently dismissed, never shown in the queue again
 
-- **Unidentified** — no person assigned yet, will appear in the labelling queue
-- **Identified** — assigned to a known person
-- **Anonymous** — explicitly marked as "not interesting", excluded from the queue
-  and from search results
+---
 
 ## Tech Stack
 
-| Layer                      | Technology                                |
-|----------------------------|-------------------------------------------|
-| Language                   | Python 3.12                               |
-| UI                         | PySide6 6.10+                             |
-| Face detection & embedding | InsightFace (ArcFace model)               |
-| ML runtime                 | ONNX Runtime GPU (CUDA via NVIDIA driver) |
-| Vector search              | FAISS (faiss-cpu)                         |
-| Relational metadata        | SQLAlchemy + SQLite                       |
-| Package manager            | uv                                        |
-| Linter/formatter           | ruff, black                               |
-| Type checker               | ty                                        |
-| Testing                    | pytest, pytest-qt, pytest-cov             |
-| Distribution               | PyInstaller + appimagetool (AppImage)     |
+| Layer                      | Technology                        | Notes                      |
+|----------------------------|-----------------------------------|----------------------------|
+| Language                   | Python 3.12                       |                            |
+| UI                         | PySide6 6.10+                     |                            |
+| Face detection & embedding | InsightFace (ArcFace)             | GPU-accelerated            |
+| ML runtime                 | ONNX Runtime GPU                  | CUDA via NVIDIA driver     |
+| Vector search              | FAISS `IndexFlatIP`               | CPU, exact search          |
+| Relational metadata        | SQLAlchemy 2.0 + SQLite           |                            |
+| Schema migrations          | Alembic                           | Auto-applied at startup    |
+| Package manager            | uv                                |                            |
+| Linter/formatter           | ruff, black                       |                            |
+| Type checker               | ty                                |                            |
+| Testing                    | pytest, pytest-qt, pytest-alembic | In-memory SQLite for tests |
+| Distribution               | PyInstaller + appimagetool        | AppImage                   |
+
+---
 
 ## Project Structure
 
@@ -74,140 +136,124 @@ Every detected face in the database has one of three states:
 photo-aident/
 ├── src/photoaident/
 │   ├── __init__.py
-│   ├── __main__.py          # Entry point
-│   ├── app.py               # QApplication bootstrap
+│   ├── __main__.py              # Entry point
+│   ├── app.py                   # QApplication bootstrap, applies migrations
+│   ├── paths.py                 # AppPaths: XDG path resolution, test override
 │   ├── core/
-│   │   ├── indexer.py       # Scans image folders, drives the pipeline
-│   │   ├── embeddings.py    # InsightFace/ArcFace wrapper, returns 512-dim vectors
-│   │   ├── search.py        # Similarity search logic against FAISS index
-│   │   └── labeller.py      # Suggestion engine: given a face, find likely persons
+│   │   ├── indexer.py           # Scans folders read-only, drives pipeline
+│   │   ├── embeddings.py        # InsightFace/ArcFace wrapper
+│   │   ├── search.py            # Similarity search + metadata filter logic
+│   │   └── labeller.py          # Suggestion engine
 │   ├── db/
-│   │   ├── database.py      # SQLAlchemy models and session management
-│   │   └── vector_store.py  # FAISS index load/save/query wrapper
+│   │   ├── database.py          # SQLAlchemy models + session factory
+│   │   ├── migrations/          # Alembic migration scripts
+│   │   │   ├── env.py
+│   │   │   ├── script.py.mako
+│   │   │   └── versions/
+│   │   └── vector_store.py      # FAISS index wrapper
 │   ├── ui/
-│   │   ├── main_window.py   # QMainWindow shell with sidebar navigation
+│   │   ├── main_window.py
 │   │   ├── pages/
-│   │   │   ├── library.py   # Photo grid with search/filter UI
-│   │   │   ├── indexer.py   # Indexing progress page
-│   │   │   ├── labelling.py # Face labelling queue page
-│   │   │   └── persons.py   # Person and cluster management
+│   │   │   ├── library.py
+│   │   │   ├── indexer.py
+│   │   │   ├── labelling.py
+│   │   │   └── persons.py
 │   │   └── widgets/
 │   │       ├── thumbnail_grid.py
-│   │       ├── face_crop.py      # Displays a single face crop with action buttons
+│   │       ├── face_crop.py
 │   │       └── person_card.py
 │   └── utils/
-│       └── image_utils.py   # Thumbnail generation, face crop extraction, EXIF
-├── data/                    # Runtime data, gitignored
-│   ├── db/
-│   │   ├── photoaident.db   # SQLite database
-│   │   └── faiss.index      # Serialized FAISS index
-│   └── thumbnails/          # Cached thumbnails and face crops
-├── assets/
-│   └── icons/
-│       └── app.png
-├── scripts/
-│   ├── build.sh             # PyInstaller build
-│   └── build_appimage.sh    # AppImage packaging via appimagetool
-├── tools/
-│   └── appimagetool         # appimagetool binary, gitignored
+│       └── image_utils.py       # Read-only image helpers, EXIF, thumbnails
 ├── tests/
-├── photoaident.spec         # PyInstaller spec
+│   ├── conftest.py              # Shared fixtures: temp AppPaths, in-memory DB
+│   ├── test_database.py
+│   ├── test_vector_store.py
+│   ├── test_indexer.py
+│   ├── test_search.py
+│   ├── test_labeller.py
+│   └── fixtures/
+│       └── images/              # Small real JPEGs for integration tests
+├── alembic.ini
+├── photoaident.spec
 ├── pyproject.toml
 └── uv.lock
 ```
 
 ---
 
-## Database Schema (SQLite via SQLAlchemy)
+## Database Schema
 
-The schema is designed so that new analysis passes (metadata extraction, scenery
-classification, etc.) can be added later without touching existing tables or
-invalidating existing data. Each analysis concern lives in its own table.
+The schema is designed so that new analysis passes (metadata, scenery
+classification, GPS search) can be added later without touching existing tables.
+Each concern lives in its own table. Alembic manages all schema evolution.
 
 ### `images`
 
-Core record for an indexed image file. Intentionally lean — only identity and
-indexing state live here. All derived data goes in separate tables.
+Core record per indexed image file.
 
 - `id` — primary key
-- `file_path` — absolute path to the image (unique)
-- `file_hash` — SHA256 of file contents, used for deduplication and change detection
+- `file_path` — absolute path to image (unique, never modified by the app)
+- `file_hash` — SHA256 of file contents; used for deduplication and change
+  detection; reindexing is triggered when hash changes
 - `file_size` — bytes
-- `indexed_at` — timestamp when first indexed
-- `updated_at` — timestamp of last re-index (updated on each reindex pass)
-- `index_version` — integer, incremented each time this image is reprocessed;
-  allows querying which images were indexed with an older pipeline version
-
-The `index_version` column is the key to supporting future reindexing. When a new
-model or analysis pass is introduced, its results store their own `model_version`.
-Comparing the two tells you which images need reprocessing without touching
-unaffected records.
+- `indexed_at` — first indexed timestamp
+- `updated_at` — last reindex timestamp
+- `index_version` — integer, incremented on each reindex; compared against
+  per-face `model_version` to identify outdated embeddings
 
 ### `image_metadata`
 
-EXIF and filesystem metadata. Stored separately from `images` so it can be
-populated, updated, or skipped independently of face indexing.
+EXIF and filesystem metadata. Separate table so it can be populated, updated,
+or skipped independently of face indexing.
 
 - `id` — primary key
-- `image_id` — FK to `images` (unique — one metadata record per image)
-- `taken_at` — timestamp from EXIF DateTimeOriginal (nullable if not present)
+- `image_id` — FK to `images` (unique)
+- `taken_at` — datetime from EXIF `DateTimeOriginal` (nullable)
 - `taken_at_source` — enum: `exif` | `filesystem` | `manual`
-  (records where the timestamp came from, important for reliability)
-- `camera_make` — EXIF Make (nullable)
-- `camera_model` — EXIF Model (nullable)
+- `camera_make` — nullable
+- `camera_model` — nullable
 - `gps_lat` — decimal degrees, nullable
 - `gps_lon` — decimal degrees, nullable
 - `gps_altitude` — metres, nullable
-- `gps_source` — enum: `exif` | `manual` (nullable)
-- `width` — image width in pixels
-- `height` — image height in pixels
-- `orientation` — EXIF orientation value (1–8)
+- `width` / `height` — pixels
+- `orientation` — EXIF value 1–8
 
-**Indexes for efficient filtering:**
-
-- `idx_metadata_taken_at` on `taken_at` — date range queries
-- `idx_metadata_gps` on `(gps_lat, gps_lon)` — bounding box GPS queries
-  (for future map-based search; exact spatial indexing via R-tree can be added
-  later if needed)
+**Indexes:** `idx_metadata_taken_at` on `taken_at`; `idx_metadata_gps` on
+`(gps_lat, gps_lon)` for bounding-box GPS queries.
 
 ### `image_tags`
 
-Flat key-value store for future scenery classification labels and any other
-per-image tags. Avoids schema changes when new tag types are introduced.
+Key-value store for future per-image classification labels. Adding a new
+classifier (scenery, event type, season) means writing new rows here — no
+schema migration required.
 
 - `id` — primary key
 - `image_id` — FK to `images`
-- `tag_key` — e.g. `scene:indoor`, `scene:beach`, `event:party`, `season:summer`
-- `tag_value` — float confidence score (0.0–1.0) or string for manual tags
+- `tag_key` — e.g. `scene:beach`, `event:party`, `season:summer`
+- `tag_value` — float confidence (0.0–1.0) or string for manual tags
 - `tag_source` — enum: `model` | `manual`
-- `model_name` — name and version of the model that produced this tag (nullable
-  for manual tags), e.g. `scenery-v1`
+- `model_name` — model identifier for `model` tags, e.g. `scenery-v1` (nullable)
 - `created_at` — timestamp
 
-**Index:** `idx_tags_key_value` on `(tag_key, tag_value)` — efficient filtering
-by tag type and minimum confidence threshold.
-
-This table is not used yet but is created from day one. Adding a new classifier
-later means writing new rows here — no migration needed.
+**Index:** `idx_tags_key_value` on `(tag_key, tag_value)`.
 
 ### `faces`
 
-A single detected face within an image.
+One row per detected face in an image.
 
 - `id` — primary key
 - `image_id` — FK to `images`
-- `faiss_id` — integer index into the FAISS vector index
-- `bbox_x, bbox_y, bbox_w, bbox_h` — bounding box in the source image (pixels)
-- `detection_confidence` — float, confidence score from the detector
+- `faiss_id` — position in FAISS index (stable link between SQLite and FAISS)
+- `bbox_x, bbox_y, bbox_w, bbox_h` — bounding box in source image (pixels)
+- `detection_confidence` — float
 - `person_id` — FK to `persons`, nullable
 - `cluster_id` — FK to `embedding_clusters`, nullable
 - `state` — enum: `unidentified` | `identified` | `anonymous`
 - `labelled_at` — timestamp of last manual action
-- `model_version` — version string of the embedding model used to produce this
-  face's embedding, e.g. `arcface-r100-v1`; allows targeted reindexing when the
-  model is upgraded
+- `model_version` — embedding model version string, e.g. `arcface-r100-v1`;
+  used to identify faces that need reindexing when the model is upgraded
 
-**Index:** `idx_faces_state` on `state` — fast queue queries for unidentified faces.
+**Indexes:** `idx_faces_state` on `state`; `idx_faces_image` on `image_id`.
 
 ### `persons`
 
@@ -220,168 +266,241 @@ A named person the user cares about identifying.
 
 ### `embedding_clusters`
 
-A named group of embeddings for a person, representing a distinct life stage
-or appearance era. A person has one or more clusters.
+A named group of embeddings for a person representing a life stage or appearance
+era. Each person has one or more clusters.
 
 - `id` — primary key
 - `person_id` — FK to `persons`
-- `label` — optional name, e.g. "childhood", "adult" (nullable = auto)
+- `label` — optional name, e.g. "childhood" (nullable)
 - `created_at` — timestamp
 
-The cluster's effective embedding for matching is the mean of all face embeddings
-assigned to it, computed at query time from the FAISS vectors.
+The cluster's effective embedding for search is computed as the mean of all
+`identified` face embeddings assigned to it, fetched from FAISS at query time.
 
 ### `suggestions`
 
-Pending match suggestions generated by the labeller engine.
+Pending match suggestions from the labeller engine.
 
 - `id` — primary key
-- `face_id` — FK to `faces` (the unidentified face)
+- `face_id` — FK to `faces`
 - `person_id` — FK to `persons`
 - `cluster_id` — FK to `embedding_clusters`
-- `similarity_score` — cosine similarity 0.0–1.0
+- `similarity_score` — float
 - `state` — enum: `pending` | `confirmed` | `rejected`
 - `created_at` — timestamp
 
 ---
 
+## Schema Migrations (Alembic)
+
+Migrations run automatically at app startup — the user never runs CLI commands.
+
+```python
+# app.py — called before the main window is shown
+from alembic.config import Config
+from alembic import command
+
+
+def apply_migrations(db_url: str) -> None:
+    cfg = Config()
+    cfg.set_main_option("script_location", "photoaident.db:migrations")
+    cfg.set_main_option("sqlalchemy.url", db_url)
+    command.upgrade(cfg, "head")
+```
+
+To generate a new migration after changing models:
+
+```bash
+uv run alembic revision --autogenerate -m "describe the change"
+```
+
+Always review autogenerated migrations before committing — Alembic's SQLite
+support requires `render_as_batch=True` in `env.py` for column alterations.
+
+---
+
 ## Reindexing Strategy
 
-Reindexing must be possible without losing labelling work (person assignments,
-cluster memberships, anonymous flags). The schema supports this as follows:
+Reindexing re-runs face detection and embedding on already-indexed images without
+losing any labelling work.
 
-**What reindexing means:**
+**Triggers:**
 
-- Re-running face detection + embedding on images already in the database
-- Triggered when: a new model version is deployed, detection parameters change,
-  or the user explicitly requests it
+- User explicitly requests full reindex
+- A new embedding model version is deployed (`model_version` mismatch)
+- File hash changes (file was modified externally — though the collection should
+  never be touched, external tools might update EXIF)
 
-**What must be preserved across reindexing:**
+**What is always preserved:**
 
 - All `Person` and `EmbeddingCluster` records
-- All `Face` records where `state = identified` or `state = anonymous`
+- All face assignments (`state = identified`) and dismissals (`state = anonymous`)
+- All `image_metadata` and `image_tags` records
 - All `Suggestion` records
-- All `image_metadata` records
-- All `image_tags` records
 
-**Reindex algorithm:**
+**Reindex algorithm per image:**
 
-1. Query images where `faces.model_version != current_model_version`
-   (or all images if full reindex requested)
-2. For each such image, run detection + embedding again
-3. For each newly detected face:
-    - If a face at approximately the same bounding box already exists with
-      `state = identified` or `state = anonymous`: update its `faiss_id` and
-      `model_version`, preserve all labelling
-    - If a face at approximately the same bounding box exists with
-      `state = unidentified`: replace embedding in FAISS, update `faiss_id`
-    - If a face is newly detected (no bbox match): insert as unidentified
-    - If an old face has no bbox match in the new detection: mark as deleted
-      (soft delete — add `deleted_at` column) so labelling history is preserved
-4. Update `images.index_version` and `images.updated_at`
-
-Bounding box matching uses a configurable IoU (intersection over union) threshold
-(default 0.5) to account for minor detector differences between model versions.
+1. Run detection + embedding on the image (read-only file access)
+2. Match new detections to existing face records by bounding box IoU ≥ 0.5
+3. For matched faces: update `faiss_id` and `model_version`, preserve state and
+   person assignment
+4. For new detections (no match): insert as `unidentified`
+5. For old faces with no detection match: soft-delete (`deleted_at` timestamp),
+   preserving history
+6. Update `images.index_version` and `images.updated_at`
 
 ---
 
-## Core Pipeline
+## Search Strategy
 
-### Indexing
+Search always combines FAISS (face similarity) with SQLite (metadata filters):
 
-1. Walk target directory recursively for image files (jpg, jpeg, png, webp, tiff)
-2. Skip unchanged files via SHA256 hash check (hash unchanged = file unchanged)
-3. For each image:
-   a. Extract and store EXIF/metadata into `image_metadata`
-   b. Detect faces via InsightFace RetinaFace
-   c. For each face: compute 512-dim ArcFace embedding, L2-normalise
-   d. Store embedding in FAISS, store face record with `state = unidentified`
-   and current `model_version`
-   e. Extract and cache face crop to `data/thumbnails/faces/<face_id>.jpg`
-4. Run in a `QThread`, emit progress signals
+1. FAISS query returns candidate `faiss_id` list for the selected person/cluster
+2. SQLite JOIN resolves face → image → image_metadata → image_tags
+3. Metadata predicates applied in SQL (date range, GPS bbox, tag confidence)
+4. Results deduplicated by image, returned to UI
 
-### Labelling Queue
-
-1. Query all `faces` with `state = unidentified`, ordered by
-   `image_metadata.taken_at` ascending (oldest photos first)
-2. Present face crop + source photo context to user
-3. User action: assign to person/cluster | new person | anonymous | skip
-4. After assignment: trigger suggestion engine in background
-
-### Suggestion Engine (`core/labeller.py`)
-
-1. Compute mean embedding of the updated cluster
-2. Query FAISS for N nearest unidentified faces within threshold
-3. Write pending `Suggestion` records
-4. UI presents suggestions as a confirm/reject review queue
-
-### Search
-
-1. User selects person (+ optional cluster) and any metadata filters
-   (date range, GPS bounding box, tags)
-2. FAISS query returns candidate face records
-3. Filter candidates through SQLite JOIN with `image_metadata` and `image_tags`
-   applying the metadata predicates
-4. Deduplicate by image, return results to UI
-
-**Note on filtering order:** FAISS search is fast even at scale, so the pattern is
-FAISS first (face similarity) → SQLite filter (metadata). For pure metadata queries
-with no person filter (future feature), go directly to SQLite which has the indexes.
+For pure metadata queries with no person filter (future feature): skip FAISS,
+query SQLite directly using the metadata indexes.
 
 ---
 
-## Matching Strategy
+## Zero-Install Development & Testing
 
-- Embeddings are L2-normalised so inner product = cosine similarity
-- `faiss.IndexFlatIP` — exact search, appropriate for home collection sizes
-- A face matches a person if within threshold of **any** of their clusters
-- Default similarity threshold: 0.5 (tunable per person)
+No external database server is required at any point. SQLite is embedded.
+
+**`paths.py` — central path resolver:**
+
+```python
+# Can be pointed at a temp directory in tests
+class AppPaths:
+    def __init__(self, base_data: Path | None = None, base_cache: Path | None = None):
+        self.data = base_data or Path.home() / ".local/share/photoaident"
+        self.cache = base_cache or Path.home() / ".cache/photoaident"
+        self.config = Path.home() / ".config/photoaident"
+
+    @property
+    def db_path(self) -> Path:
+        return self.data / "db" / "photoaident.db"
+
+    @property
+    def faiss_path(self) -> Path:
+        return self.data / "db" / "faiss.index"
+
+    @property
+    def face_crops_dir(self) -> Path:
+        return self.cache / "faces"
+
+    @property
+    def thumbs_dir(self) -> Path:
+        return self.cache / "thumbs"
+```
+
+**`tests/conftest.py` — shared fixtures:**
+
+```python
+import pytest
+from pathlib import Path
+from photoaident.paths import AppPaths
+from photoaident.db.database import get_engine, apply_migrations
+
+
+@pytest.fixture(scope="session")
+def tmp_paths(tmp_path_factory) -> AppPaths:
+    """Isolated XDG paths for the test session — never touches real user data."""
+    base = tmp_path_factory.mktemp("photoaident")
+    paths = AppPaths(
+        base_data=base / "data",
+        base_cache=base / "cache",
+    )
+    paths.data.mkdir(parents=True, exist_ok=True)
+    paths.cache.mkdir(parents=True, exist_ok=True)
+    return paths
+
+
+@pytest.fixture(scope="session")
+def db_engine(tmp_paths):
+    """SQLite engine with all Alembic migrations applied."""
+    engine = get_engine(tmp_paths.db_path)
+    apply_migrations(str(tmp_paths.db_path))
+    return engine
+
+
+@pytest.fixture
+def db_session(db_engine):
+    """Per-test transactional session — rolls back after each test."""
+    from sqlalchemy.orm import Session
+    with db_engine.connect() as conn:
+        with conn.begin_nested() as savepoint:
+            session = Session(bind=conn)
+            yield session
+            session.close()
+            savepoint.rollback()
+
+
+@pytest.fixture(scope="session")
+def vector_store(tmp_paths):
+    from photoaident.db.vector_store import VectorStore
+    return VectorStore(tmp_paths.faiss_path)
+```
+
+Tests use `db_session` for full isolation — each test gets a clean transaction
+that is rolled back afterwards. Migrations run once per session. No server, no
+docker, no setup steps beyond `uv sync`.
 
 ---
 
-## Key Design Decisions
+## Test Coverage Targets
 
-- **Labelling is the primary input mechanism.** No separate reference photo upload.
-  Persons and embeddings grow from the labelling process.
-- **Multiple clusters per person** handle appearance changes over time.
-- **`image_tags` key-value table** means adding scenery classification, event
-  detection, or any other per-image labels in the future requires no schema
-  migration — just new rows with a new `tag_key`.
-- **`model_version` on `Face`** enables targeted reindexing: only faces produced
-  by an outdated model need reprocessing. Labelling is preserved.
-- **`image_metadata` is a separate table** so metadata extraction can be run,
-  re-run, or skipped independently of face indexing.
-- **FAISS index is append-only during indexing.** Deletions handled by soft-delete
-  in SQLite; the FAISS vector is ignored thereafter.
-- **GPU used only for InsightFace inference.** FAISS runs on CPU.
-- **Indexing runs in QThread.** Never block the main thread.
-- **Face crops pre-extracted and cached** at index time for fast labelling queue.
-- **Suggestions are non-destructive** — never auto-confirmed without user action.
+| Module               | Coverage target | Notes                                                 |
+|----------------------|-----------------|-------------------------------------------------------|
+| `db/database.py`     | 95%+            | Models, relations, state transitions                  |
+| `db/vector_store.py` | 95%+            | Add, search, persist, reload                          |
+| `core/indexer.py`    | 80%+            | Use fixture images; mock GPU calls                    |
+| `core/search.py`     | 90%+            | End-to-end with fixture data                          |
+| `core/labeller.py`   | 85%+            | Suggestion generation logic                           |
+| `paths.py`           | 100%            | Trivial but critical                                  |
+| `ui/`                | Best-effort     | pytest-qt for smoke tests; avoid testing Qt internals |
+
+GPU-dependent code (`embeddings.py`) should be covered by integration tests that
+are skipped when `CUDAExecutionProvider` is unavailable (`pytest.mark.gpu`).
+All other tests must run without a GPU.
 
 ---
 
 ## Development Commands
 
 ```bash
-uv sync                         # Install dependencies
-uv run photoaident              # Run the app
-uv run pytest                   # Run tests
-uv run ruff check src/          # Lint
-uv run ty check src/            # Type check
-./scripts/build.sh              # PyInstaller bundle
-./scripts/build_appimage.sh     # AppImage
+uv sync                              # Install all dependencies
+uv run photoaident                   # Run the app
+uv run pytest                        # All tests (no GPU required)
+uv run pytest -m gpu                 # GPU integration tests only
+uv run pytest --cov=photoaident      # With coverage report
+uv run ruff check src/               # Lint
+uv run ruff format src/              # Format
+uv run ty check src/                 # Type check
+uv run alembic revision --autogenerate -m "description"  # New migration
+uv run alembic upgrade head          # Apply migrations manually (dev use)
+./scripts/build.sh                   # PyInstaller bundle
+./scripts/build_appimage.sh          # AppImage
 ```
+
+---
 
 ## GPU / CUDA Notes
 
-- Requires NVIDIA GPU with driver 520+
-- ONNX Runtime GPU handles CUDA internally — no system CUDA toolkit needed
-- InsightFace automatically uses `CUDAExecutionProvider` when available
-- App works on CPU-only machines but indexing is significantly slower
-- GPU status shown in status bar at startup
+- Target: NVIDIA RTX 4070, driver 580, CUDA 13
+- ONNX Runtime GPU handles CUDA internally — no system `nvcc` needed
+- InsightFace selects `CUDAExecutionProvider` automatically when available
+- App works on CPU-only machines — indexing is slower but functional
+- GPU availability shown in the status bar at startup
+- All tests except `@pytest.mark.gpu` must pass on CPU-only CI
+
+---
 
 ## Distribution
 
-- PyInstaller bundles Python, Qt, InsightFace, FAISS, and all dependencies
-- Wrapped into `.AppImage` using `appimagetool` directly (not `appimage-builder`)
-- Host system provides: glibc, libGL/CUDA drivers, libxcb
+- PyInstaller bundles Python 3.12, PySide6, InsightFace, FAISS, and all deps
+- Wrapped into `.AppImage` via `appimagetool` (not `appimage-builder`)
+- Host provides: glibc, libGL/CUDA drivers, libxcb
+- CUDA on target machine: optional — app falls back to CPU gracefully
