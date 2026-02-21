@@ -48,8 +48,9 @@ ignore = []
 "tests/**/*" = ["F401", "F811"]
 
 [tool.pytest.ini_options]
-addopts = "-ra --cov=app --cov-report=term-missing:skip-covered --cov-report=xml --cov-report=html"
+addopts = "-ra --cov=photoaident --cov-report=term-missing:skip-covered --cov-report=xml --cov-report=html"
 testpaths = ["tests"]
+pythonpath = ["src"]
 filterwarnings = [
     "ignore::DeprecationWarning:testcontainers(\\.|$)",
 ]

@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Git pre-commit hook: run linting, format and type checks via uv
+# This hook requires `uv` to be installed and available on PATH.
+# It blocks the commit if any check fails.
+
+set -euo pipefail
+
+require_uv() {
+  if ! command -v uv >/dev/null 2>&1; then
+    echo "[pre-commit] Error: 'uv' is not installed or not on PATH." >&2
+    echo "- Install uv: https://github.com/astral-sh/uv#installation" >&2
+    echo "- Then install dev dependencies: uv sync" >&2
+    return 127
+  fi
+}
+
+run_ruff_check() {
+  echo "[pre-commit] Linting with Ruff..."
+  uv run ruff check .
+}
+
+run_black_check() {
+  echo "[pre-commit] Checking code formatting with Black..."
+  uv run black --check .
+}
+
+run_ty_check() {
+  echo "[pre-commit] Running static type checks with ty..."
+  uv run ty check
+}
+
+# Ensure uv is available
+require_uv
+
+# Run checks
+if ! run_black_check; then
+  echo
+  echo "[pre-commit] Black formatting check failed. Please format your code and try again."
+  echo "You can auto-format with: uv run black ."
+  exit 1
+fi
+
+if ! run_ruff_check; then
+  echo
+  echo "[pre-commit] Ruff linting failed. Please fix the reported issues and try again."
+  echo "You can run locally with: uv run ruff check ."
+  exit 1
+fi
+
+if ! run_ty_check; then
+  echo
+  echo "[pre-commit] ty check failed. Please fix type errors and try again."
+  echo "You can run locally with: uv run ty check"
+  exit 1
+fi
+
+exit 0

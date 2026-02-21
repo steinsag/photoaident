@@ -1,5 +1,6 @@
 import sys
-from PySide6 import QtCore, QtWidgets
+
+from PySide6 import QtWidgets
 
 from photoaident.app import MyWidget
 
