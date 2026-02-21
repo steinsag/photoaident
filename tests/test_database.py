@@ -1,3 +1,4 @@
+import sqlalchemy as sa
 from sqlalchemy.orm import Session
 
 from photoaident.db.database import (
@@ -143,3 +144,34 @@ def test_get_session_factory(db_engine):
     session = factory()
     assert isinstance(session, Session)
     session.close()
+
+
+def test_enum_case_consistency(db_session):
+    # Verify that SQLAlchemy correctly inserts and reads lowercase enum values
+    # consistent with our fixed migration schema.
+    img = Image(file_path="/test/enum_test.jpg", file_hash="hash", file_size=100)
+    db_session.add(img)
+    db_session.flush()
+
+    meta = ImageMetadata(
+        image_id=img.id,
+        taken_at_source=TakenAtSource.EXIF,
+        width=100,
+        height=100,
+    )
+    db_session.add(meta)
+    db_session.commit()
+
+    # Read back through SQLAlchemy
+    meta_read = db_session.query(ImageMetadata).filter_by(image_id=img.id).one()
+    assert meta_read.taken_at_source == TakenAtSource.EXIF
+    assert meta_read.taken_at_source.value == "exif"
+
+    # Check the raw value in the database to ensure it's lowercase 'exif'
+    # and NOT 'EXIF' (which would have been the case with the old migration)
+    raw_value = db_session.execute(
+        sa.text("SELECT taken_at_source FROM image_metadata WHERE image_id = :img_id"),
+        {"img_id": img.id},
+    ).scalar()
+    assert raw_value == "exif"
+    assert raw_value.islower()

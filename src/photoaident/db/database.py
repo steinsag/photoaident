@@ -101,7 +101,8 @@ class ImageMetadata(Base):
     )
     taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
     taken_at_source: Mapped[TakenAtSource] = mapped_column(
-        Enum(TakenAtSource), nullable=False
+        Enum(TakenAtSource, values_callable=lambda x: [e.value for e in x]),
+        nullable=False,
     )
     camera_make: Mapped[Optional[str]] = mapped_column(String)
     camera_model: Mapped[Optional[str]] = mapped_column(String)
@@ -136,7 +137,9 @@ class ImageTag(Base):
     tag_value: Mapped[str] = mapped_column(
         String, nullable=False
     )  # Stores float confidence as string if needed, or just string
-    tag_source: Mapped[TagSource] = mapped_column(Enum(TagSource), nullable=False)
+    tag_source: Mapped[TagSource] = mapped_column(
+        Enum(TagSource, values_callable=lambda x: [e.value for e in x]), nullable=False
+    )
     model_name: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -174,7 +177,9 @@ class Face(Base):
         ForeignKey("embedding_clusters.id")
     )
     state: Mapped[FaceState] = mapped_column(
-        Enum(FaceState), default=FaceState.UNIDENTIFIED, index=True
+        Enum(FaceState, values_callable=lambda x: [e.value for e in x]),
+        default=FaceState.UNIDENTIFIED,
+        index=True,
     )
     labelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     model_version: Mapped[str] = mapped_column(String, nullable=False)
@@ -257,7 +262,8 @@ class Suggestion(Base):
     )
     similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
     state: Mapped[SuggestionState] = mapped_column(
-        Enum(SuggestionState), default=SuggestionState.PENDING
+        Enum(SuggestionState, values_callable=lambda x: [e.value for e in x]),
+        default=SuggestionState.PENDING,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 

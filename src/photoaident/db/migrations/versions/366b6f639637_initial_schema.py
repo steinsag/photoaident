@@ -8,8 +8,8 @@ Create Date: 2026-02-21 23:18:30.420759
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "366b6f639637"
@@ -80,7 +80,7 @@ def upgrade() -> None:
         sa.Column("taken_at", sa.DateTime(), nullable=True),
         sa.Column(
             "taken_at_source",
-            sa.Enum("EXIF", "FILESYSTEM", "MANUAL", name="takenatsource"),
+            sa.Enum("exif", "filesystem", "manual", name="takenatsource"),
             nullable=False,
         ),
         sa.Column("camera_make", sa.String(), nullable=True),
@@ -110,7 +110,7 @@ def upgrade() -> None:
         sa.Column("tag_key", sa.String(), nullable=False),
         sa.Column("tag_value", sa.String(), nullable=False),
         sa.Column(
-            "tag_source", sa.Enum("MODEL", "MANUAL", name="tagsource"), nullable=False
+            "tag_source", sa.Enum("model", "manual", name="tagsource"), nullable=False
         ),
         sa.Column("model_name", sa.String(), nullable=True),
         sa.Column(
@@ -140,7 +140,7 @@ def upgrade() -> None:
         sa.Column("cluster_id", sa.Integer(), nullable=True),
         sa.Column(
             "state",
-            sa.Enum("UNIDENTIFIED", "IDENTIFIED", "ANONYMOUS", name="facestate"),
+            sa.Enum("unidentified", "identified", "anonymous", name="facestate"),
             nullable=False,
         ),
         sa.Column("labelled_at", sa.DateTime(), nullable=True),
@@ -175,7 +175,7 @@ def upgrade() -> None:
         sa.Column("similarity_score", sa.Float(), nullable=False),
         sa.Column(
             "state",
-            sa.Enum("PENDING", "CONFIRMED", "REJECTED", name="suggestionstate"),
+            sa.Enum("pending", "confirmed", "rejected", name="suggestionstate"),
             nullable=False,
         ),
         sa.Column(
