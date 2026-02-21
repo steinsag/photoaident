@@ -81,3 +81,8 @@ logs/
 # Misc
 *.swp
 *.swo
+
+.output.txt
+AppDir/
+appimage-builder-cache/
+PhotoAIdent-*-x86_64.AppImage

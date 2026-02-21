@@ -34,6 +34,7 @@ sources = ["src"]
 [tool.uv]
 dev-dependencies = [
     "black>=26.1.0",
+    "pyinstaller>=6.19.0",
     "pytest>=8.0.0",
     "pytest-cov>=7.0.0",
     "pytest-qt>=4.4.0",
