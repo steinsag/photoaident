@@ -369,32 +369,7 @@ query SQLite directly using the metadata indexes.
 
 No external database server is required at any point. SQLite is embedded.
 
-**`paths.py` — central path resolver:**
-
-```python
-# Can be pointed at a temp directory in tests
-class AppPaths:
-    def __init__(self, base_data: Path | None = None, base_cache: Path | None = None):
-        self.data = base_data or Path.home() / ".local/share/photoaident"
-        self.cache = base_cache or Path.home() / ".cache/photoaident"
-        self.config = Path.home() / ".config/photoaident"
-
-    @property
-    def db_path(self) -> Path:
-        return self.data / "db" / "photoaident.db"
-
-    @property
-    def faiss_path(self) -> Path:
-        return self.data / "db" / "faiss.index"
-
-    @property
-    def face_crops_dir(self) -> Path:
-        return self.cache / "faces"
-
-    @property
-    def thumbs_dir(self) -> Path:
-        return self.cache / "thumbs"
-```
+**`paths.py` — central path resolver**
 
 **`tests/conftest.py` — shared fixtures:**
 
@@ -481,7 +456,7 @@ uv run ruff format src/              # Format
 uv run ty check src/                 # Type check
 uv run alembic revision --autogenerate -m "description"  # New migration
 uv run alembic upgrade head          # Apply migrations manually (dev use)
-./scripts/build.sh                   # PyInstaller bundle
+./scripts/build_pyinstaller.sh       # PyInstaller bundle
 ./scripts/build_appimage.sh          # AppImage
 ```
 
