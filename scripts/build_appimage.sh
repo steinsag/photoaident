@@ -1,23 +1,46 @@
 #!/usr/bin/env bash
 set -e
 
-# First build the PyInstaller bundle
-#./scripts/build.sh
+echo "→ Building PyInstaller bundle..."
+./scripts/build_pyinstaller.sh
 
 echo "→ Preparing AppDir..."
+rm -rf AppDir
 mkdir -p AppDir/usr/bin
-cp dist/photoaident/photoaident AppDir/usr/bin/
-cp -r dist/photoaident/_internal AppDir/usr/bin/
-
 mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps/
-cp assets/icons/app.png AppDir/usr/share/icons/hicolor/256x256/apps/photoaident.png
+mkdir -p AppDir/usr/share/icons/hicolor/48x48/apps/
+mkdir -p AppDir/usr/share/applications/
 
-echo "→ Building AppImage via Docker..."
-docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -v "$(pwd)":/workspace:Z \
-    -w /workspace \
-    appimagecrafters/appimage-builder:latest \
-    appimage-builder --recipe AppImageBuilder.yml
+# Copy PyInstaller bundle
+cp -r dist/photoaident/* AppDir/usr/bin/
+
+# Icons
+cp assets/icons/app.png AppDir/usr/share/icons/hicolor/256x256/apps/photoaident.png
+cp assets/icons/app.png AppDir/usr/share/icons/hicolor/48x48/apps/photoaident.png
+cp assets/icons/app.png AppDir/photoaident.png  # required by appimagetool in root
+
+# Desktop file (required by appimagetool)
+cat > AppDir/usr/share/applications/photoaident.desktop << EOF
+[Desktop Entry]
+Type=Application
+Name=PhotoAIdent
+Exec=photoaident
+Icon=photoaident
+Categories=Graphics;Photography;
+EOF
+
+# Symlink desktop file and icon to AppDir root (appimagetool requires this)
+cp AppDir/usr/share/applications/photoaident.desktop AppDir/photoaident.desktop
+
+# AppRun - the entry point appimagetool calls
+cat > AppDir/AppRun << 'EOF'
+#!/bin/bash
+HERE="$(dirname "$(readlink -f "${0}")")"
+exec "$HERE/usr/bin/photoaident" "$@"
+EOF
+chmod +x AppDir/AppRun
+
+echo "→ Building AppImage..."
+ARCH=x86_64 appimagetool AppDir PhotoAIdent-0.1.0-x86_64.AppImage
 
 echo "→ Done! PhotoAIdent-0.1.0-x86_64.AppImage ready."

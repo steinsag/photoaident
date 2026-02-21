@@ -10,23 +10,8 @@ AppDir:
     exec: usr/bin/photoaident
     exec_args: "$@"
 
-  apt:
-    arch: amd64
-    include:
-      - libc6
-      - libglib2.0-0
-      - libnss3
-      - libx11-6
-    sources:
-      - sourceline: "deb [arch=amd64] http://archive.ubuntu.com/ubuntu jammy main"
-        key_url: "http://keyserver.ubuntu.com/pks/lookup?op=get&search=0x871920D1991BC93C"
-
   files:
     include:
-      - /bin/sh:bin/sh
-      - /bin/dash:bin/dash
-      - /usr/bin/env:usr/bin/env
-      - assets/:usr/share/photoaident/assets/
       - assets/icons/app.png:usr/share/icons/hicolor/256x256/apps/photoaident.png
       - assets/icons/app.png:usr/share/icons/hicolor/48x48/apps/photoaident.png
 
