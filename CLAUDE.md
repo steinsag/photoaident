@@ -200,107 +200,94 @@ The schema is designed so that new analysis passes (metadata, scenery
 classification, GPS search) can be added later without touching existing tables.
 Each concern lives in its own table. Alembic manages all schema evolution.
 
-### `images`
+```mermaid
+erDiagram
+    images ||--o| image_metadata : "1:1"
+    images ||--o{ image_tags : "1:N"
+    images ||--o{ faces : "1:N"
+    persons ||--o{ faces : "1:N"
+    persons ||--o{ embedding_clusters : "1:N"
+    persons ||--o{ suggestions : "1:N"
+    embedding_clusters ||--o{ faces : "1:N"
+    embedding_clusters ||--o{ suggestions : "1:N"
+    faces ||--o{ suggestions : "1:N"
 
-Core record per indexed image file.
+    images {
+        int id PK
+        string file_path UK
+        string file_hash "SHA256"
+        int file_size
+        datetime indexed_at
+        datetime updated_at
+        int index_version
+    }
 
-- `id` — primary key
-- `file_path` — absolute path to image (unique, never modified by the app)
-- `file_hash` — SHA256 of file contents; used for deduplication and change
-  detection; reindexing is triggered when hash changes
-- `file_size` — bytes
-- `indexed_at` — first indexed timestamp
-- `updated_at` — last reindex timestamp
-- `index_version` — integer, incremented on each reindex; compared against
-  per-face `model_version` to identify outdated embeddings
+    image_metadata {
+        int id PK
+        int image_id FK, UK
+        datetime taken_at
+        string taken_at_source "exif|filesystem|manual"
+        string camera_make
+        string camera_model
+        numeric gps_lat
+        numeric gps_lon
+        float gps_altitude
+        int width
+        int height
+        int orientation "EXIF 1-8"
+    }
 
-### `image_metadata`
+    image_tags {
+        int id PK
+        int image_id FK
+        string tag_key
+        string tag_value
+        string tag_source "model|manual"
+        string model_name
+        datetime created_at
+    }
 
-EXIF and filesystem metadata. Separate table so it can be populated, updated,
-or skipped independently of face indexing.
+    faces {
+        int id PK
+        int image_id FK
+        int faiss_id
+        int bbox_x
+        int bbox_y
+        int bbox_w
+        int bbox_h
+        float detection_confidence
+        int person_id FK
+        int cluster_id FK
+        string state "unidentified|identified|anonymous"
+        datetime labelled_at
+        string model_version
+        datetime deleted_at
+    }
 
-- `id` — primary key
-- `image_id` — FK to `images` (unique)
-- `taken_at` — datetime from EXIF `DateTimeOriginal` (nullable)
-- `taken_at_source` — enum: `exif` | `filesystem` | `manual`
-- `camera_make` — nullable
-- `camera_model` — nullable
-- `gps_lat` — decimal degrees, nullable
-- `gps_lon` — decimal degrees, nullable
-- `gps_altitude` — metres, nullable
-- `width` / `height` — pixels
-- `orientation` — EXIF value 1–8
+    persons {
+        int id PK
+        string name
+        string notes
+        datetime created_at
+    }
 
-**Indexes:** `idx_metadata_taken_at` on `taken_at`; `idx_metadata_gps` on
-`(gps_lat, gps_lon)` for bounding-box GPS queries.
+    embedding_clusters {
+        int id PK
+        int person_id FK
+        string label
+        datetime created_at
+    }
 
-### `image_tags`
-
-Key-value store for future per-image classification labels. Adding a new
-classifier (scenery, event type, season) means writing new rows here — no
-schema migration required.
-
-- `id` — primary key
-- `image_id` — FK to `images`
-- `tag_key` — e.g. `scene:beach`, `event:party`, `season:summer`
-- `tag_value` — float confidence (0.0–1.0) or string for manual tags
-- `tag_source` — enum: `model` | `manual`
-- `model_name` — model identifier for `model` tags, e.g. `scenery-v1` (nullable)
-- `created_at` — timestamp
-
-**Index:** `idx_tags_key_value` on `(tag_key, tag_value)`.
-
-### `faces`
-
-One row per detected face in an image.
-
-- `id` — primary key
-- `image_id` — FK to `images`
-- `faiss_id` — position in FAISS index (stable link between SQLite and FAISS)
-- `bbox_x, bbox_y, bbox_w, bbox_h` — bounding box in source image (pixels)
-- `detection_confidence` — float
-- `person_id` — FK to `persons`, nullable
-- `cluster_id` — FK to `embedding_clusters`, nullable
-- `state` — enum: `unidentified` | `identified` | `anonymous`
-- `labelled_at` — timestamp of last manual action
-- `model_version` — embedding model version string, e.g. `arcface-r100-v1`;
-  used to identify faces that need reindexing when the model is upgraded
-
-**Indexes:** `idx_faces_state` on `state`; `idx_faces_image` on `image_id`.
-
-### `persons`
-
-A named person the user cares about identifying.
-
-- `id` — primary key
-- `name` — display name
-- `notes` — optional free text
-- `created_at` — timestamp
-
-### `embedding_clusters`
-
-A named group of embeddings for a person representing a life stage or appearance
-era. Each person has one or more clusters.
-
-- `id` — primary key
-- `person_id` — FK to `persons`
-- `label` — optional name, e.g. "childhood" (nullable)
-- `created_at` — timestamp
-
-The cluster's effective embedding for search is computed as the mean of all
-`identified` face embeddings assigned to it, fetched from FAISS at query time.
-
-### `suggestions`
-
-Pending match suggestions from the labeller engine.
-
-- `id` — primary key
-- `face_id` — FK to `faces`
-- `person_id` — FK to `persons`
-- `cluster_id` — FK to `embedding_clusters`
-- `similarity_score` — float
-- `state` — enum: `pending` | `confirmed` | `rejected`
-- `created_at` — timestamp
+    suggestions {
+        int id PK
+        int face_id FK
+        int person_id FK
+        int cluster_id FK
+        float similarity_score
+        string state "pending|confirmed|rejected"
+        datetime created_at
+    }
+```
 
 ---
 
