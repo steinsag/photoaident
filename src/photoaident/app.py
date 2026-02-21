@@ -1,8 +1,19 @@
+import os
 import random
+import sys
 import threading
 
 import onnxruntime as ort
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
+
+
+def get_resource_path(relative_path: str) -> str:
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    if hasattr(sys, "_MEIPASS"):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        return os.path.join(sys._MEIPASS, relative_path)
+
+    return os.path.join(os.path.abspath("."), relative_path)
 
 
 class MyWidget(QtWidgets.QWidget):
@@ -10,6 +21,9 @@ class MyWidget(QtWidgets.QWidget):
 
     def __init__(self):
         super().__init__()
+
+        self.setWindowTitle("PhotoAIdent")
+        self._set_app_icon()
 
         self.hello = [
             "Hallo Welt",
@@ -71,3 +85,18 @@ class MyWidget(QtWidgets.QWidget):
     @QtCore.Slot()
     def magic(self):
         self.text.setText(random.choice(self.hello))
+
+    def _set_app_icon(self):
+        icon = QtGui.QIcon()
+        resolutions = ["512", "256", "128", "64", "48"]
+        for res in resolutions:
+            path = get_resource_path(f"assets/icons/app-{res}.png")
+            if os.path.exists(path):
+                icon.addFile(path)
+
+        default_path = get_resource_path("assets/icons/app.png")
+        if os.path.exists(default_path):
+            icon.addFile(default_path)
+
+        self.setWindowIcon(icon)
+        QtWidgets.QApplication.setWindowIcon(icon)

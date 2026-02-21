@@ -7,7 +7,10 @@ echo "→ Building PyInstaller bundle..."
 echo "→ Preparing AppDir..."
 rm -rf AppDir
 mkdir -p AppDir/usr/bin
+mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps/
 mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps/
+mkdir -p AppDir/usr/share/icons/hicolor/128x128/apps/
+mkdir -p AppDir/usr/share/icons/hicolor/64x64/apps/
 mkdir -p AppDir/usr/share/icons/hicolor/48x48/apps/
 mkdir -p AppDir/usr/share/applications/
 
@@ -15,8 +18,11 @@ mkdir -p AppDir/usr/share/applications/
 cp -r dist/photoaident/* AppDir/usr/bin/
 
 # Icons
-cp assets/icons/app.png AppDir/usr/share/icons/hicolor/256x256/apps/photoaident.png
-cp assets/icons/app.png AppDir/usr/share/icons/hicolor/48x48/apps/photoaident.png
+cp assets/icons/app-512.png AppDir/usr/share/icons/hicolor/512x512/apps/photoaident.png
+cp assets/icons/app-256.png AppDir/usr/share/icons/hicolor/256x256/apps/photoaident.png
+cp assets/icons/app-128.png AppDir/usr/share/icons/hicolor/128x128/apps/photoaident.png
+cp assets/icons/app-64.png AppDir/usr/share/icons/hicolor/64x64/apps/photoaident.png
+cp assets/icons/app-48.png AppDir/usr/share/icons/hicolor/48x48/apps/photoaident.png
 cp assets/icons/app.png AppDir/photoaident.png  # required by appimagetool in root
 
 # Desktop file (required by appimagetool)

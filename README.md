@@ -1,11 +1,14 @@
 # PhotoAIdent
 
+PhotoAIdent is a local, privacy-first photo management tool that uses AI-powered face and image recognition to help you
+find and organize photos by the people you love. Filter your photos by person, but also by image details.
+
 ## Initial setup
 
 This project uses package manager [uv](https://github.com/astral-sh/uv) to manage dependencies.
 Run the following to install all dependencies:
 
-    uv sync --python 3.13
+    uv sync --python 3.12
 
 ## Running the app
 
