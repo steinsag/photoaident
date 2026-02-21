@@ -31,6 +31,19 @@ irreplaceable personal archive spanning decades.
 
 ---
 
+## Agent Instructions
+
+Before marking any task or phase as complete:
+
+1. Lint the code using `uv run ruff check --fix` and fix any reported issues
+2. Format the code consistently using `uv run black`
+3. Ensure proper type checking using `uv run ty check` and fix any reported issues
+4. Run `uv run scripts/verify.py` and ensure it exits with code 0
+5. Fix any issues reported before declaring the work done
+6. Never skip verification even if the changes appear trivial
+
+---
+
 ## Scale Characteristics
 
 The target collection is ~80,000 JPEG images spanning ~30 years. Key implications:

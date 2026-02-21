@@ -1,4 +1,271 @@
-from sqlalchemy import create_engine, Engine
+from datetime import datetime
+from enum import Enum as PyEnum
+from typing import List, Optional
+
+from sqlalchemy import (
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Numeric,
+    UniqueConstraint,
+    func,
+    create_engine,
+    Engine,
+)
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    sessionmaker,
+)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class TakenAtSource(PyEnum):
+    EXIF = "exif"
+    FILESYSTEM = "filesystem"
+    MANUAL = "manual"
+
+
+class TagSource(PyEnum):
+    MODEL = "model"
+    MANUAL = "manual"
+
+
+class FaceState(PyEnum):
+    UNIDENTIFIED = "unidentified"
+    IDENTIFIED = "identified"
+    ANONYMOUS = "anonymous"
+
+
+class SuggestionState(PyEnum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
+class Image(Base):
+    """Stores information about indexed image files.
+
+    Relations:
+        - metadata_rel: One-to-one with ImageMetadata.
+        - tags: One-to-many with ImageTag.
+        - faces: One-to-many with Face.
+    """
+
+    __tablename__ = "images"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    file_path: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    file_hash: Mapped[str] = mapped_column(String, nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+    index_version: Mapped[int] = mapped_column(Integer, default=1)
+
+    metadata_rel: Mapped["ImageMetadata"] = relationship(
+        "ImageMetadata",
+        back_populates="image",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+    tags: Mapped[List["ImageTag"]] = relationship(
+        "ImageTag", back_populates="image", cascade="all, delete-orphan"
+    )
+    faces: Mapped[List["Face"]] = relationship(
+        "Face", back_populates="image", cascade="all, delete-orphan"
+    )
+
+
+class ImageMetadata(Base):
+    """Stores technical metadata and GPS information for an image.
+
+    Relations:
+        - image: Many-to-one with Image (unique).
+    """
+
+    __tablename__ = "image_metadata"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_id: Mapped[int] = mapped_column(
+        ForeignKey("images.id"), unique=True, nullable=False
+    )
+    taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
+    taken_at_source: Mapped[TakenAtSource] = mapped_column(
+        Enum(TakenAtSource), nullable=False
+    )
+    camera_make: Mapped[Optional[str]] = mapped_column(String)
+    camera_model: Mapped[Optional[str]] = mapped_column(String)
+    gps_lat: Mapped[Optional[float]] = mapped_column(Numeric(precision=10, scale=8))
+    gps_lon: Mapped[Optional[float]] = mapped_column(Numeric(precision=11, scale=8))
+    gps_altitude: Mapped[Optional[float]] = mapped_column(Float)
+    width: Mapped[int] = mapped_column(Integer)
+    height: Mapped[int] = mapped_column(Integer)
+    orientation: Mapped[int] = mapped_column(Integer, default=1)
+
+    image: Mapped["Image"] = relationship("Image", back_populates="metadata_rel")
+
+    __table_args__ = (
+        # For bounding-box GPS queries
+        # SQLite doesn't have spatial indexes, so we just index the columns
+        # Index('idx_metadata_gps', 'gps_lat', 'gps_lon'),
+    )
+
+
+class ImageTag(Base):
+    """Stores tags and classification results for an image.
+
+    Relations:
+        - image: Many-to-one with Image.
+    """
+
+    __tablename__ = "image_tags"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_id: Mapped[int] = mapped_column(ForeignKey("images.id"), nullable=False)
+    tag_key: Mapped[str] = mapped_column(String, nullable=False)
+    tag_value: Mapped[str] = mapped_column(
+        String, nullable=False
+    )  # Stores float confidence as string if needed, or just string
+    tag_source: Mapped[TagSource] = mapped_column(Enum(TagSource), nullable=False)
+    model_name: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    image: Mapped["Image"] = relationship("Image", back_populates="tags")
+
+    __table_args__ = (
+        UniqueConstraint("image_id", "tag_key", "tag_source", name="uq_image_tag"),
+    )
+
+
+class Face(Base):
+    """Stores detected face regions and their associations.
+
+    Relations:
+        - image: Many-to-one with Image.
+        - person: Many-to-one with Person (optional).
+        - cluster: Many-to-one with EmbeddingCluster (optional).
+        - suggestions: One-to-many with Suggestion.
+    """
+
+    __tablename__ = "faces"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    image_id: Mapped[int] = mapped_column(
+        ForeignKey("images.id"), nullable=False, index=True
+    )
+    faiss_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_x: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_y: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_w: Mapped[int] = mapped_column(Integer, nullable=False)
+    bbox_h: Mapped[int] = mapped_column(Integer, nullable=False)
+    detection_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persons.id"))
+    cluster_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("embedding_clusters.id")
+    )
+    state: Mapped[FaceState] = mapped_column(
+        Enum(FaceState), default=FaceState.UNIDENTIFIED, index=True
+    )
+    labelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    model_version: Mapped[str] = mapped_column(String, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+    image: Mapped["Image"] = relationship("Image", back_populates="faces")
+    person: Mapped[Optional["Person"]] = relationship("Person", back_populates="faces")
+    cluster: Mapped[Optional["EmbeddingCluster"]] = relationship(
+        "EmbeddingCluster", back_populates="faces"
+    )
+    suggestions: Mapped[List["Suggestion"]] = relationship(
+        "Suggestion", back_populates="face", cascade="all, delete-orphan"
+    )
+
+
+class Person(Base):
+    """Stores information about identified individuals.
+
+    Relations:
+        - faces: One-to-many with Face.
+        - clusters: One-to-many with EmbeddingCluster.
+        - suggestions: One-to-many with Suggestion.
+    """
+
+    __tablename__ = "persons"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    faces: Mapped[List["Face"]] = relationship("Face", back_populates="person")
+    clusters: Mapped[List["EmbeddingCluster"]] = relationship(
+        "EmbeddingCluster", back_populates="person", cascade="all, delete-orphan"
+    )
+    suggestions: Mapped[List["Suggestion"]] = relationship(
+        "Suggestion", back_populates="person", cascade="all, delete-orphan"
+    )
+
+
+class EmbeddingCluster(Base):
+    """Groups face embeddings that likely belong to the same person.
+
+    Relations:
+        - person: Many-to-one with Person.
+        - faces: One-to-many with Face.
+        - suggestions: One-to-many with Suggestion.
+    """
+
+    __tablename__ = "embedding_clusters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"), nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    person: Mapped["Person"] = relationship("Person", back_populates="clusters")
+    faces: Mapped[List["Face"]] = relationship("Face", back_populates="cluster")
+    suggestions: Mapped[List["Suggestion"]] = relationship(
+        "Suggestion", back_populates="cluster", cascade="all, delete-orphan"
+    )
+
+
+class Suggestion(Base):
+    """Stores suggested person assignments for faces based on cluster similarity.
+
+    Relations:
+        - face: Many-to-one with Face.
+        - person: Many-to-one with Person.
+        - cluster: Many-to-one with EmbeddingCluster.
+    """
+
+    __tablename__ = "suggestions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    face_id: Mapped[int] = mapped_column(ForeignKey("faces.id"), nullable=False)
+    person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"), nullable=False)
+    cluster_id: Mapped[int] = mapped_column(
+        ForeignKey("embedding_clusters.id"), nullable=False
+    )
+    similarity_score: Mapped[float] = mapped_column(Float, nullable=False)
+    state: Mapped[SuggestionState] = mapped_column(
+        Enum(SuggestionState), default=SuggestionState.PENDING
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    face: Mapped["Face"] = relationship("Face", back_populates="suggestions")
+    person: Mapped["Person"] = relationship("Person", back_populates="suggestions")
+    cluster: Mapped["EmbeddingCluster"] = relationship(
+        "EmbeddingCluster", back_populates="suggestions"
+    )
 
 
 def get_engine(db_path: str | None = None) -> Engine:
@@ -13,3 +280,12 @@ def get_engine(db_path: str | None = None) -> Engine:
         db_path = str(AppPaths().db_path)
 
     return create_engine(f"sqlite:///{db_path}")
+
+
+def get_session_factory(engine: Engine) -> sessionmaker:
+    """Creates a SQLAlchemy session factory.
+
+    Args:
+        engine: The SQLAlchemy engine to use.
+    """
+    return sessionmaker(bind=engine)
