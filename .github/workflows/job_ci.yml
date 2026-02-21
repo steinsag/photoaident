@@ -1,0 +1,39 @@
+name: Reusable CI Job
+
+on:
+  workflow_call:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python and uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Sync dependencies (including dev)
+        run: uv sync
+
+      - name: Install system dependencies for Qt and Xvfb
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xinput0 libxcb-xkb1 libxkbcommon-x11-0 libegl1 xvfb
+
+      - name: Check code formatting with Black
+        run: uv run black --check .
+
+      - name: Lint with Ruff
+        run: uv run ruff check .
+
+      - name: Type check with ty
+        run: uv run ty check
+
+      - name: Run tests with pytest
+        run: |
+          # Use xvfb-run for tests that require a display (pyside6 + pytest-qt)
+          xvfb-run --auto-servernum uv run pytest
