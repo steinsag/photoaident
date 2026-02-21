@@ -1,7 +1,13 @@
 # PhotoAIdent
 
-PhotoAIdent is a local, privacy-first photo management tool that uses AI-powered face and image recognition to help you
-find and organize photos by the people you love. Filter your photos by person, but also by image details.
+PhotoAIdent is a local, privacy-first desktop application for AI-powered face
+recognition and photo search. It scans a local photo library, detects and embeds
+faces using InsightFace/ArcFace, and provides a PySide6 desktop UI where the user
+progressively labels faces — assigning them to known persons or marking them as
+anonymous. Over time the app learns who is in the collection and surfaces match
+suggestions automatically.
+
+No cloud, no external API calls, no data leaves the machine.
 
 ## Initial setup
 

@@ -18,6 +18,7 @@ dependencies = [
     "SQLAlchemy>=2.0.0",
     "opencv-python-headless>=4.9.0",
     "tqdm>=4.66.0",
+    "alembic>=1.18.4",
 ]
 
 [project.scripts]

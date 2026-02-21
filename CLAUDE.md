@@ -295,19 +295,6 @@ Pending match suggestions from the labeller engine.
 
 Migrations run automatically at app startup — the user never runs CLI commands.
 
-```python
-# app.py — called before the main window is shown
-from alembic.config import Config
-from alembic import command
-
-
-def apply_migrations(db_url: str) -> None:
-    cfg = Config()
-    cfg.set_main_option("script_location", "photoaident.db:migrations")
-    cfg.set_main_option("sqlalchemy.url", db_url)
-    command.upgrade(cfg, "head")
-```
-
 To generate a new migration after changing models:
 
 ```bash
@@ -369,55 +356,8 @@ query SQLite directly using the metadata indexes.
 
 No external database server is required at any point. SQLite is embedded.
 
-**`paths.py` — central path resolver**
-
-**`tests/conftest.py` — shared fixtures:**
-
-```python
-import pytest
-from pathlib import Path
-from photoaident.paths import AppPaths
-from photoaident.db.database import get_engine, apply_migrations
-
-
-@pytest.fixture(scope="session")
-def tmp_paths(tmp_path_factory) -> AppPaths:
-    """Isolated XDG paths for the test session — never touches real user data."""
-    base = tmp_path_factory.mktemp("photoaident")
-    paths = AppPaths(
-        base_data=base / "data",
-        base_cache=base / "cache",
-    )
-    paths.data.mkdir(parents=True, exist_ok=True)
-    paths.cache.mkdir(parents=True, exist_ok=True)
-    return paths
-
-
-@pytest.fixture(scope="session")
-def db_engine(tmp_paths):
-    """SQLite engine with all Alembic migrations applied."""
-    engine = get_engine(tmp_paths.db_path)
-    apply_migrations(str(tmp_paths.db_path))
-    return engine
-
-
-@pytest.fixture
-def db_session(db_engine):
-    """Per-test transactional session — rolls back after each test."""
-    from sqlalchemy.orm import Session
-    with db_engine.connect() as conn:
-        with conn.begin_nested() as savepoint:
-            session = Session(bind=conn)
-            yield session
-            session.close()
-            savepoint.rollback()
-
-
-@pytest.fixture(scope="session")
-def vector_store(tmp_paths):
-    from photoaident.db.vector_store import VectorStore
-    return VectorStore(tmp_paths.faiss_path)
-```
+* `paths.py` — central path resolver
+* `tests/conftest.py` — shared fixtures
 
 Tests use `db_session` for full isolation — each test gets a clean transaction
 that is rolled back afterwards. Migrations run once per session. No server, no
