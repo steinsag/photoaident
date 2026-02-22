@@ -40,24 +40,39 @@ class ThumbnailWidget(QtWidgets.QWidget):
         self._load_thumbnail()
 
     def _load_thumbnail(self):
-        if self.thumb_path.exists():
-            pixmap = QtGui.QPixmap(str(self.thumb_path))
+        # Calculate scaled size while keeping aspect ratio
+        def get_scaled_size(path):
+            reader = QtGui.QImageReader(str(path))
+            if not reader.canRead():
+                return QtCore.QSize()
+            orig_size = reader.size()
+            if not orig_size.isValid():
+                return QtCore.QSize()
+
+            w = orig_size.width()
+            h = orig_size.height()
+            scale = min(150 / w, 150 / h)
+            return QtCore.QSize(int(w * scale), int(h * scale))
+
+        target_path = (
+            self.thumb_path if self.thumb_path.exists() else Path(self.file_path)
+        )
+        scaled_size = get_scaled_size(target_path)
+
+        if scaled_size.isValid():
+            reader = QtGui.QImageReader(str(target_path))
+            reader.setScaledSize(scaled_size)
+            image = reader.read()
+            if image.isNull():
+                pixmap = QtGui.QPixmap()
+            else:
+                pixmap = QtGui.QPixmap.fromImage(image)
         else:
-            # Fallback to original file if thumbnail doesn't exist yet
-            # In a real app, we'd trigger thumbnail generation
-            pixmap = QtGui.QPixmap(self.file_path)
+            pixmap = QtGui.QPixmap()
 
         if pixmap.isNull():
             self.image_label.setText(self.tr("Error loading image"))
             return
-
-        # Scale pixmap to fit
-        pixmap = pixmap.scaled(
-            150,
-            150,
-            QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-            QtCore.Qt.TransformationMode.SmoothTransformation,
-        )
 
         # Draw faces
         if self.faces and self.orig_size:
@@ -135,18 +150,19 @@ class ThumbnailGrid(QtWidgets.QWidget):
             ):
                 widget = item.widget()
                 if widget:
-                    widget.setParent(None)
+                    self.main_layout.removeWidget(widget)
                     widget.deleteLater()
 
-        for i in reversed(range(self.grid_layout.count())):
-            item = self.grid_layout.itemAt(i)
+        # Clear thumbnails list before deleting widgets to avoid stale references
+        self.thumbnails = []
+
+        # Remove all widgets from the grid layout properly
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
             if item:
                 widget = item.widget()
                 if widget:
-                    # Potential cause of segfault if called here:
-                    # widget.setParent(None)
                     widget.deleteLater()
-        self.thumbnails = []
 
     def add_thumbnail(
         self,
@@ -166,29 +182,32 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.grid_layout.addWidget(thumb, row, col)
         self.thumbnails.append(thumb)
 
-    def set_images(
+    def set_images_with_total(
         self,
         images_data: List[Tuple[int, str, List[Face], Path, Tuple[int, int] | None]],
+        total_count: int,
     ):
         self.clear()
         if not images_data:
             return
 
-        # Cap the number of thumbnails to avoid performance issues/segfaults
-        # with very large collections for now.
-        # 1000 is a reasonable limit for a single page without virtualization.
-        MAX_THUMBS = 1000
-        for img_id, path, faces, thumb_path, orig_size in images_data[:MAX_THUMBS]:
+        for img_id, path, faces, thumb_path, orig_size in images_data:
             self.add_thumbnail(img_id, path, faces, thumb_path, orig_size)
 
-        if len(images_data) > MAX_THUMBS:
+        if total_count > len(images_data):
             label = QtWidgets.QLabel(
                 self.tr("Showing first {limit} of {total} images.").format(
-                    limit=MAX_THUMBS, total=len(images_data)
+                    limit=len(images_data), total=total_count
                 )
             )
             label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             self.main_layout.insertWidget(1, label)
+
+    def set_images(
+        self,
+        images_data: List[Tuple[int, str, List[Face], Path, Tuple[int, int] | None]],
+    ):
+        self.set_images_with_total(images_data, len(images_data))
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)

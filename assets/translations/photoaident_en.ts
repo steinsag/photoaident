@@ -44,27 +44,27 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="138"/>
+        <location filename="../../src/photoaident/app.py" line="139"/>
         <source>Indexing complete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="150"/>
+        <location filename="../../src/photoaident/app.py" line="151"/>
         <source>&amp;File</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="152"/>
+        <location filename="../../src/photoaident/app.py" line="153"/>
         <source>&amp;Preferences</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="159"/>
+        <location filename="../../src/photoaident/app.py" line="160"/>
         <source>&amp;Exit</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="175"/>
+        <location filename="../../src/photoaident/app.py" line="176"/>
         <source>Changing the photo collection path will cause all existing detected faces to be lost.
 
 Currently indexed:
@@ -75,37 +75,37 @@ Do you really want to proceed?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="185"/>
+        <location filename="../../src/photoaident/app.py" line="186"/>
         <source>Confirm Collection Change</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="212"/>
+        <location filename="../../src/photoaident/app.py" line="213"/>
         <source>Indexing</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="212"/>
+        <location filename="../../src/photoaident/app.py" line="213"/>
         <source>Searching for photos...</source>
         <translation type="unfinished">Searching for photos...</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="248"/>
+        <location filename="../../src/photoaident/app.py" line="249"/>
         <source>✅ GPU ready — {providers}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="252"/>
+        <location filename="../../src/photoaident/app.py" line="253"/>
         <source>⚠️ CPU only — {providers}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="257"/>
+        <location filename="../../src/photoaident/app.py" line="258"/>
         <source>❌ Import failed: {error}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="259"/>
+        <location filename="../../src/photoaident/app.py" line="260"/>
         <source>❌ Error: {error}</source>
         <translation type="unfinished"></translation>
     </message>

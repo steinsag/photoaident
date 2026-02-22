@@ -131,7 +131,8 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self.indexing_label.setText(msg)
         # Reload library view periodically or when indexing finishes
-        if indexed % 10 == 0 or indexed == total:
+        # Increased frequency to every 50 images to reduce UI lag
+        if indexed % 50 == 0 or indexed == total:
             self.central_widget.load_images()
 
     def _on_indexing_finished(self):

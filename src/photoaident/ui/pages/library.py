@@ -45,6 +45,7 @@ class LibraryPage(QtWidgets.QWidget):
     def load_images(self):
         filter_idx = self.filter_combo.currentIndex()
 
+        # Update thumbnails in a single batch to avoid multiple UI refreshes
         with self.session_factory() as session:
             stmt = select(Image).options(
                 joinedload(Image.faces), joinedload(Image.metadata_rel)
@@ -55,7 +56,25 @@ class LibraryPage(QtWidgets.QWidget):
             elif filter_idx == 2:  # Without Faces
                 stmt = stmt.where(~Image.faces.any())
 
-            images = session.execute(stmt).unique().scalars().all()
+            # Only fetch what we can display (MAX_THUMBS = 1000)
+            # This significantly improves performance for large collections
+            MAX_THUMBS = 1000
+            # Better way to get count for the filtered query:
+            count_stmt = select(Image)
+            if filter_idx == 1:
+                count_stmt = count_stmt.where(Image.faces.any())
+            elif filter_idx == 2:
+                count_stmt = count_stmt.where(~Image.faces.any())
+
+            # Using a subquery for count is more robust
+            from sqlalchemy import func
+
+            total_filtered = (
+                session.scalar(select(func.count()).select_from(count_stmt.subquery()))
+                or 0
+            )
+
+            images = session.execute(stmt.limit(MAX_THUMBS)).unique().scalars().all()
 
             images_data = []
             for img in images:
@@ -75,4 +94,4 @@ class LibraryPage(QtWidgets.QWidget):
                     (img.id, img.file_path, img.faces, thumb_path, orig_size)
                 )
 
-            self.grid.set_images(images_data)
+            self.grid.set_images_with_total(images_data, total_filtered)
