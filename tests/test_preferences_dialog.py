@@ -2,6 +2,7 @@ import pytest
 from PySide6 import QtCore, QtWidgets
 
 from photoaident.app import MainWindow
+from photoaident.db.migrate import apply_migrations
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
 
@@ -21,13 +22,15 @@ def test_paths(tmp_path):
 
 
 def test_preferences_dialog_initial_path(qtbot):
-    dialog = PreferencesDialog("/initial/path")
+    dialog = PreferencesDialog("/initial/path", 10, 20)
     qtbot.add_widget(dialog)
     assert dialog.path_edit.text() == "/initial/path"
+    assert dialog.image_count == 10
+    assert dialog.face_count == 20
 
 
 def test_preferences_dialog_accept(qtbot):
-    dialog = PreferencesDialog("/initial/path")
+    dialog = PreferencesDialog("/initial/path", 10, 20)
     qtbot.add_widget(dialog)
 
     dialog.path_edit.setText("/new/path")
@@ -42,7 +45,7 @@ def test_preferences_dialog_accept(qtbot):
 
 
 def test_preferences_dialog_reject(qtbot):
-    dialog = PreferencesDialog("/initial/path")
+    dialog = PreferencesDialog("/initial/path", 10, 20)
     qtbot.add_widget(dialog)
 
     dialog.path_edit.setText("/new/path")
@@ -59,8 +62,11 @@ def test_preferences_dialog_reject(qtbot):
 
 def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
     """Test that settings are saved when the dialog is accepted in MainWindow."""
+    # Apply migrations to the test DB
+    apply_migrations(f"sqlite:///{test_paths.db_path}")
+
     # Create a MainWindow
-    window = MainWindow(test_paths)
+    window = MainWindow(test_paths, check_gpu=False)
     qtbot.add_widget(window)
 
     # Mock PreferencesDialog.exec to simulate OK
@@ -68,7 +74,12 @@ def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
         self.path_edit.setText("/mock/saved/path")
         return QtWidgets.QDialog.DialogCode.Accepted
 
+    # Mock QMessageBox.question to simulate Yes
+    def mock_question(*args, **kwargs):
+        return QtWidgets.QMessageBox.StandardButton.Yes
+
     monkeypatch.setattr(PreferencesDialog, "exec", mock_exec)
+    monkeypatch.setattr(QtWidgets.QMessageBox, "question", mock_question)
 
     # Show preferences (this calls dialog.exec() and then saves if Accepted)
     window._show_preferences()
@@ -83,11 +94,14 @@ def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
 
 def test_preferences_cancel_not_saved(qtbot, test_paths, monkeypatch):
     """Test that settings are NOT saved when the dialog is cancelled."""
+    # Apply migrations to the test DB
+    apply_migrations(f"sqlite:///{test_paths.db_path}")
+
     initial_path = "/initial/path"
     test_paths.config_file.parent.mkdir(parents=True, exist_ok=True)
     Settings(collection_path=initial_path).save(test_paths.config_file)
 
-    window = MainWindow(test_paths)
+    window = MainWindow(test_paths, check_gpu=False)
     qtbot.add_widget(window)
 
     # Mock PreferencesDialog.exec to simulate Cancel

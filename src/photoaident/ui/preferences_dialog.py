@@ -4,8 +4,16 @@ from PySide6 import QtWidgets
 class PreferencesDialog(QtWidgets.QDialog):
     """Dialog to edit application preferences."""
 
-    def __init__(self, collection_path: str, parent: QtWidgets.QWidget | None = None):
+    def __init__(
+        self,
+        collection_path: str,
+        image_count: int = 0,
+        face_count: int = 0,
+        parent: QtWidgets.QWidget | None = None,
+    ):
         super().__init__(parent)
+        self.image_count = image_count
+        self.face_count = face_count
         self.setWindowTitle(self.tr("Preferences"))
         self.setMinimumWidth(500)
 

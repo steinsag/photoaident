@@ -7,6 +7,13 @@ from typing import TYPE_CHECKING
 import onnxruntime as ort
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from photoaident.db.database import (
+    get_counts,
+    clear_database,
+    get_engine,
+    get_session_factory,
+)
+from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
 
@@ -58,10 +65,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     status_ready = QtCore.Signal(str, str)  # message, color
 
-    def __init__(self, paths: "AppPaths"):
+    def __init__(self, paths: "AppPaths", check_gpu: bool = True):
         super().__init__()
         self.paths = paths
         self.settings = Settings.load(self.paths.config_file)
+
+        # Database and vector store
+        self.db_engine = get_engine(str(self.paths.db_path))
+        self.session_factory = get_session_factory(self.db_engine)
+        self.vector_store = VectorStore()
+        if self.paths.faiss_path.exists():
+            self.vector_store.load(self.paths.faiss_path)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
         self.resize(800, 600)
@@ -76,7 +90,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Background thread so UI doesn't freeze during ONNX init
         self.status_ready.connect(self.central_widget._update_status)
-        threading.Thread(target=self._check_gpu, daemon=True).start()
+        if check_gpu:
+            threading.Thread(target=self._check_gpu, daemon=True).start()
 
     def _create_menus(self):
         menubar = self.menuBar()
@@ -98,10 +113,45 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_preferences(self):
         """Show the preferences dialog and save changes if accepted."""
-        dialog = PreferencesDialog(self.settings.collection_path, self)
+        image_count, face_count = get_counts(self.session_factory)
+        old_path = self.settings.collection_path
+
+        dialog = PreferencesDialog(old_path, image_count, face_count, self)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
-            self.settings.collection_path = dialog.get_collection_path()
-            self.settings.save(self.paths.config_file)
+            new_path = dialog.get_collection_path()
+            if new_path != old_path:
+                # Ask for confirmation
+                msg = self.tr(
+                    "Changing the photo collection path will cause all existing "
+                    "detected faces to be lost.\n\n"
+                    "Currently indexed:\n"
+                    "- {images} images\n"
+                    "- {faces} faces\n\n"
+                    "Do you really want to proceed?"
+                ).format(images=image_count, faces=face_count)
+
+                reply = QtWidgets.QMessageBox.question(
+                    self,
+                    self.tr("Confirm Collection Change"),
+                    msg,
+                    QtWidgets.QMessageBox.StandardButton.Yes
+                    | QtWidgets.QMessageBox.StandardButton.No,
+                    QtWidgets.QMessageBox.StandardButton.No,
+                )
+
+                if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+                    # Clear data
+                    clear_database(self.session_factory)
+                    self.vector_store.reset()
+                    self.vector_store.save(self.paths.faiss_path)
+
+                    # Update settings
+                    self.settings.collection_path = new_path
+                    self.settings.save(self.paths.config_file)
+            else:
+                # Path didn't change, just save settings
+                # (in case other settings added later)
+                self.settings.save(self.paths.config_file)
 
     def _check_gpu(self):
         try:

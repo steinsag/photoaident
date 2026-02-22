@@ -96,6 +96,10 @@ class VectorStore:
         # IndexFlatIP supports reconstruct to get back the vector
         return self.index.reconstruct(faiss_id)
 
+    def reset(self) -> None:
+        """Clears all embeddings from the index."""
+        self.index.reset()
+
     def save(self, path: Path) -> None:
         """Saves the FAISS index to a file.
 

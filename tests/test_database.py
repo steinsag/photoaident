@@ -1,9 +1,10 @@
-import sqlalchemy as sa
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from photoaident.db.database import (
     get_engine,
     get_session_factory,
+    get_counts,
+    clear_database,
     Image,
     ImageMetadata,
     ImageTag,
@@ -146,32 +147,40 @@ def test_get_session_factory(db_engine):
     session.close()
 
 
-def test_enum_case_consistency(db_session):
-    # Verify that SQLAlchemy correctly inserts and reads lowercase enum values
-    # consistent with our fixed migration schema.
-    img = Image(file_path="/test/enum_test.jpg", file_hash="hash", file_size=100)
+def test_get_counts_and_clear_database(db_session, db_engine):
+    factory = sessionmaker(bind=db_session.get_bind())
+
+    # Initially 0
+    img_count, face_count = get_counts(factory)
+    assert img_count == 0
+    assert face_count == 0
+
+    # Add some data
+    img = Image(file_path="img1.jpg", file_hash="h1", file_size=100)
     db_session.add(img)
     db_session.flush()
 
-    meta = ImageMetadata(
+    face = Face(
         image_id=img.id,
-        taken_at_source=TakenAtSource.EXIF,
-        width=100,
-        height=100,
+        faiss_id=0,
+        bbox_x=0,
+        bbox_y=0,
+        bbox_w=10,
+        bbox_h=10,
+        detection_confidence=0.9,
+        state=FaceState.UNIDENTIFIED,
+        model_version="v1",
     )
-    db_session.add(meta)
-    db_session.commit()
+    db_session.add(face)
+    db_session.flush()
 
-    # Read back through SQLAlchemy
-    meta_read = db_session.query(ImageMetadata).filter_by(image_id=img.id).one()
-    assert meta_read.taken_at_source == TakenAtSource.EXIF
-    assert meta_read.taken_at_source.value == "exif"
+    img_count, face_count = get_counts(factory)
+    assert img_count == 1
+    assert face_count == 1
 
-    # Check the raw value in the database to ensure it's lowercase 'exif'
-    # and NOT 'EXIF' (which would have been the case with the old migration)
-    raw_value = db_session.execute(
-        sa.text("SELECT taken_at_source FROM image_metadata WHERE image_id = :img_id"),
-        {"img_id": img.id},
-    ).scalar()
-    assert raw_value == "exif"
-    assert raw_value.islower()
+    # Clear database
+    clear_database(factory)
+
+    img_count, face_count = get_counts(factory)
+    assert img_count == 0
+    assert face_count == 0

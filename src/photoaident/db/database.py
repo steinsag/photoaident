@@ -14,6 +14,8 @@ from sqlalchemy import (
     func,
     create_engine,
     Engine,
+    select,
+    delete,
 )
 from sqlalchemy.orm import (
     DeclarativeBase,
@@ -295,3 +297,38 @@ def get_session_factory(engine: Engine) -> sessionmaker:
         engine: The SQLAlchemy engine to use.
     """
     return sessionmaker(bind=engine)
+
+
+def clear_database(session_factory: sessionmaker) -> None:
+    """Removes all data from the database.
+
+    Args:
+        session_factory: The SQLAlchemy session factory.
+    """
+    with session_factory() as session:
+        # Delete in order to respect foreign keys (if enforced)
+        # suggestions -> faces -> images
+        # suggestions -> embedding_clusters -> persons
+        session.execute(delete(Suggestion))
+        session.execute(delete(Face))
+        session.execute(delete(ImageTag))
+        session.execute(delete(ImageMetadata))
+        session.execute(delete(Image))
+        session.execute(delete(EmbeddingCluster))
+        session.execute(delete(Person))
+        session.commit()
+
+
+def get_counts(session_factory: sessionmaker) -> tuple[int, int]:
+    """Returns the number of indexed images and discovered faces.
+
+    Args:
+        session_factory: The SQLAlchemy session factory.
+
+    Returns:
+        A tuple of (image_count, face_count).
+    """
+    with session_factory() as session:
+        image_count = session.scalar(select(func.count(Image.id))) or 0
+        face_count = session.scalar(select(func.count(Face.id))) or 0
+        return image_count, face_count

@@ -9,59 +9,6 @@ The image collection is **never written to**. All output goes to XDG directories
 
 ---
 
-## Phase 1 — Foundation: Paths, DB, Migrations, Test Infrastructure
-
-Everything else depends on this. No GPU, no UI.
-
-### `paths.py` — central XDG path resolver
-
-- `AppPaths` class with `data`, `cache`, `config` roots
-- Properties: `db_path`, `faiss_path`, `face_crops_dir`, `thumbs_dir`
-- Overridable roots so tests redirect everything to `tmp_path`
-
-### Alembic setup
-
-- `uv add alembic` to dependencies
-- `uv run alembic init src/photoaident/db/migrations`
-- Configure `env.py` to use `AppPaths` for the DB URL and `render_as_batch=True`
-  (required for SQLite column alterations)
-- `apply_migrations(db_url)` helper called at app startup
-
-### SQLAlchemy models (`db/database.py`)
-
-- `Image`, `ImageMetadata`, `ImageTag`, `Face`, `Person`, `EmbeddingCluster`,
-  `Suggestion`
-- All enums as Python `enum.Enum` mapped via SQLAlchemy
-- `get_engine(db_path)` and `get_session_factory(engine)` helpers
-- First Alembic migration generated from these models
-
-### FAISS wrapper (`db/vector_store.py`)
-
-- `VectorStore` wrapping `faiss.IndexFlatIP(512)`
-- `add(embedding) -> int` (returns faiss_id)
-- `search(embedding, k, threshold) -> list[tuple[int, float]]`
-- `get_embedding(faiss_id) -> np.ndarray`
-- `save()` / `load()` to/from `AppPaths.faiss_path`
-
-### Test infrastructure (`tests/conftest.py`)
-
-- `tmp_paths` fixture (session-scoped, `AppPaths` pointed at `tmp_path`)
-- `db_engine` fixture (session-scoped, runs all Alembic migrations once)
-- `db_session` fixture (function-scoped, rolls back after each test)
-- `vector_store` fixture (session-scoped, in-memory)
-
-### Tests
-
-- All models: round-trip insert/query, FK relations, enum values
-- `VectorStore`: add → search → verify, save → reload → search
-- Alembic: `pytest-alembic` built-in tests (upgrade, downgrade consistency,
-  model/DDL match)
-
-**Done when:** `uv run pytest` passes with no GPU, no external processes, from a
-fresh `uv sync`. Alembic migration history is clean and tested.
-
----
-
 ## Phase 2 — Embedding Pipeline
 
 Get InsightFace running and producing embeddings from real images.
