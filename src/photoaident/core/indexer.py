@@ -200,7 +200,7 @@ class IndexingTask(QtCore.QObject):
                             # Add to FAISS
                             faiss_id = self.vector_store.add(info["embedding"])
 
-                            # Save Face to DB
+                            # Prepare Face for DB
                             bbox = info["bbox"]
                             face = Face(
                                 image_id=img.id,
@@ -216,9 +216,13 @@ class IndexingTask(QtCore.QObject):
                             session.add(face)
                             new_faces.append((face, bbox))
 
+                        # First, persist FAISS to minimize DB→FAISS mismatch risk
+                        self.vector_store.save(self.paths.faiss_path)
+
+                        # Then commit DB so faces and file_hash are durable
                         session.commit()  # Now face IDs are assigned
 
-                        # Save face crop thumbnails
+                        # Save face crop thumbnails (cache)
                         self.paths.face_crops_dir.mkdir(parents=True, exist_ok=True)
                         for face, bbox in new_faces:
                             crop = embedder.extract_face_crop(path, bbox)
@@ -235,4 +239,6 @@ class IndexingTask(QtCore.QObject):
                         img.file_hash = "ERROR"
                         session.commit()
 
+            # Final save of FAISS index before finishing
+            self.vector_store.save(self.paths.faiss_path)
             self.finished.emit()

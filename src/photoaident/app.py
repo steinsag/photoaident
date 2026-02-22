@@ -129,7 +129,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.indexing_label.setText(msg)
 
     def _on_indexing_finished(self):
-        self.vector_store.save(self.paths.faiss_path)
         self.indexing_label.setText(self.tr("Indexing complete"))
         if self._indexing_thread:
             self._indexing_thread.quit()
@@ -257,6 +256,24 @@ class MainWindow(QtWidgets.QMainWindow):
             color = "red"
 
         self.status_ready.emit(msg, color)
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        # Graceful shutdown: cancel indexing and persist FAISS index
+        if self._indexing_task is not None and self._indexing_thread is not None:
+            try:
+                self._indexing_task.cancel()
+                # Ask the worker thread to stop and wait a bit
+                self._indexing_thread.quit()
+                self._indexing_thread.wait(5000)
+            except Exception:
+                pass
+            finally:
+                # Ensure FAISS index is persisted
+                try:
+                    self.vector_store.save(self.paths.faiss_path)
+                except Exception:
+                    pass
+        event.accept()
 
     def _set_app_icon(self):
         icon = QtGui.QIcon()
