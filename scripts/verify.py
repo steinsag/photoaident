@@ -17,6 +17,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 COMMANDS: list[list[str]] = [
     ["ruff", "check", "--fix", "."],
@@ -27,41 +28,64 @@ COMMANDS: list[list[str]] = [
 
 
 def check_translations() -> int:
-    """Check if translation source files (*.ts) are up-to-date."""
+    """Check if translation source files (*.ts) are up-to-date.
+
+    Strategy: compare .ts file content before and after running lupdate.
+    With -locations none, .ts files only change when actual translatable
+    strings are added or removed — not when line numbers shift due to code
+    reformatting.  A before/after comparison in Python avoids any dependency
+    on the git index state and works correctly in a single run.
+    """
     print("\n[verify] checking translations (i18n)...\n", flush=True)
 
-    ts_files = [
-        "assets/translations/photoaident_de.ts",
-        "assets/translations/photoaident_en.ts",
+    ts_paths = [
+        Path("assets/translations/photoaident_de.ts"),
+        Path("assets/translations/photoaident_en.ts"),
     ]
+    update_cmd = (
+        "uv run pyside6-lupdate -locations none -extensions py src/ -ts "
+        + " ".join(str(p) for p in ts_paths)
+    )
 
-    # In a real scenario, we might want to discover these files automatically
-    # or use a project file. For now, we list them explicitly.
+    before = {p: p.read_text(encoding="utf-8") for p in ts_paths}
 
     try:
-        # Run lupdate to see if any strings are missing or obsolete
         subprocess.run(
+            # -locations none: omit <location> tags so .ts files are stable
+            #   across code reformats (only change when strings change).
+            # -extensions py: directory scan must be told to look at .py files
+            #   (lupdate's default extension list does not include Python).
             [
                 "pyside6-lupdate",
-                "src/photoaident/app.py",
-                "src/photoaident/core/indexer.py",
-                "src/photoaident/ui/widgets/progress_dialog.py",
-                "src/photoaident/ui/preferences_dialog.py",
-                "src/photoaident/ui/pages/library.py",
-                "src/photoaident/ui/widgets/thumbnail_grid.py",
+                "-locations",
+                "none",
+                "-extensions",
+                "py",
+                "src/",
                 "-ts",
             ]
-            + ts_files,
+            + [str(p) for p in ts_paths],
             check=True,
             capture_output=True,
             text=True,
         )
-
     except subprocess.CalledProcessError as e:
-        print(f"[verify] Translation check failed: {e}")
+        print(f"[verify] lupdate failed: {e}")
         if e.stderr:
             print(e.stderr)
         return e.returncode
+
+    after = {p: p.read_text(encoding="utf-8") for p in ts_paths}
+    changed = [p for p in ts_paths if before[p] != after[p]]
+    if changed:
+        names = " ".join(str(p) for p in changed)
+        print(
+            f"[verify] Translation files were updated by lupdate: {names}\n"
+            "Commit the updated files to keep translations in sync with the source:\n\n"
+            f"  git add {names}\n\n"
+            f"To regenerate manually:\n  {update_cmd}\n"
+        )
+        return 1
 
     print("[verify] Translations are up-to-date.")
     return 0
@@ -78,7 +102,7 @@ def _ensure_available(cmd: str) -> None:
 
 def run() -> int:
     # Ensure required tools are present before running
-    for tool in ("ruff", "black", "ty", "pytest", "pyside6-lupdate", "git"):
+    for tool in ("ruff", "black", "ty", "pytest", "pyside6-lupdate"):
         _ensure_available(tool)
 
     # First, check translations

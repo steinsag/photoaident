@@ -30,9 +30,16 @@ This runs, in order: `black .`, `ruff check --fix .`, `ty check`, `pytest`.
 
 ## Translations (i18n)
 
-To update translation source files (`.ts`) after adding new strings:
+To update translation source files (`.ts`) after adding or removing strings:
 
-    uv run pyside6-lupdate src/ -ts assets/translations/photoaident_de.ts
+    uv run pyside6-lupdate -locations none -extensions py src/ -ts assets/translations/photoaident_de.ts assets/translations/photoaident_en.ts
+
+Flags explained:
+- `-locations none` — omits `<location>` line-number tags so `.ts` files only
+  change when strings actually change, not on every code reformat.  This makes
+  `git diff` reliable as a staleness check.
+- `-extensions py` — required when passing a directory; lupdate's default
+  extension list does not include Python files.
 
 To compile them to binary format (`.qm`) for the app to load them:
 

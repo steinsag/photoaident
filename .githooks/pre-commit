@@ -32,10 +32,15 @@ run_ty_check() {
 run_translation_check() {
   echo "[pre-commit] Checking if translations (*.ts) are up-to-date..."
   ts_files="assets/translations/photoaident_de.ts assets/translations/photoaident_en.ts"
-  uv run pyside6-lupdate src/photoaident/app.py src/photoaident/ui/preferences_dialog.py -ts $ts_files > /dev/null
+  # -locations none: omit <location> tags so .ts files are stable across
+  #   code reformats (only change when strings are added/removed).
+  # -extensions py: directory scan must be told to look at .py files
+  #   (lupdate's default extension list does not include Python).
+  uv run pyside6-lupdate -locations none -extensions py src/ -ts $ts_files > /dev/null
   if ! git diff --exit-code $ts_files > /dev/null; then
-    echo "[pre-commit] Translations are out of date. Please update them and stage the changes."
-    echo "Update command: uv run pyside6-lupdate src/photoaident/app.py src/photoaident/ui/preferences_dialog.py -ts $ts_files"
+    echo "[pre-commit] Translation files are out of date — lupdate found new or removed strings."
+    echo "Stage the updated files and commit them:"
+    echo "  git add $ts_files"
     return 1
   fi
 }
