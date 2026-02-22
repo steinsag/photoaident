@@ -2,7 +2,7 @@ import sys
 
 from PySide6 import QtWidgets
 
-from photoaident.app import MyWidget
+from photoaident.app import MainWindow
 from photoaident.db.migrate import apply_migrations
 from photoaident.paths import AppPaths
 
@@ -15,9 +15,8 @@ def main():
 
     app = QtWidgets.QApplication([])
 
-    widget = MyWidget()
-    widget.resize(800, 600)
-    widget.show()
+    window = MainWindow(paths)
+    window.show()
 
     sys.exit(app.exec())
 

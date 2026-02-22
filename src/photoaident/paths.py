@@ -56,6 +56,11 @@ class AppPaths:
         """Directory for full-photo thumbnails."""
         return self.cache / "thumbs"
 
+    @property
+    def config_file(self) -> Path:
+        """Path to the TOML configuration file."""
+        return self.config / "config.toml"
+
     def ensure_dirs(self) -> None:
         """Ensure all required directories exist."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

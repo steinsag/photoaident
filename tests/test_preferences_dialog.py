@@ -1,0 +1,108 @@
+import pytest
+from PySide6 import QtCore, QtWidgets
+
+from photoaident.app import MainWindow
+from photoaident.settings import Settings
+from photoaident.ui.preferences_dialog import PreferencesDialog
+
+
+@pytest.fixture
+def test_paths(tmp_path):
+    from photoaident.paths import AppPaths
+
+    base = tmp_path / "photoaident"
+    paths = AppPaths(
+        base_data=base / "data",
+        base_cache=base / "cache",
+        base_config=base / "config",
+    )
+    paths.ensure_dirs()
+    return paths
+
+
+def test_preferences_dialog_initial_path(qtbot):
+    dialog = PreferencesDialog("/initial/path")
+    qtbot.add_widget(dialog)
+    assert dialog.path_edit.text() == "/initial/path"
+
+
+def test_preferences_dialog_accept(qtbot):
+    dialog = PreferencesDialog("/initial/path")
+    qtbot.add_widget(dialog)
+
+    dialog.path_edit.setText("/new/path")
+
+    # Click OK
+    ok_button = dialog.button_box.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
+    assert ok_button is not None
+    qtbot.mouseClick(ok_button, QtCore.Qt.MouseButton.LeftButton)
+
+    assert dialog.result() == QtWidgets.QDialog.DialogCode.Accepted
+    assert dialog.get_collection_path() == "/new/path"
+
+
+def test_preferences_dialog_reject(qtbot):
+    dialog = PreferencesDialog("/initial/path")
+    qtbot.add_widget(dialog)
+
+    dialog.path_edit.setText("/new/path")
+
+    cancel_button = dialog.button_box.button(
+        QtWidgets.QDialogButtonBox.StandardButton.Cancel
+    )
+    assert cancel_button is not None
+    qtbot.mouseClick(cancel_button, QtCore.Qt.MouseButton.LeftButton)
+
+    assert dialog.result() == QtWidgets.QDialog.DialogCode.Rejected
+    assert dialog.get_collection_path() == "/new/path"
+
+
+def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
+    """Test that settings are saved when the dialog is accepted in MainWindow."""
+    # Create a MainWindow
+    window = MainWindow(test_paths)
+    qtbot.add_widget(window)
+
+    # Mock PreferencesDialog.exec to simulate OK
+    def mock_exec(self):
+        self.path_edit.setText("/mock/saved/path")
+        return QtWidgets.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(PreferencesDialog, "exec", mock_exec)
+
+    # Show preferences (this calls dialog.exec() and then saves if Accepted)
+    window._show_preferences()
+
+    # Verify settings in memory
+    assert window.settings.collection_path == "/mock/saved/path"
+
+    # Verify settings on disk
+    loaded_settings = Settings.load(test_paths.config_file)
+    assert loaded_settings.collection_path == "/mock/saved/path"
+
+
+def test_preferences_cancel_not_saved(qtbot, test_paths, monkeypatch):
+    """Test that settings are NOT saved when the dialog is cancelled."""
+    initial_path = "/initial/path"
+    test_paths.config_file.parent.mkdir(parents=True, exist_ok=True)
+    Settings(collection_path=initial_path).save(test_paths.config_file)
+
+    window = MainWindow(test_paths)
+    qtbot.add_widget(window)
+
+    # Mock PreferencesDialog.exec to simulate Cancel
+    def mock_exec(self):
+        self.path_edit.setText("/mock/cancelled/path")
+        return QtWidgets.QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(PreferencesDialog, "exec", mock_exec)
+
+    # Show preferences
+    window._show_preferences()
+
+    # Verify settings in memory NOT updated
+    assert window.settings.collection_path == initial_path
+
+    # Verify settings on disk NOT updated
+    loaded_settings = Settings.load(test_paths.config_file)
+    assert loaded_settings.collection_path == initial_path
