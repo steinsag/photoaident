@@ -158,45 +158,60 @@ unlabelled. New clusters can be added at any time as new eras are encountered.
 
 ## Project Structure
 
+Files marked `[TODO]` are planned but not yet implemented.
+
 ```
 photo-aident/
 ├── src/photoaident/
 │   ├── __init__.py
-│   ├── __main__.py              # Entry point
-│   ├── app.py                   # QApplication bootstrap, applies migrations
+│   ├── __main__.py              # Entry point, instance lock, migration boot
+│   ├── app.py                   # QApplication bootstrap + MainWindow
 │   ├── paths.py                 # AppPaths: XDG path resolution, test override
+│   ├── settings.py              # Settings (TOML, currently: collection_path)
 │   ├── core/
-│   │   ├── indexer.py           # Scans folders read-only, drives pipeline
+│   │   ├── indexer.py           # InventoryTask + IndexingTask (Qt threads)
 │   │   ├── embeddings.py        # InsightFace/ArcFace wrapper
-│   │   ├── search.py            # Similarity search + metadata filter logic
-│   │   └── labeller.py          # Suggestion engine
+│   │   ├── search.py            # [TODO] Similarity search + metadata filters
+│   │   └── labeller.py          # [TODO] Suggestion engine
 │   ├── db/
 │   │   ├── database.py          # SQLAlchemy models + session factory
+│   │   ├── migrate.py           # Alembic runner (auto-applied at startup)
 │   │   ├── migrations/          # Alembic migration scripts
 │   │   │   ├── env.py
 │   │   │   ├── script.py.mako
 │   │   │   └── versions/
 │   │   └── vector_store.py      # FAISS index wrapper
 │   ├── ui/
-│   │   ├── main_window.py
+│   │   ├── preferences_dialog.py
 │   │   ├── pages/
-│   │   │   ├── library.py
-│   │   │   ├── indexer.py
-│   │   │   ├── labelling.py
-│   │   │   └── persons.py
+│   │   │   ├── library.py       # LibraryPage: thumbnail grid + filter
+│   │   │   ├── labelling.py     # [TODO] LabellingPage: face-by-face queue
+│   │   │   └── persons.py       # [TODO] PersonsPage: manage known persons
 │   │   └── widgets/
 │   │       ├── thumbnail_grid.py
-│   │       ├── face_crop.py
-│   │       └── person_card.py
+│   │       ├── image_detail_dialog.py
+│   │       ├── progress_dialog.py
+│   │       ├── face_crop.py     # [TODO] FaceCropWidget for labelling UI
+│   │       └── person_card.py   # [TODO] PersonCard for persons page
 │   └── utils/
-│       └── image_utils.py       # Read-only image helpers, EXIF, thumbnails
+│       ├── image_utils.py       # generate_thumbnail() (read-only)
+│       └── instance_lock.py     # fcntl-based single-instance lock
 ├── tests/
 │   ├── conftest.py              # Shared fixtures: temp AppPaths, in-memory DB
+│   ├── test_app.py
 │   ├── test_database.py
-│   ├── test_vector_store.py
+│   ├── test_embeddings.py
+│   ├── test_image_detail_dialog.py
 │   ├── test_indexer.py
-│   ├── test_search.py
-│   ├── test_labeller.py
+│   ├── test_instance_lock.py
+│   ├── test_paths.py
+│   ├── test_preferences_dialog.py
+│   ├── test_progress_dialog.py
+│   ├── test_settings.py
+│   ├── test_thumbnail_grid.py
+│   ├── test_vector_store.py
+│   ├── test_search.py           # [TODO] once search.py exists
+│   ├── test_labeller.py         # [TODO] once labeller.py exists
 │   └── fixtures/
 │       └── images/              # Small real JPEGs for integration tests
 ├── alembic.ini
@@ -204,6 +219,25 @@ photo-aident/
 ├── pyproject.toml
 └── uv.lock
 ```
+
+### Implementation Status
+
+| Component                  | Status     | Notes                                        |
+|----------------------------|------------|----------------------------------------------|
+| DB schema + migrations     | ✓ Complete | 3 migrations applied                         |
+| FAISS vector store         | ✓ Complete | IndexFlatIP, save/load                       |
+| Face embedding (ArcFace)   | ✓ Complete | GPU with CPU fallback                        |
+| Indexer (inventory + embed)| ✓ Complete | Qt-threaded, auto-runs at startup            |
+| AppPaths / XDG             | ✓ Complete |                                              |
+| Settings                   | ✓ Minimal  | Only `collection_path` so far               |
+| MainWindow (app.py)        | ⚠ Partial  | Single-page; no sidebar navigation yet      |
+| LibraryPage                | ✓ Functional| Thumbnail grid + 3-way filter + detail view |
+| PreferencesDialog          | ✓ Complete |                                              |
+| LabellingPage              | ✗ TODO     | Phase 5                                      |
+| PersonsPage                | ✗ TODO     | Phase 7                                      |
+| core/search.py             | ✗ TODO     | Phase 8                                      |
+| core/labeller.py           | ✗ TODO     | Phase 6                                      |
+| FaceCropWidget             | ✗ TODO     | Phase 5                                      |
 
 ---
 

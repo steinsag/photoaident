@@ -61,6 +61,9 @@ coverage.xml
 .vscode/
 .idea/
 
+# Claude Code local settings (user-specific; .claude/settings.json can be committed)
+.claude/settings.local.json
+
 # OS files
 .DS_Store
 Thumbs.db
