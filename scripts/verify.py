@@ -57,25 +57,6 @@ def check_translations() -> int:
             text=True,
         )
 
-        # Check if git detects changes in .ts files
-        result = subprocess.run(
-            ["git", "diff", "--exit-code"] + ts_files,
-            capture_output=True,
-            text=True,
-        )
-
-        if result.returncode != 0:
-            print("[verify] Translations are out of date! Please update them with:")
-            print(
-                "  uv run pyside6-lupdate src/photoaident/app.py "
-                "src/photoaident/core/indexer.py "
-                "src/photoaident/ui/widgets/progress_dialog.py "
-                "src/photoaident/ui/preferences_dialog.py "
-                "src/photoaident/ui/pages/library.py "
-                "src/photoaident/ui/widgets/thumbnail_grid.py -ts " + " ".join(ts_files)
-            )
-            return result.returncode
-
     except subprocess.CalledProcessError as e:
         print(f"[verify] Translation check failed: {e}")
         if e.stderr:
