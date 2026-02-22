@@ -28,6 +28,19 @@ One command to auto-fix formatting/lints, run type checks, and tests:
 
 This runs, in order: `black .`, `ruff check --fix .`, `ty check`, `pytest`.
 
+## Translations (i18n)
+
+To update translation source files (`.ts`) after adding new strings:
+
+    uv run pyside6-lupdate src/ -ts assets/translations/photoaident_de.ts
+
+To compile them to binary format (`.qm`) for the app to load them:
+
+    for ts in assets/translations/*.ts; do uv run pyside6-lrelease "$ts" -qm "${ts%.ts}.qm"; done
+
+Note: The build scripts automatically generate `.qm` files. You only need to run this manually if you want to see the
+translations when running the app via `uv run photoaident`.
+
 ## Code formatting (Black)
 
 [Black](https://black.readthedocs.io/) is used for code formatting.

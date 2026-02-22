@@ -42,6 +42,19 @@ Before marking any task or phase as complete:
 5. Fix any issues reported before declaring the work done
 6. Never skip verification even if the changes appear trivial
 
+## ⚠️ Internationalization (i18n)
+
+**The UI must be fully internationalized. All user-facing strings must be
+translatable.**
+
+- Wrap all user-facing strings in `self.tr()` (Qt's translation system)
+- Keep translation source files (`assets/translations/*.ts`) up to date
+- If you add or modify UI strings, run `pyside6-lupdate` to update `.ts` files
+- Verification scripts (`verify.py`, pre-commit hook) will fail if translations
+  are out of date
+- See README.md for specific commands to update and compile translations
+- Always translate all UI strings to English and German
+
 ---
 
 ## Scale Characteristics
@@ -202,15 +215,15 @@ Each concern lives in its own table. Alembic manages all schema evolution.
 
 ```mermaid
 erDiagram
-    images ||--o| image_metadata : "1:1"
-    images ||--o{ image_tags : "1:N"
-    images ||--o{ faces : "1:N"
-    persons ||--o{ faces : "1:N"
-    persons ||--o{ embedding_clusters : "1:N"
-    persons ||--o{ suggestions : "1:N"
-    embedding_clusters ||--o{ faces : "1:N"
-    embedding_clusters ||--o{ suggestions : "1:N"
-    faces ||--o{ suggestions : "1:N"
+    images ||--o| image_metadata: "1:1"
+    images ||--o{ image_tags: "1:N"
+    images ||--o{ faces: "1:N"
+    persons ||--o{ faces: "1:N"
+    persons ||--o{ embedding_clusters: "1:N"
+    persons ||--o{ suggestions: "1:N"
+    embedding_clusters ||--o{ faces: "1:N"
+    embedding_clusters ||--o{ suggestions: "1:N"
+    faces ||--o{ suggestions: "1:N"
 
     images {
         int id PK

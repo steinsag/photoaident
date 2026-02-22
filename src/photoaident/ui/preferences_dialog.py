@@ -6,22 +6,22 @@ class PreferencesDialog(QtWidgets.QDialog):
 
     def __init__(self, collection_path: str, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Preferences")
+        self.setWindowTitle(self.tr("Preferences"))
         self.setMinimumWidth(500)
 
         layout = QtWidgets.QVBoxLayout(self)
 
         # Photo Collection Path setting
-        group = QtWidgets.QGroupBox("Photo Collection", self)
+        group = QtWidgets.QGroupBox(self.tr("Photo Collection"), self)
         group_layout = QtWidgets.QHBoxLayout(group)
 
         self.path_edit = QtWidgets.QLineEdit(collection_path, self)
-        self.path_edit.setPlaceholderText("Select photo collection folder...")
+        self.path_edit.setPlaceholderText(self.tr("Select photo collection folder..."))
 
-        browse_button = QtWidgets.QPushButton("Browse...", self)
+        browse_button = QtWidgets.QPushButton(self.tr("Browse..."), self)
         browse_button.clicked.connect(self._browse_path)
 
-        group_layout.addWidget(QtWidgets.QLabel("Path:"))
+        group_layout.addWidget(QtWidgets.QLabel(self.tr("Path:")))
         group_layout.addWidget(self.path_edit)
         group_layout.addWidget(browse_button)
 
@@ -42,7 +42,7 @@ class PreferencesDialog(QtWidgets.QDialog):
         """Open a directory selection dialog."""
         current_path = self.path_edit.text()
         directory = QtWidgets.QFileDialog.getExistingDirectory(
-            self, "Select Photo Collection Folder", current_path
+            self, self.tr("Select Photo Collection Folder"), current_path
         )
         if directory:
             self.path_edit.setText(directory)

@@ -20,7 +20,37 @@ def get_resource_path(relative_path: str) -> str:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         return os.path.join(sys._MEIPASS, relative_path)
 
-    return os.path.join(os.path.abspath("."), relative_path)
+    # In development, resources are in project_root/assets.
+    # project_root is two levels up from this file (src/photoaident/app.py)
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
+    return os.path.join(project_root, relative_path)
+
+
+def load_translations(app: QtWidgets.QApplication):
+    """Load translations for the current system locale."""
+    locale = QtCore.QLocale.system().name()  # e.g. "en_US", "de_DE"
+
+    # We also check the base name (e.g. "de" for "de_DE")
+    short_locale = locale.split("_")[0]
+
+    translator = QtCore.QTranslator(app)
+
+    # Search paths for translation files
+    # 1. assets/translations/photoaident_<locale>.qm
+    # 2. assets/translations/photoaident_<short_locale>.qm
+
+    search_locales = [locale, short_locale]
+    for loc in search_locales:
+        filename = f"photoaident_{loc}.qm"
+        path = get_resource_path(os.path.join("assets", "translations", filename))
+        if os.path.exists(path):
+            if translator.load(path):
+                app.installTranslator(translator)
+                # Keep a reference to prevent garbage collection
+                app._translator = translator  # type: ignore[attr-defined]
+                break
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -33,7 +63,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.paths = paths
         self.settings = Settings.load(self.paths.config_file)
 
-        self.setWindowTitle("PhotoAIdent")
+        self.setWindowTitle(self.tr("PhotoAIdent"))
         self.resize(800, 600)
         self._set_app_icon()
 
@@ -52,16 +82,16 @@ class MainWindow(QtWidgets.QMainWindow):
         menubar = self.menuBar()
 
         # File menu
-        file_menu = menubar.addMenu("&File")
+        file_menu = menubar.addMenu(self.tr("&File"))
 
-        settings_action = QtGui.QAction("&Preferences", self)
+        settings_action = QtGui.QAction(self.tr("&Preferences"), self)
         settings_action.setShortcut(QtGui.QKeySequence.StandardKey.Preferences)
         settings_action.triggered.connect(self._show_preferences)
         file_menu.addAction(settings_action)
 
         file_menu.addSeparator()
 
-        exit_action = QtGui.QAction("&Exit", self)
+        exit_action = QtGui.QAction(self.tr("&Exit"), self)
         exit_action.setShortcut(QtGui.QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
@@ -81,17 +111,21 @@ class MainWindow(QtWidgets.QMainWindow):
             has_cuda = "CUDAExecutionProvider" in providers
 
             if has_cuda:
-                msg = f"✅ GPU ready — {', '.join(providers)}"
+                msg = self.tr("✅ GPU ready — {providers}").format(
+                    providers=", ".join(providers)
+                )
                 color = "green"
             else:
-                msg = f"⚠️ CPU only — {', '.join(providers)}"
+                msg = self.tr("⚠️ CPU only — {providers}").format(
+                    providers=", ".join(providers)
+                )
                 color = "orange"
 
         except ImportError as e:
-            msg = f"❌ Import failed: {e}"
+            msg = self.tr("❌ Import failed: {error}").format(error=str(e))
             color = "red"
         except Exception as e:
-            msg = f"❌ Error: {e}"
+            msg = self.tr("❌ Error: {error}").format(error=str(e))
             color = "red"
 
         self.status_ready.emit(msg, color)
@@ -117,19 +151,19 @@ class MyWidget(QtWidgets.QWidget):
         super().__init__()
 
         self.hello = [
-            "Hallo Welt",
-            "Hei maailma",
-            "Hola Mundo",
-            "Привіт, світе!",
-            "Hello World!",
+            self.tr("Hallo Welt"),
+            self.tr("Hei maailma"),
+            self.tr("Hola Mundo"),
+            self.tr("Привіт, світе!"),
+            self.tr("Hello World!"),
         ]
 
-        self.button = QtWidgets.QPushButton("Click me!")
+        self.button = QtWidgets.QPushButton(self.tr("Click me!"))
         self.text = QtWidgets.QLabel(
-            "Hello World", alignment=QtCore.Qt.AlignmentFlag.AlignCenter
+            self.tr("Hello World"), alignment=QtCore.Qt.AlignmentFlag.AlignCenter
         )
         self.gpu_status = QtWidgets.QLabel(
-            "⏳ Checking GPU / InsightFace...",
+            self.tr("⏳ Checking GPU / InsightFace..."),
             alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
         )
         self.gpu_status.setStyleSheet("color: gray; font-size: 11px;")

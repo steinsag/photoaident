@@ -15,6 +15,10 @@ def main():
 
     app = QtWidgets.QApplication([])
 
+    from photoaident.app import load_translations
+
+    load_translations(app)
+
     window = MainWindow(paths)
     window.show()
 

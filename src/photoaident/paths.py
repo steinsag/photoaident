@@ -61,6 +61,12 @@ class AppPaths:
         """Path to the TOML configuration file."""
         return self.config / "config.toml"
 
+    @property
+    def translations_dir(self) -> Path:
+        """Directory for translation files."""
+        # Use the root assets directory for translations
+        return Path(__file__).parents[2] / "assets" / "translations"
+
     def ensure_dirs(self) -> None:
         """Ensure all required directories exist."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
