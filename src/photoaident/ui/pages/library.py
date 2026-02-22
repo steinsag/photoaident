@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from photoaident.db.database import Image
+from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
 if TYPE_CHECKING:
@@ -37,6 +38,7 @@ class LibraryPage(QtWidgets.QWidget):
 
         # Image grid
         self.grid = ThumbnailGrid()
+        self.grid.image_selected.connect(self._on_image_selected)
         layout.addWidget(self.grid)
 
         # Initial load
@@ -95,3 +97,16 @@ class LibraryPage(QtWidgets.QWidget):
                 )
 
             self.grid.set_images_with_total(images_data, total_filtered)
+
+    def _on_image_selected(self, image_id: int):
+        with self.session_factory() as session:
+            stmt = (
+                select(Image)
+                .where(Image.id == image_id)
+                .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
+            )
+            image = session.execute(stmt).unique().scalar_one_or_none()
+
+            if image:
+                dialog = ImageDetailDialog(image, self)
+                dialog.exec()
