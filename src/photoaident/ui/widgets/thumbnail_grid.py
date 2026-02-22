@@ -4,6 +4,7 @@ from typing import List, Tuple
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.db.database import Face
+from photoaident.utils.image_utils import generate_thumbnail
 
 
 class ThumbnailWidget(QtWidgets.QWidget):
@@ -40,6 +41,12 @@ class ThumbnailWidget(QtWidgets.QWidget):
         self._load_thumbnail()
 
     def _load_thumbnail(self):
+        if not self.thumb_path.exists():
+            try:
+                generate_thumbnail(Path(self.file_path), self.thumb_path)
+            except Exception as e:
+                print(f"Error generating thumbnail for {self.file_path}: {e}")
+
         # Calculate scaled size while keeping aspect ratio
         def get_scaled_size(path):
             reader = QtGui.QImageReader(str(path))
@@ -141,7 +148,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     def clear(self):
         # Remove the "Showing X of Y" label if it exists
-        if self.main_layout.count() > 1:
+        while self.main_layout.count() > 1:
             item = self.main_layout.itemAt(1)
             if (
                 item
@@ -152,6 +159,9 @@ class ThumbnailGrid(QtWidgets.QWidget):
                 if widget:
                     self.main_layout.removeWidget(widget)
                     widget.deleteLater()
+            else:
+                # Should not happen as scroll area is at 0, but safety first
+                break
 
         # Clear thumbnails list before deleting widgets to avoid stale references
         self.thumbnails = []
@@ -189,6 +199,11 @@ class ThumbnailGrid(QtWidgets.QWidget):
     ):
         self.clear()
         if not images_data:
+            # If no images, still show total if it's > 0 (though this shouldn't happen)
+            if total_count > 0:
+                label = QtWidgets.QLabel(self.tr("No images found."))
+                label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+                self.main_layout.insertWidget(1, label)
             return
 
         for img_id, path, faces, thumb_path, orig_size in images_data:
@@ -212,7 +227,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
         # Recalculate columns based on width
-        new_cols = max(1, self.width() // 170)
+        # Subtract some margin for scrollbar
+        new_cols = max(1, (self.width() - 20) // 170)
         if new_cols != self.cols:
             self.cols = new_cols
             self._rearrange_grid()

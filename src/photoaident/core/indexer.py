@@ -11,6 +11,7 @@ from photoaident.core.embeddings import FaceEmbedder
 from photoaident.db.database import Image, Face, FaceState
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
+from photoaident.utils.image_utils import generate_thumbnail
 
 
 class InventoryTask(QtCore.QObject):
@@ -228,6 +229,11 @@ class IndexingTask(QtCore.QObject):
                             crop = embedder.extract_face_crop(path, bbox)
                             crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
                             crop.save(crop_path, "JPEG", quality=90)
+
+                        # Save full-photo thumbnail (cache)
+                        thumb_path = self.paths.thumbs_dir / f"{img.file_hash}.jpg"
+                        if not thumb_path.exists():
+                            generate_thumbnail(path, thumb_path)
 
                         indexed_count += 1
                         total_faces += len(faces_info)

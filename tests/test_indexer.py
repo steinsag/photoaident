@@ -119,7 +119,7 @@ def test_indexing_task_success(
 ):
     # Setup: Create an image that needs indexing
     img_file = tmp_path / "img1.jpg"
-    img_file.write_bytes(b"dummy image data")
+    PILImage.new("RGB", (100, 100), "red").save(img_file, "JPEG")
 
     with session_factory() as session:
         img = Image(file_path=str(img_file), file_size=len(b"dummy image data"))
@@ -169,3 +169,7 @@ def test_indexing_task_success(
     # Verify crop was saved
     crop_path = tmp_paths.face_crops_dir / f"{face.id}.jpg"
     assert crop_path.exists()
+
+    # Verify full-photo thumbnail was saved
+    thumb_path = tmp_paths.thumbs_dir / f"{img.file_hash}.jpg"
+    assert thumb_path.exists()
