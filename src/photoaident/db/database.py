@@ -133,7 +133,7 @@ class ImageTag(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     image_id: Mapped[int] = mapped_column(ForeignKey("images.id"), nullable=False)
-    tag_key: Mapped[str] = mapped_column(String, nullable=False)
+    tag_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
     tag_value: Mapped[str] = mapped_column(
         String, nullable=False
     )  # Stores float confidence as string if needed, or just string
