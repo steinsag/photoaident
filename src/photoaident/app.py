@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import onnxruntime as ort
 from PySide6 import QtCore, QtGui, QtWidgets
 
+from photoaident.core.indexer import InventoryTask, IndexingTask
 from photoaident.db.database import (
     get_counts,
     clear_database,
@@ -14,10 +15,9 @@ from photoaident.db.database import (
     get_session_factory,
 )
 from photoaident.db.vector_store import VectorStore
-from photoaident.core.indexer import InventoryTask
-from photoaident.ui.widgets.progress_dialog import ProgressDialog
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
+from photoaident.ui.widgets.progress_dialog import ProgressDialog
 
 if TYPE_CHECKING:
     from photoaident.paths import AppPaths
@@ -83,6 +83,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.resize(800, 600)
         self._set_app_icon()
 
+        # Status bar
+        self.status_bar = self.statusBar()
+        self.indexing_label = QtWidgets.QLabel()
+        self.status_bar.addPermanentWidget(self.indexing_label)
+
         # Central widget
         self.central_widget = MyWidget()
         self.setCentralWidget(self.central_widget)
@@ -94,6 +99,43 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_ready.connect(self.central_widget._update_status)
         if check_gpu:
             threading.Thread(target=self._check_gpu, daemon=True).start()
+
+        # Start indexing if we have images
+        self._indexing_task = None
+        self._indexing_thread = None
+        QtCore.QTimer.singleShot(1000, self._maybe_start_indexing)
+
+    def _maybe_start_indexing(self):
+        """Start indexing if there are images that need it."""
+        if self._indexing_task is not None:
+            return
+
+        self._indexing_task = IndexingTask(
+            self.session_factory, self.vector_store, self.paths
+        )
+        self._indexing_thread = QtCore.QThread()
+        self._indexing_task.moveToThread(self._indexing_thread)
+
+        self._indexing_task.progress.connect(self._update_indexing_status)
+        self._indexing_task.finished.connect(self._on_indexing_finished)
+        self._indexing_thread.started.connect(self._indexing_task.run)
+
+        self._indexing_thread.start()
+
+    def _update_indexing_status(self, indexed, total, faces):
+        msg = self.tr("Indexed: {indexed}/{total} | Faces: {faces}").format(
+            indexed=indexed, total=total, faces=faces
+        )
+        self.indexing_label.setText(msg)
+
+    def _on_indexing_finished(self):
+        self.vector_store.save(self.paths.faiss_path)
+        self.indexing_label.setText(self.tr("Indexing complete"))
+        if self._indexing_thread:
+            self._indexing_thread.quit()
+            self._indexing_thread.wait()
+            self._indexing_thread = None
+        self._indexing_task = None
 
     def _create_menus(self):
         menubar = self.menuBar()
@@ -172,14 +214,22 @@ class MainWindow(QtWidgets.QMainWindow):
         task.progress.connect(dialog.update_progress)
         task.finished.connect(dialog.accept)
         task.finished.connect(thread.quit)
+        task.finished.connect(self._maybe_start_indexing)
         thread.started.connect(task.run)
         thread.finished.connect(thread.deleteLater)
 
         # Ensure task is deleted when thread finishes
         task.finished.connect(task.deleteLater)
 
+        # Start thread before exec to avoid blocking if finished signal comes early
         thread.start()
-        dialog.exec()
+        try:
+            dialog.exec()
+        finally:
+            if thread.isRunning():
+                task.cancel()
+                thread.quit()
+                thread.wait()
 
     def _check_gpu(self):
         try:

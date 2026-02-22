@@ -20,17 +20,27 @@
         <translation>PhotoAIdent</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="102"/>
+        <location filename="../../src/photoaident/app.py" line="126"/>
+        <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/photoaident/app.py" line="133"/>
+        <source>Indexing complete</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../../src/photoaident/app.py" line="144"/>
         <source>&amp;File</source>
         <translation>&amp;Datei</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="104"/>
+        <location filename="../../src/photoaident/app.py" line="146"/>
         <source>&amp;Preferences</source>
         <translation>&amp;Einstellungen</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="111"/>
+        <location filename="../../src/photoaident/app.py" line="153"/>
         <source>&amp;Exit</source>
         <translation>&amp;Beenden</translation>
     </message>
@@ -54,7 +64,7 @@
             </translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="127"/>
+        <location filename="../../src/photoaident/app.py" line="169"/>
         <source>Changing the photo collection path will cause all existing detected faces to be lost.
 
 Currently indexed:
@@ -65,37 +75,37 @@ Do you really want to proceed?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="137"/>
+        <location filename="../../src/photoaident/app.py" line="179"/>
         <source>Confirm Collection Change</source>
         <translation>Pfadänderung bestätigen</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="164"/>
+        <location filename="../../src/photoaident/app.py" line="206"/>
         <source>Indexing</source>
         <translation>Indexierung</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="164"/>
+        <location filename="../../src/photoaident/app.py" line="206"/>
         <source>Searching for photos...</source>
         <translation>Suche nach Fotos...</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="192"/>
+        <location filename="../../src/photoaident/app.py" line="242"/>
         <source>✅ GPU ready — {providers}</source>
         <translation>✅ GPU bereit — {providers}</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="197"/>
+        <location filename="../../src/photoaident/app.py" line="247"/>
         <source>⚠️ CPU only — {providers}</source>
         <translation>⚠️ Nur CPU — {providers}</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="203"/>
+        <location filename="../../src/photoaident/app.py" line="253"/>
         <source>❌ Import failed: {error}</source>
         <translation>❌ Import fehlgeschlagen: {error}</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="206"/>
+        <location filename="../../src/photoaident/app.py" line="256"/>
         <source>❌ Error: {error}</source>
         <translation>❌ Fehler: {error}</translation>
     </message>
@@ -103,42 +113,42 @@ Do you really want to proceed?</source>
 <context>
     <name>MyWidget</name>
     <message>
-        <location filename="../../src/photoaident/app.py" line="232"/>
+        <location filename="../../src/photoaident/app.py" line="282"/>
         <source>Hallo Welt</source>
         <translation>Hallo Welt</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="233"/>
+        <location filename="../../src/photoaident/app.py" line="283"/>
         <source>Hei maailma</source>
         <translation>Hei maailma</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="234"/>
+        <location filename="../../src/photoaident/app.py" line="284"/>
         <source>Hola Mundo</source>
         <translation>Hola Mundo</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="235"/>
+        <location filename="../../src/photoaident/app.py" line="285"/>
         <source>Привіт, світе!</source>
         <translation>Привіт, світе!</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="236"/>
+        <location filename="../../src/photoaident/app.py" line="286"/>
         <source>Hello World!</source>
         <translation>Hallo Welt!</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="239"/>
+        <location filename="../../src/photoaident/app.py" line="289"/>
         <source>Click me!</source>
         <translation>Klick mich!</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="241"/>
+        <location filename="../../src/photoaident/app.py" line="291"/>
         <source>Hello World</source>
         <translation>Hallo Welt</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="244"/>
+        <location filename="../../src/photoaident/app.py" line="294"/>
         <source>⏳ Checking GPU / InsightFace...</source>
         <translation>⏳ Prüfe GPU / InsightFace...</translation>
     </message>

@@ -74,11 +74,20 @@ def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
         self.path_edit.setText("/mock/saved/path")
         return QtWidgets.QDialog.DialogCode.Accepted
 
+    # Mock ProgressDialog.exec to avoid modal blocking in tests
+    def mock_progress_exec(self):
+        # We don't actually want to run the thread in this test,
+        # but let's just make it return immediately.
+        return QtWidgets.QDialog.DialogCode.Accepted
+
     # Mock QMessageBox.question to simulate Yes
     def mock_question(*args, **kwargs):
         return QtWidgets.QMessageBox.StandardButton.Yes
 
     monkeypatch.setattr(PreferencesDialog, "exec", mock_exec)
+    from photoaident.ui.widgets.progress_dialog import ProgressDialog
+
+    monkeypatch.setattr(ProgressDialog, "exec", mock_progress_exec)
     monkeypatch.setattr(QtWidgets.QMessageBox, "question", mock_question)
 
     # Show preferences (this calls dialog.exec() and then saves if Accepted)

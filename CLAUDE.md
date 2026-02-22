@@ -404,9 +404,9 @@ uv run photoaident                   # Run the app
 uv run pytest                        # All tests (no GPU required)
 uv run pytest -m gpu                 # GPU integration tests only
 uv run pytest --cov=photoaident      # With coverage report
-uv run ruff check src/               # Lint
-uv run ruff format src/              # Format
-uv run ty check src/                 # Type check
+uv run ruff check                    # Lint
+uv run ruff format                   # Format
+uv run ty check                      # Type check
 uv run alembic revision --autogenerate -m "description"  # New migration
 uv run alembic upgrade head          # Apply migrations manually (dev use)
 ./scripts/build_pyinstaller.sh       # PyInstaller bundle

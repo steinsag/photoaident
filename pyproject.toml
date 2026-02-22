@@ -61,6 +61,9 @@ ignore = []
 addopts = "-ra --cov=photoaident --cov-report=term-missing:skip-covered --cov-report=xml --cov-report=html"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "gpu: marks tests as requiring a GPU (CUDA) (deselect with '-m \"not gpu\"')",
+]
 filterwarnings = [
     "ignore::DeprecationWarning:testcontainers(\\.|$)",
 ]
