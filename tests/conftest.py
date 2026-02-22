@@ -39,8 +39,8 @@ def db_session(db_engine):
             savepoint.rollback()
 
 
-@pytest.fixture(scope="session")
-def vector_store(tmp_paths):
+@pytest.fixture
+def vector_store():
     from photoaident.db.vector_store import VectorStore
 
-    return VectorStore(tmp_paths.faiss_path)
+    return VectorStore()
