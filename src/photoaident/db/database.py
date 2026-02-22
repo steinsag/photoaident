@@ -66,7 +66,7 @@ class Image(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     file_path: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    file_hash: Mapped[str] = mapped_column(String, nullable=False)
+    file_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     indexed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

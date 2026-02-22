@@ -14,6 +14,8 @@ from photoaident.db.database import (
     get_session_factory,
 )
 from photoaident.db.vector_store import VectorStore
+from photoaident.core.indexer import InventoryTask
+from photoaident.ui.widgets.progress_dialog import ProgressDialog
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
 
@@ -148,10 +150,36 @@ class MainWindow(QtWidgets.QMainWindow):
                     # Update settings
                     self.settings.collection_path = new_path
                     self.settings.save(self.paths.config_file)
+
+                    # Start inventory scan
+                    self._run_inventory_scan(new_path)
             else:
                 # Path didn't change, just save settings
                 # (in case other settings added later)
                 self.settings.save(self.paths.config_file)
+
+    def _run_inventory_scan(self, path: str):
+        """Run the initial inventory scan for a new collection path."""
+        dialog = ProgressDialog(
+            self.tr("Indexing"), self.tr("Searching for photos..."), self
+        )
+
+        task = InventoryTask(path, self.session_factory)
+        thread = QtCore.QThread()
+        task.moveToThread(thread)
+
+        task.status.connect(dialog.update_status)
+        task.progress.connect(dialog.update_progress)
+        task.finished.connect(dialog.accept)
+        task.finished.connect(thread.quit)
+        thread.started.connect(task.run)
+        thread.finished.connect(thread.deleteLater)
+
+        # Ensure task is deleted when thread finishes
+        task.finished.connect(task.deleteLater)
+
+        thread.start()
+        dialog.exec()
 
     def _check_gpu(self):
         try:

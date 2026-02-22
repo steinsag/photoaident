@@ -44,6 +44,8 @@ def check_translations() -> int:
             [
                 "pyside6-lupdate",
                 "src/photoaident/app.py",
+                "src/photoaident/core/indexer.py",
+                "src/photoaident/ui/widgets/progress_dialog.py",
                 "src/photoaident/ui/preferences_dialog.py",
                 "-ts",
             ]
@@ -64,6 +66,8 @@ def check_translations() -> int:
             print("[verify] Translations are out of date! Please update them with:")
             print(
                 "  uv run pyside6-lupdate src/photoaident/app.py "
+                "src/photoaident/core/indexer.py "
+                "src/photoaident/ui/widgets/progress_dialog.py "
                 "src/photoaident/ui/preferences_dialog.py -ts " + " ".join(ts_files)
             )
             return result.returncode
