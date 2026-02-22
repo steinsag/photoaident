@@ -47,6 +47,8 @@ def check_translations() -> int:
                 "src/photoaident/core/indexer.py",
                 "src/photoaident/ui/widgets/progress_dialog.py",
                 "src/photoaident/ui/preferences_dialog.py",
+                "src/photoaident/ui/pages/library.py",
+                "src/photoaident/ui/widgets/thumbnail_grid.py",
                 "-ts",
             ]
             + ts_files,
@@ -68,7 +70,9 @@ def check_translations() -> int:
                 "  uv run pyside6-lupdate src/photoaident/app.py "
                 "src/photoaident/core/indexer.py "
                 "src/photoaident/ui/widgets/progress_dialog.py "
-                "src/photoaident/ui/preferences_dialog.py -ts " + " ".join(ts_files)
+                "src/photoaident/ui/preferences_dialog.py "
+                "src/photoaident/ui/pages/library.py "
+                "src/photoaident/ui/widgets/thumbnail_grid.py -ts " + " ".join(ts_files)
             )
             return result.returncode
 

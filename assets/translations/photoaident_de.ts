@@ -13,34 +13,53 @@
     </message>
 </context>
 <context>
+    <name>LibraryPage</name>
+    <message>
+        <source>All Images</source>
+        <translation type="vanished">Alle Bilder</translation>
+    </message>
+    <message>
+        <source>With Faces</source>
+        <translation type="vanished">Mit Gesichtern</translation>
+    </message>
+    <message>
+        <source>Without Faces</source>
+        <translation type="vanished">Ohne Gesichter</translation>
+    </message>
+    <message>
+        <source>Filter:</source>
+        <translation type="vanished">Filter:</translation>
+    </message>
+</context>
+<context>
     <name>MainWindow</name>
     <message>
-        <location filename="../../src/photoaident/app.py" line="82"/>
+        <location filename="../../src/photoaident/app.py" line="84"/>
         <source>PhotoAIdent</source>
         <translation>PhotoAIdent</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="126"/>
+        <location filename="../../src/photoaident/app.py" line="129"/>
         <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="132"/>
+        <location filename="../../src/photoaident/app.py" line="138"/>
         <source>Indexing complete</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="143"/>
+        <location filename="../../src/photoaident/app.py" line="150"/>
         <source>&amp;File</source>
         <translation>&amp;Datei</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="145"/>
+        <location filename="../../src/photoaident/app.py" line="152"/>
         <source>&amp;Preferences</source>
         <translation>&amp;Einstellungen</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="152"/>
+        <location filename="../../src/photoaident/app.py" line="159"/>
         <source>&amp;Exit</source>
         <translation>&amp;Beenden</translation>
     </message>
@@ -53,7 +72,8 @@
 
                 Do you really want to proceed?
             </source>
-        <translation type="vanished">Das Ändern des Pfads der Fotosammlung führt dazu, dass alle bereits erkannten Gesichter
+        <translation type="vanished">Das Ändern des Pfads der Fotosammlung führt dazu, dass alle bereits erkannten
+                Gesichter
                 verloren gehen.
 
                 Aktuell indexiert:
@@ -64,7 +84,7 @@
             </translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="168"/>
+        <location filename="../../src/photoaident/app.py" line="175"/>
         <source>Changing the photo collection path will cause all existing detected faces to be lost.
 
 Currently indexed:
@@ -75,37 +95,37 @@ Do you really want to proceed?</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="178"/>
+        <location filename="../../src/photoaident/app.py" line="185"/>
         <source>Confirm Collection Change</source>
         <translation>Pfadänderung bestätigen</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="205"/>
+        <location filename="../../src/photoaident/app.py" line="212"/>
         <source>Indexing</source>
         <translation>Indexierung</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="205"/>
+        <location filename="../../src/photoaident/app.py" line="212"/>
         <source>Searching for photos...</source>
         <translation>Suche nach Fotos...</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="241"/>
+        <location filename="../../src/photoaident/app.py" line="248"/>
         <source>✅ GPU ready — {providers}</source>
         <translation>✅ GPU bereit — {providers}</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="246"/>
+        <location filename="../../src/photoaident/app.py" line="252"/>
         <source>⚠️ CPU only — {providers}</source>
         <translation>⚠️ Nur CPU — {providers}</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="252"/>
+        <location filename="../../src/photoaident/app.py" line="257"/>
         <source>❌ Import failed: {error}</source>
         <translation>❌ Import fehlgeschlagen: {error}</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="255"/>
+        <location filename="../../src/photoaident/app.py" line="259"/>
         <source>❌ Error: {error}</source>
         <translation>❌ Fehler: {error}</translation>
     </message>
@@ -113,44 +133,36 @@ Do you really want to proceed?</source>
 <context>
     <name>MyWidget</name>
     <message>
-        <location filename="../../src/photoaident/app.py" line="299"/>
         <source>Hallo Welt</source>
-        <translation>Hallo Welt</translation>
+        <translation type="vanished">Hallo Welt</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="300"/>
         <source>Hei maailma</source>
-        <translation>Hei maailma</translation>
+        <translation type="vanished">Hei maailma</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="301"/>
         <source>Hola Mundo</source>
-        <translation>Hola Mundo</translation>
+        <translation type="vanished">Hola Mundo</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="302"/>
         <source>Привіт, світе!</source>
-        <translation>Привіт, світе!</translation>
+        <translation type="vanished">Привіт, світе!</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="303"/>
         <source>Hello World!</source>
-        <translation>Hallo Welt!</translation>
+        <translation type="vanished">Hallo Welt!</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="306"/>
         <source>Click me!</source>
-        <translation>Klick mich!</translation>
+        <translation type="vanished">Klick mich!</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="308"/>
         <source>Hello World</source>
-        <translation>Hallo Welt</translation>
+        <translation type="vanished">Hallo Welt</translation>
     </message>
     <message>
-        <location filename="../../src/photoaident/app.py" line="311"/>
         <source>⏳ Checking GPU / InsightFace...</source>
-        <translation>⏳ Prüfe GPU / InsightFace...</translation>
+        <translation type="vanished">⏳ Prüfe GPU / InsightFace...</translation>
     </message>
 </context>
 <context>
@@ -184,6 +196,20 @@ Do you really want to proceed?</source>
         <location filename="../../src/photoaident/ui/preferences_dialog.py" line="53"/>
         <source>Select Photo Collection Folder</source>
         <translation>Fotosammlungsordner auswählen</translation>
+    </message>
+</context>
+<context>
+    <name>ThumbnailGrid</name>
+    <message>
+        <source>Showing first {limit} of {total} images.</source>
+        <translation type="vanished">Zeige die ersten {limit} von {total} Bildern.</translation>
+    </message>
+</context>
+<context>
+    <name>ThumbnailWidget</name>
+    <message>
+        <source>Error loading image</source>
+        <translation type="vanished">Fehler beim Laden des Bildes</translation>
     </message>
 </context>
 </TS>

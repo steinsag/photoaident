@@ -1,5 +1,4 @@
 import os
-import random
 import sys
 import threading
 from typing import TYPE_CHECKING
@@ -16,6 +15,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
+from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.preferences_dialog import PreferencesDialog
 from photoaident.ui.widgets.progress_dialog import ProgressDialog
 
@@ -62,10 +62,12 @@ def load_translations(app: QtWidgets.QApplication):
                 break
 
 
+class _GPUStatusSignal(QtCore.QObject):
+    status_ready = QtCore.Signal(str)
+
+
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window."""
-
-    status_ready = QtCore.Signal(str, str)  # message, color
 
     def __init__(self, paths: "AppPaths", check_gpu: bool = True):
         super().__init__()
@@ -80,7 +82,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.vector_store.load(self.paths.faiss_path)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
-        self.resize(800, 600)
+        self.resize(1024, 768)
         self._set_app_icon()
 
         # Status bar
@@ -89,14 +91,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_bar.addPermanentWidget(self.indexing_label)
 
         # Central widget
-        self.central_widget = MyWidget()
+        self.central_widget = LibraryPage(self.session_factory, self.paths)
         self.setCentralWidget(self.central_widget)
 
         # Create menu bar
         self._create_menus()
 
-        # Background thread so UI doesn't freeze during ONNX init
-        self.status_ready.connect(self.central_widget._update_status)
+        # Update GPU status
+        self._gpu_status_signal = _GPUStatusSignal()
+        self._gpu_status_signal.status_ready.connect(self._on_gpu_status_ready)
         if check_gpu:
             threading.Thread(target=self._check_gpu, daemon=True).start()
 
@@ -127,6 +130,9 @@ class MainWindow(QtWidgets.QMainWindow):
             indexed=indexed, total=total, faces=faces
         )
         self.indexing_label.setText(msg)
+        # Reload library view periodically or when indexing finishes
+        if indexed % 10 == 0 or indexed == total:
+            self.central_widget.load_images()
 
     def _on_indexing_finished(self):
         self.indexing_label.setText(self.tr("Indexing complete"))
@@ -135,6 +141,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._indexing_thread.wait()
             self._indexing_thread = None
         self._indexing_task = None
+        self.central_widget.load_images()
 
     def _create_menus(self):
         menubar = self.menuBar()
@@ -241,21 +248,21 @@ class MainWindow(QtWidgets.QMainWindow):
                 msg = self.tr("✅ GPU ready — {providers}").format(
                     providers=", ".join(providers)
                 )
-                color = "green"
             else:
                 msg = self.tr("⚠️ CPU only — {providers}").format(
                     providers=", ".join(providers)
                 )
-                color = "orange"
 
         except ImportError as e:
             msg = self.tr("❌ Import failed: {error}").format(error=str(e))
-            color = "red"
         except Exception as e:
             msg = self.tr("❌ Error: {error}").format(error=str(e))
-            color = "red"
 
-        self.status_ready.emit(msg, color)
+        # Update status bar via signal
+        self._gpu_status_signal.status_ready.emit(msg)
+
+    def _on_gpu_status_ready(self, msg: str):
+        self.status_bar.showMessage(msg, 5000)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
         # Graceful shutdown: cancel indexing and persist FAISS index
@@ -289,42 +296,3 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.setWindowIcon(icon)
         QtWidgets.QApplication.setWindowIcon(icon)
-
-
-class MyWidget(QtWidgets.QWidget):
-    def __init__(self):
-        super().__init__()
-
-        self.hello = [
-            self.tr("Hallo Welt"),
-            self.tr("Hei maailma"),
-            self.tr("Hola Mundo"),
-            self.tr("Привіт, світе!"),
-            self.tr("Hello World!"),
-        ]
-
-        self.button = QtWidgets.QPushButton(self.tr("Click me!"))
-        self.text = QtWidgets.QLabel(
-            self.tr("Hello World"), alignment=QtCore.Qt.AlignmentFlag.AlignCenter
-        )
-        self.gpu_status = QtWidgets.QLabel(
-            self.tr("⏳ Checking GPU / InsightFace..."),
-            alignment=QtCore.Qt.AlignmentFlag.AlignCenter,
-        )
-        self.gpu_status.setStyleSheet("color: gray; font-size: 11px;")
-
-        main_layout = QtWidgets.QVBoxLayout(self)
-        main_layout.addWidget(self.text)
-        main_layout.addWidget(self.button)
-        main_layout.addWidget(self.gpu_status)
-
-        self.button.clicked.connect(self.magic)
-
-    @QtCore.Slot(str, str)
-    def _update_status(self, message: str, color: str):
-        self.gpu_status.setText(message)
-        self.gpu_status.setStyleSheet(f"color: {color}; font-size: 11px;")
-
-    @QtCore.Slot()
-    def magic(self):
-        self.text.setText(random.choice(self.hello))

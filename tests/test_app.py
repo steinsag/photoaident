@@ -1,21 +1,26 @@
 from PySide6 import QtCore
 
-from photoaident.app import MyWidget
+from photoaident.app import MainWindow
+from photoaident.paths import AppPaths
+from photoaident.db.migrate import apply_migrations
 
 
-def test_app_setup(qtbot):
+def test_app_setup(qtbot, tmp_path):
     """
-    Test that the application widget can be instantiated and basic interaction works.
+    Test that the application window can be instantiated.
     """
-    widget = MyWidget()
-    qtbot.addWidget(widget)
+    paths = AppPaths(
+        base_data=tmp_path / "data",
+        base_cache=tmp_path / "cache",
+        base_config=tmp_path / "config",
+    )
+    paths.ensure_dirs()
 
-    # Check initial state
-    assert widget.text.text() == "Hello World"
+    # Apply migrations to the test database
+    apply_migrations(f"sqlite:///{paths.db_path}")
 
-    # Click the button
-    with qtbot.waitSignal(widget.button.clicked, timeout=1000):
-        qtbot.mouseClick(widget.button, QtCore.Qt.MouseButton.LeftButton)
+    window = MainWindow(paths, check_gpu=False)
+    qtbot.addWidget(window)
 
-    # Check that text changed to one of the expected values
-    qtbot.waitUntil(lambda: widget.text.text() in widget.hello, timeout=1000)
+    assert window.windowTitle() == "PhotoAIdent"
+    assert window.central_widget is not None
