@@ -2,6 +2,69 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US">
 <context>
+    <name>AssignPersonDialog</name>
+    <message>
+        <source>Assign to Person</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Search…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>New person…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Cluster</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>New cluster…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(unlabelled)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>New Person</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>New Cluster</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label (optional):</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>FaceCropWidget</name>
+    <message>
+        <source>No image</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No thumbnail</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Date: {taken_at}
+Confidence: {confidence}%</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ImageDetailDialog</name>
     <message>
         <source>Image Details</source>
@@ -64,6 +127,37 @@ Please close it before starting a new one.</source>
     </message>
 </context>
 <context>
+    <name>LabellingPage</name>
+    <message>
+        <source>Assign to Person…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Mark Anonymous</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>{count} face(s) remaining</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>All done! No unidentified faces remain.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>All remaining faces skipped this session. Restart the app to review them again.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>LibraryPage</name>
     <message>
         <source>All Images</source>
@@ -86,6 +180,14 @@ Please close it before starting a new one.</source>
     <name>MainWindow</name>
     <message>
         <source>PhotoAIdent</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Library</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Label</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

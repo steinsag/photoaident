@@ -23,4 +23,5 @@ def test_app_setup(qtbot, tmp_path):
     qtbot.addWidget(window)
 
     assert window.windowTitle() == "PhotoAIdent"
-    assert window.central_widget is not None
+    assert window.library_page is not None
+    assert window.labelling_page is not None

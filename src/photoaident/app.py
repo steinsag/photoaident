@@ -15,6 +15,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
+from photoaident.ui.pages.labelling import LabellingPage
 from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.preferences_dialog import PreferencesDialog
 from photoaident.ui.widgets.progress_dialog import ProgressDialog
@@ -90,9 +91,46 @@ class MainWindow(QtWidgets.QMainWindow):
         self.indexing_label = QtWidgets.QLabel()
         self.status_bar.addPermanentWidget(self.indexing_label)
 
-        # Central widget
-        self.central_widget = LibraryPage(self.session_factory, self.paths)
-        self.setCentralWidget(self.central_widget)
+        # Pages
+        self.library_page = LibraryPage(self.session_factory, self.paths)
+        self.labelling_page = LabellingPage(self.session_factory, self.paths)
+
+        # Stacked widget holding the pages
+        self.stacked = QtWidgets.QStackedWidget()
+        self.stacked.addWidget(self.library_page)  # index 0
+        self.stacked.addWidget(self.labelling_page)  # index 1
+
+        # Sidebar navigation buttons
+        self.btn_library = QtWidgets.QPushButton(self.tr("Library"))
+        self.btn_library.setFlat(True)
+        self.btn_library.clicked.connect(lambda: self._switch_page(0))
+
+        self.btn_label = QtWidgets.QPushButton(self.tr("Label"))
+        self.btn_label.setFlat(True)
+        self.btn_label.clicked.connect(lambda: self._switch_page(1))
+
+        sidebar_layout = QtWidgets.QVBoxLayout()
+        sidebar_layout.setContentsMargins(4, 8, 4, 8)
+        sidebar_layout.setSpacing(4)
+        sidebar_layout.addWidget(self.btn_library)
+        sidebar_layout.addWidget(self.btn_label)
+        sidebar_layout.addStretch()
+
+        sidebar = QtWidgets.QWidget()
+        sidebar.setFixedWidth(110)
+        sidebar.setLayout(sidebar_layout)
+
+        # Assemble central widget
+        central = QtWidgets.QWidget()
+        central_layout = QtWidgets.QHBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(sidebar)
+        central_layout.addWidget(self.stacked)
+        self.setCentralWidget(central)
+
+        # Start on Library page
+        self._switch_page(0)
 
         # Create menu bar
         self._create_menus()
@@ -133,7 +171,7 @@ class MainWindow(QtWidgets.QMainWindow):
         # Reload library view periodically or when indexing finishes
         # Increased frequency to every 50 images to reduce UI lag
         if indexed % 50 == 0 or indexed == total:
-            self.central_widget.load_images()
+            self.library_page.load_images()
 
     def _on_indexing_finished(self):
         self.indexing_label.setText(self.tr("Indexing complete"))
@@ -142,7 +180,18 @@ class MainWindow(QtWidgets.QMainWindow):
             self._indexing_thread.wait()
             self._indexing_thread = None
         self._indexing_task = None
-        self.central_widget.load_images()
+        self.library_page.load_images()
+
+    def _switch_page(self, index: int) -> None:
+        """Switch to the given page index and highlight the active sidebar button."""
+        buttons = [self.btn_library, self.btn_label]
+        for i, btn in enumerate(buttons):
+            font = btn.font()
+            font.setBold(i == index)
+            btn.setFont(font)
+        self.stacked.setCurrentIndex(index)
+        if index == 1:
+            self.labelling_page.refresh()
 
     def _create_menus(self):
         menubar = self.menuBar()

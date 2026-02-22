@@ -2,6 +2,70 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="de_DE">
 <context>
+    <name>AssignPersonDialog</name>
+    <message>
+        <source>Assign to Person</source>
+        <translation>Person zuweisen</translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation>Person</translation>
+    </message>
+    <message>
+        <source>Search…</source>
+        <translation>Suchen…</translation>
+    </message>
+    <message>
+        <source>New person…</source>
+        <translation>Neue Person…</translation>
+    </message>
+    <message>
+        <source>Cluster</source>
+        <translation>Cluster</translation>
+    </message>
+    <message>
+        <source>New cluster…</source>
+        <translation>Neuen Cluster…</translation>
+    </message>
+    <message>
+        <source>(unlabelled)</source>
+        <translation>(ohne Bezeichnung)</translation>
+    </message>
+    <message>
+        <source>New Person</source>
+        <translation>Neue Person</translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation>Name:</translation>
+    </message>
+    <message>
+        <source>New Cluster</source>
+        <translation>Neuer Cluster</translation>
+    </message>
+    <message>
+        <source>Label (optional):</source>
+        <translation>Bezeichnung (optional):</translation>
+    </message>
+</context>
+<context>
+    <name>FaceCropWidget</name>
+    <message>
+        <source>No image</source>
+        <translation>Kein Bild</translation>
+    </message>
+    <message>
+        <source>No thumbnail</source>
+        <translation>Keine Miniaturansicht</translation>
+    </message>
+    <message>
+        <source>Date: {taken_at}
+Confidence: {confidence}%</source>
+        <translation>Datum: {taken_at}
+Konfidenz: {confidence}%</translation>
+    </message>
+</context>
+<context>
     <name>ImageDetailDialog</name>
     <message>
         <source>Image Details</source>
@@ -64,6 +128,37 @@ Please close it before starting a new one.</source>
     </message>
 </context>
 <context>
+    <name>LabellingPage</name>
+    <message>
+        <source>Assign to Person…</source>
+        <translation>Person zuweisen…</translation>
+    </message>
+    <message>
+        <source>Mark Anonymous</source>
+        <translation>Als anonym markieren</translation>
+    </message>
+    <message>
+        <source>Skip</source>
+        <translation>Überspringen</translation>
+    </message>
+    <message>
+        <source>Unknown</source>
+        <translation>Unbekannt</translation>
+    </message>
+    <message>
+        <source>{count} face(s) remaining</source>
+        <translation>{count} Gesicht(er) verbleibend</translation>
+    </message>
+    <message>
+        <source>All done! No unidentified faces remain.</source>
+        <translation>Fertig! Keine unbekannten Gesichter mehr vorhanden.</translation>
+    </message>
+    <message>
+        <source>All remaining faces skipped this session. Restart the app to review them again.</source>
+        <translation>Alle verbleibenden Gesichter wurden in dieser Sitzung übersprungen. Starten Sie die App neu, um sie erneut zu überprüfen.</translation>
+    </message>
+</context>
+<context>
     <name>LibraryPage</name>
     <message>
         <source>All Images</source>
@@ -87,6 +182,14 @@ Please close it before starting a new one.</source>
     <message>
         <source>PhotoAIdent</source>
         <translation>PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Library</source>
+        <translation>Bibliothek</translation>
+    </message>
+    <message>
+        <source>Label</source>
+        <translation>Beschriften</translation>
     </message>
     <message>
         <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
