@@ -67,6 +67,11 @@ class AppPaths:
         # Use the root assets directory for translations
         return Path(__file__).parents[2] / "assets" / "translations"
 
+    @property
+    def lock_path(self) -> Path:
+        """Path to the instance lock file."""
+        return self.data / "photoaident.lock"
+
     def ensure_dirs(self) -> None:
         """Ensure all required directories exist."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
