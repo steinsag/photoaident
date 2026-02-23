@@ -323,9 +323,66 @@ def test_select_person_with_no_faces_shows_empty(
     assert len(page.grid.thumbnails) == 0
 
 
-def test_select_multiple_persons_unions_results(qtbot, session_factory, test_paths, vs):
-    _add_person_with_face(session_factory, vs, "Alice", "/alice.jpg")
-    _add_person_with_face(session_factory, vs, "Bob", "/bob.jpg")
+def test_select_multiple_persons_intersects_results(
+    qtbot, session_factory, test_paths, vs
+):
+    """Selecting two persons shows only images where BOTH appear (AND, not OR)."""
+    # Use orthogonal embeddings so Alice's search won't match Bob's face and vice versa
+    with session_factory() as session:
+        p1 = Person(name="Alice")
+        p2 = Person(name="Bob")
+        session.add_all([p1, p2])
+        session.flush()
+        c1 = EmbeddingCluster(person_id=p1.id)
+        c2 = EmbeddingCluster(person_id=p2.id)
+        session.add_all([c1, c2])
+        session.commit()
+        p1_id, c1_id = p1.id, c1.id
+        p2_id, c2_id = p2.id, c2.id
+
+    emb1 = np.zeros(512, dtype=np.float32)
+    emb1[0] = 1.0
+    emb2 = np.zeros(512, dtype=np.float32)
+    emb2[1] = 1.0
+    faiss_id1 = vs.add(emb1)
+    faiss_id2 = vs.add(emb2)
+
+    with session_factory() as session:
+        img1 = Image(file_path="/alice.jpg", file_size=100, file_hash="alice")
+        img2 = Image(file_path="/bob.jpg", file_size=100, file_hash="bob")
+        session.add_all([img1, img2])
+        session.flush()
+        session.add(
+            Face(
+                image_id=img1.id,
+                faiss_id=faiss_id1,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=50,
+                bbox_h=50,
+                detection_confidence=0.9,
+                person_id=p1_id,
+                cluster_id=c1_id,
+                state=FaceState.IDENTIFIED,
+                model_version="test",
+            )
+        )
+        session.add(
+            Face(
+                image_id=img2.id,
+                faiss_id=faiss_id2,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=50,
+                bbox_h=50,
+                detection_confidence=0.9,
+                person_id=p2_id,
+                cluster_id=c2_id,
+                state=FaceState.IDENTIFIED,
+                model_version="test",
+            )
+        )
+        session.commit()
 
     page = LibraryPage(session_factory, test_paths, vs)
     qtbot.addWidget(page)
@@ -338,7 +395,85 @@ def test_select_multiple_persons_unions_results(qtbot, session_factory, test_pat
     page.person_list_widget.blockSignals(False)
     page.load_images()
 
-    assert len(page.grid.thumbnails) >= 2
+    # Alice is only in alice.jpg, Bob is only in bob.jpg → no image has both
+    assert len(page.grid.thumbnails) == 0
+
+
+def test_select_multiple_persons_shows_shared_image(
+    qtbot, session_factory, test_paths, vs
+):
+    """An image containing all selected persons is included in AND results."""
+    with session_factory() as session:
+        p1 = Person(name="Alice")
+        p2 = Person(name="Bob")
+        session.add_all([p1, p2])
+        session.flush()
+        c1 = EmbeddingCluster(person_id=p1.id)
+        c2 = EmbeddingCluster(person_id=p2.id)
+        session.add_all([c1, c2])
+        session.commit()
+        p1_id, c1_id = p1.id, c1.id
+        p2_id, c2_id = p2.id, c2.id
+
+    # Two orthogonal embeddings so they won't match each other
+    emb1 = np.zeros(512, dtype=np.float32)
+    emb1[0] = 1.0
+    emb2 = np.zeros(512, dtype=np.float32)
+    emb2[1] = 1.0
+    faiss_id1 = vs.add(emb1)
+    faiss_id2 = vs.add(emb2)
+
+    with session_factory() as session:
+        img = Image(file_path="/shared.jpg", file_size=100, file_hash="shared")
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id1,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=50,
+                bbox_h=50,
+                detection_confidence=0.9,
+                person_id=p1_id,
+                cluster_id=c1_id,
+                state=FaceState.IDENTIFIED,
+                model_version="test",
+            )
+        )
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id2,
+                bbox_x=60,
+                bbox_y=0,
+                bbox_w=50,
+                bbox_h=50,
+                detection_confidence=0.9,
+                person_id=p2_id,
+                cluster_id=c2_id,
+                state=FaceState.IDENTIFIED,
+                model_version="test",
+            )
+        )
+        session.commit()
+        shared_img_id = img.id
+
+    page = LibraryPage(session_factory, test_paths, vs)
+    qtbot.addWidget(page)
+
+    page.person_list_widget.blockSignals(True)
+    for i in range(page.person_list_widget.count()):
+        item = page.person_list_widget.item(i)
+        assert item is not None
+        item.setCheckState(QtCore.Qt.CheckState.Checked)
+    page.person_list_widget.blockSignals(False)
+    page.load_images()
+
+    result_ids = [t.image_id for t in page.grid.thumbnails]
+    assert shared_img_id in result_ids
+    assert len(page.grid.thumbnails) == 1
 
 
 def test_person_filter_without_vector_store_falls_back_to_all(

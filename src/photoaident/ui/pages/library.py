@@ -182,13 +182,24 @@ class LibraryPage(QtWidgets.QWidget):
                 self.grid.set_images_with_total(self._build_images_data(images), total)
             return
 
-        # Union FAISS results across selected persons
-        image_scores: dict[int, float] = {}
+        # Intersect FAISS results: only images where ALL selected persons appear
+        per_person_scores: list[dict[int, float]] = []
         for person_id in person_ids:
+            scores: dict[int, float] = {}
             for img_id, score in find_images_by_person(
                 self.session_factory, self.vector_store, person_id
             ):
-                image_scores[img_id] = max(image_scores.get(img_id, 0.0), score)
+                scores[img_id] = score
+            per_person_scores.append(scores)
+
+        common_ids = set(per_person_scores[0].keys())
+        for scores in per_person_scores[1:]:
+            common_ids &= scores.keys()
+
+        # Rank by minimum score across persons (weakest match determines relevance)
+        image_scores: dict[int, float] = {
+            img_id: min(s[img_id] for s in per_person_scores) for img_id in common_ids
+        }
 
         if not image_scores:
             self.grid.set_images_with_total([], 0)
