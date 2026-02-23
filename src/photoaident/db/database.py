@@ -53,6 +53,10 @@ class SuggestionState(PyEnum):
     REJECTED = "rejected"
 
 
+_CASCADE = "all, delete-orphan"
+_FK_IMAGES = "images.id"
+_FK_PERSONS = "persons.id"
+
 # Ordered list of the 5 canonical age-group slot keys
 # (display names are translated in the UI).
 AGE_CLUSTERS: list[str] = ["infant", "youngster", "teenager", "adult", "senior"]
@@ -83,13 +87,13 @@ class Image(Base):
         "ImageMetadata",
         back_populates="image",
         uselist=False,
-        cascade="all, delete-orphan",
+        cascade=_CASCADE,
     )
     tags: Mapped[List["ImageTag"]] = relationship(
-        "ImageTag", back_populates="image", cascade="all, delete-orphan"
+        "ImageTag", back_populates="image", cascade=_CASCADE
     )
     faces: Mapped[List["Face"]] = relationship(
-        "Face", back_populates="image", cascade="all, delete-orphan"
+        "Face", back_populates="image", cascade=_CASCADE
     )
 
 
@@ -104,7 +108,7 @@ class ImageMetadata(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     image_id: Mapped[int] = mapped_column(
-        ForeignKey("images.id"), unique=True, nullable=False
+        ForeignKey(_FK_IMAGES), unique=True, nullable=False
     )
     taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
     taken_at_source: Mapped[TakenAtSource] = mapped_column(
@@ -139,7 +143,7 @@ class ImageTag(Base):
     __tablename__ = "image_tags"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    image_id: Mapped[int] = mapped_column(ForeignKey("images.id"), nullable=False)
+    image_id: Mapped[int] = mapped_column(ForeignKey(_FK_IMAGES), nullable=False)
     tag_key: Mapped[str] = mapped_column(String, nullable=False, index=True)
     tag_value: Mapped[str] = mapped_column(
         String, nullable=False
@@ -171,7 +175,7 @@ class Face(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     image_id: Mapped[int] = mapped_column(
-        ForeignKey("images.id"), nullable=False, index=True
+        ForeignKey(_FK_IMAGES), nullable=False, index=True
     )
     faiss_id: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_x: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -179,7 +183,7 @@ class Face(Base):
     bbox_w: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_h: Mapped[int] = mapped_column(Integer, nullable=False)
     detection_confidence: Mapped[float] = mapped_column(Float, nullable=False)
-    person_id: Mapped[Optional[int]] = mapped_column(ForeignKey("persons.id"))
+    person_id: Mapped[Optional[int]] = mapped_column(ForeignKey(_FK_PERSONS))
     cluster_id: Mapped[Optional[int]] = mapped_column(
         ForeignKey("embedding_clusters.id")
     )
@@ -198,7 +202,7 @@ class Face(Base):
         "EmbeddingCluster", back_populates="faces"
     )
     suggestions: Mapped[List["Suggestion"]] = relationship(
-        "Suggestion", back_populates="face", cascade="all, delete-orphan"
+        "Suggestion", back_populates="face", cascade=_CASCADE
     )
 
 
@@ -220,10 +224,10 @@ class Person(Base):
 
     faces: Mapped[List["Face"]] = relationship("Face", back_populates="person")
     clusters: Mapped[List["EmbeddingCluster"]] = relationship(
-        "EmbeddingCluster", back_populates="person", cascade="all, delete-orphan"
+        "EmbeddingCluster", back_populates="person", cascade=_CASCADE
     )
     suggestions: Mapped[List["Suggestion"]] = relationship(
-        "Suggestion", back_populates="person", cascade="all, delete-orphan"
+        "Suggestion", back_populates="person", cascade=_CASCADE
     )
 
 
@@ -239,7 +243,7 @@ class EmbeddingCluster(Base):
     __tablename__ = "embedding_clusters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"), nullable=False)
+    person_id: Mapped[int] = mapped_column(ForeignKey(_FK_PERSONS), nullable=False)
     label: Mapped[Optional[str]] = mapped_column(String)
     age_group: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -247,7 +251,7 @@ class EmbeddingCluster(Base):
     person: Mapped["Person"] = relationship("Person", back_populates="clusters")
     faces: Mapped[List["Face"]] = relationship("Face", back_populates="cluster")
     suggestions: Mapped[List["Suggestion"]] = relationship(
-        "Suggestion", back_populates="cluster", cascade="all, delete-orphan"
+        "Suggestion", back_populates="cluster", cascade=_CASCADE
     )
 
 
@@ -264,7 +268,7 @@ class Suggestion(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     face_id: Mapped[int] = mapped_column(ForeignKey("faces.id"), nullable=False)
-    person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"), nullable=False)
+    person_id: Mapped[int] = mapped_column(ForeignKey(_FK_PERSONS), nullable=False)
     cluster_id: Mapped[int] = mapped_column(
         ForeignKey("embedding_clusters.id"), nullable=False
     )

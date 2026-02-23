@@ -289,7 +289,7 @@ def test_image_with_metadata_provides_orig_size(qtbot, session_factory, test_pat
 
 
 def test_select_one_person_shows_matched_images(qtbot, session_factory, test_paths, vs):
-    person_id, img_id = _add_person_with_face(session_factory, vs, "Eve", "/eve.jpg")
+    _, _ = _add_person_with_face(session_factory, vs, "Eve", "/eve.jpg")
 
     page = LibraryPage(session_factory, test_paths, vs)
     qtbot.addWidget(page)

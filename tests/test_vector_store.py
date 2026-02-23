@@ -6,14 +6,16 @@ import pytest
 
 from photoaident.db.vector_store import VectorStore
 
+_rng = np.random.default_rng(seed=42)
+
 
 def test_vector_store_add_search(vector_store):
     # Create some dummy embeddings
     # FAISS works best with normalized vectors for IndexFlatIP
-    v1 = np.random.rand(512).astype(np.float32)
+    v1 = _rng.random(512).astype(np.float32)
     v1 /= np.linalg.norm(v1)
 
-    v2 = np.random.rand(512).astype(np.float32)
+    v2 = _rng.random(512).astype(np.float32)
     v2 /= np.linalg.norm(v2)
 
     id1 = vector_store.add(v1)
@@ -46,7 +48,7 @@ def test_vector_store_threshold(vector_store):
 
 
 def test_vector_store_get_embedding(vector_store):
-    v1 = np.random.rand(512).astype(np.float32)
+    v1 = _rng.random(512).astype(np.float32)
     v1 /= np.linalg.norm(v1)
 
     faiss_id = vector_store.add(v1)
@@ -56,7 +58,7 @@ def test_vector_store_get_embedding(vector_store):
 
 
 def test_vector_store_save_load(vector_store, tmp_path):
-    v1 = np.random.rand(512).astype(np.float32)
+    v1 = _rng.random(512).astype(np.float32)
     v1 /= np.linalg.norm(v1)
     vector_store.add(v1)
 
@@ -72,7 +74,7 @@ def test_vector_store_save_load(vector_store, tmp_path):
 
 
 def test_vector_store_empty_search(vector_store):
-    v1 = np.random.rand(512).astype(np.float32)
+    v1 = _rng.random(512).astype(np.float32)
     results = vector_store.search(v1, k=5)
     assert results == []
 
@@ -81,7 +83,7 @@ def test_vector_store_invalid_id(vector_store):
     with pytest.raises(IndexError):
         vector_store.get_embedding(0)
 
-    v1 = np.random.rand(512).astype(np.float32)
+    v1 = _rng.random(512).astype(np.float32)
     vector_store.add(v1)
 
     with pytest.raises(IndexError):
@@ -89,13 +91,13 @@ def test_vector_store_invalid_id(vector_store):
 
 
 def test_vector_store_invalid_dimension(vector_store):
-    v_invalid = np.random.rand(256).astype(np.float32)
+    v_invalid = _rng.random(256).astype(np.float32)
     with pytest.raises(ValueError, match="must be 512-dimensional"):
         vector_store.add(v_invalid)
 
 
 def test_vector_store_search_k0(vector_store):
-    v1 = np.random.rand(512).astype(np.float32)
+    v1 = _rng.random(512).astype(np.float32)
     vector_store.add(v1)
     results = vector_store.search(v1, k=0)
     assert results == []

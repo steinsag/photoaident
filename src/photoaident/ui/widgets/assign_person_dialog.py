@@ -244,7 +244,7 @@ class AssignPersonDialog(QtWidgets.QDialog):
 
         q = self.query_embedding.astype(np.float32).flatten()
         q_norm = np.linalg.norm(q)
-        if q_norm == 0.0:
+        if q_norm < 1e-9:
             return {}
         q = q / q_norm
 
@@ -257,13 +257,13 @@ class AssignPersonDialog(QtWidgets.QDialog):
             for fid in faiss_ids:
                 try:
                     embeddings.append(self.vector_store.get_embedding(fid))
-                except (IndexError, Exception):
+                except Exception:
                     pass
             if not embeddings:
                 continue
             mean_vec = np.mean(np.stack(embeddings, axis=0), axis=0).astype(np.float32)
             mean_norm = np.linalg.norm(mean_vec)
-            if mean_norm == 0.0:
+            if mean_norm < 1e-9:
                 continue
             mean_vec = mean_vec / mean_norm
             scores[age_key] = float(np.dot(q, mean_vec))

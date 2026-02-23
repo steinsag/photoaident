@@ -33,6 +33,34 @@ class InventoryTask(QtCore.QObject):
     def cancel(self):
         self._is_cancelled = True
 
+    def _scan_image_files(self, extensions: set) -> Optional[List[Path]]:
+        """Walk root_path for matching files. Returns None if cancelled."""
+        image_paths: List[Path] = []
+        for root, _, files in os.walk(self.root_path):
+            if self._is_cancelled:
+                return None
+            for file in files:
+                ext = os.path.splitext(file)[1].lower()
+                if ext in extensions:
+                    image_paths.append(Path(root) / file)
+        return image_paths
+
+    def _add_image_if_missing(self, session, p: Path) -> bool:
+        """Insert image record if not already present. Returns True if added."""
+        existing = session.execute(
+            select(Image).where(Image.file_path == str(p))
+        ).scalar_one_or_none()
+        if existing:
+            return False
+        stat = p.stat()
+        img = Image(
+            file_path=str(p),
+            file_size=stat.st_size,
+            file_hash=None,
+        )
+        session.add(img)
+        return True
+
     def run(self):
         """Perform the scan and inventory."""
         if not self.root_path.exists() or not self.root_path.is_dir():
@@ -45,18 +73,10 @@ class InventoryTask(QtCore.QObject):
             )
         )
 
-        # 1. Recursive scan for .jpg and .jpeg (case-insensitive)
-        image_paths: List[Path] = []
-        extensions = {".jpg", ".jpeg"}
-
-        for root, _, files in os.walk(self.root_path):
-            if self._is_cancelled:
-                self.finished.emit(0)
-                return
-            for file in files:
-                ext = os.path.splitext(file)[1].lower()
-                if ext in extensions:
-                    image_paths.append(Path(root) / file)
+        image_paths = self._scan_image_files({".jpg", ".jpeg"})
+        if image_paths is None:
+            self.finished.emit(0)
+            return
 
         total = len(image_paths)
         if total == 0:
@@ -67,7 +87,6 @@ class InventoryTask(QtCore.QObject):
             QtCore.QCoreApplication.translate("InventoryTask", "Adding to database...")
         )
 
-        # 2. Add to database in batches
         added_count = 0
         batch_size = 100
 
@@ -81,24 +100,9 @@ class InventoryTask(QtCore.QObject):
                 batch = image_paths[i : i + batch_size]
                 for p in batch:
                     try:
-                        # Check if already exists by file_path
-                        existing = session.execute(
-                            select(Image).where(Image.file_path == str(p))
-                        ).scalar_one_or_none()
-                        if existing:
-                            continue
-
-                        # Get file size without opening file
-                        stat = p.stat()
-                        img = Image(
-                            file_path=str(p),
-                            file_size=stat.st_size,
-                            file_hash=None,  # Defer hashing
-                        )
-                        session.add(img)
-                        added_count += 1
+                        if self._add_image_if_missing(session, p):
+                            added_count += 1
                     except Exception:
-                        # Skip files that can't be stat'ed (permissions etc)
                         continue
 
                 session.commit()
@@ -147,10 +151,68 @@ class IndexingTask(QtCore.QObject):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
+    def _save_face_crops(
+        self,
+        new_faces: list,
+        embedder: FaceEmbedder,
+        image_path: Path,
+    ) -> None:
+        """Save JPEG crops for each newly detected face."""
+        self.paths.face_crops_dir.mkdir(parents=True, exist_ok=True)
+        for face, bbox in new_faces:
+            crop = embedder.extract_face_crop(image_path, bbox)
+            crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
+            crop.save(crop_path, "JPEG", quality=90)
+
+    def _index_single_image(
+        self,
+        img: Image,
+        session,
+        embedder: FaceEmbedder,
+    ) -> int:
+        """Detect faces, persist to DB + FAISS, save thumbnails. Returns face count."""
+        path = Path(img.file_path)
+        if not path.exists():
+            img.file_hash = "MISSING"
+            session.commit()
+            return 0
+
+        img.file_hash = self._calculate_hash(path)
+
+        faces_info = embedder.process_image(path)
+        new_faces = []
+        for info in faces_info:
+            faiss_id = self.vector_store.add(info["embedding"])
+            bbox = info["bbox"]
+            face = Face(
+                image_id=img.id,
+                faiss_id=faiss_id,
+                bbox_x=bbox[0],
+                bbox_y=bbox[1],
+                bbox_w=bbox[2] - bbox[0],
+                bbox_h=bbox[3] - bbox[1],
+                detection_confidence=info["det_score"],
+                state=FaceState.UNIDENTIFIED,
+                model_version="buffalo_l",
+            )
+            session.add(face)
+            new_faces.append((face, bbox))
+
+        # Persist FAISS first to minimise DB→FAISS mismatch risk
+        self.vector_store.save(self.paths.faiss_path)
+        session.commit()
+
+        self._save_face_crops(new_faces, embedder, path)
+
+        thumb_path = self.paths.thumbs_dir / f"{img.file_hash}.jpg"
+        if not thumb_path.exists():
+            generate_thumbnail(path, thumb_path)
+
+        return len(faces_info)
+
     def run(self):
         """Index images that haven't been indexed yet."""
         with self.session_factory() as session:
-            # 1. Get total count of images to index
             total_images = session.execute(
                 select(func.count(Image.id)).where(Image.file_hash.is_(None))
             ).scalar_one()
@@ -159,12 +221,9 @@ class IndexingTask(QtCore.QObject):
                 self.finished.emit()
                 return
 
-            # Get total face count so far
             total_faces = session.execute(select(func.count(Face.id))).scalar_one()
 
-            # 2. Process images one by one
             indexed_count = 0
-            # Get images in smaller batches to avoid long-running transactions
             while not self._is_cancelled:
                 images_to_index = (
                     session.execute(
@@ -182,69 +241,17 @@ class IndexingTask(QtCore.QObject):
                         break
 
                     try:
-                        path = Path(img.file_path)
-                        if not path.exists():
-                            # Skip missing files
-                            img.file_hash = "MISSING"
-                            session.commit()
-                            continue
-
-                        # Calculate hash
-                        img.file_hash = self._calculate_hash(path)
-
-                        # Detect faces
                         embedder = self._get_embedder()
-                        faces_info = embedder.process_image(path)
-
-                        new_faces = []
-                        for info in faces_info:
-                            # Add to FAISS
-                            faiss_id = self.vector_store.add(info["embedding"])
-
-                            # Prepare Face for DB
-                            bbox = info["bbox"]
-                            face = Face(
-                                image_id=img.id,
-                                faiss_id=faiss_id,
-                                bbox_x=bbox[0],
-                                bbox_y=bbox[1],
-                                bbox_w=bbox[2] - bbox[0],
-                                bbox_h=bbox[3] - bbox[1],
-                                detection_confidence=info["det_score"],
-                                state=FaceState.UNIDENTIFIED,
-                                model_version="buffalo_l",
-                            )
-                            session.add(face)
-                            new_faces.append((face, bbox))
-
-                        # First, persist FAISS to minimize DB→FAISS mismatch risk
-                        self.vector_store.save(self.paths.faiss_path)
-
-                        # Then commit DB so faces and file_hash are durable
-                        session.commit()  # Now face IDs are assigned
-
-                        # Save face crop thumbnails (cache)
-                        self.paths.face_crops_dir.mkdir(parents=True, exist_ok=True)
-                        for face, bbox in new_faces:
-                            crop = embedder.extract_face_crop(path, bbox)
-                            crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
-                            crop.save(crop_path, "JPEG", quality=90)
-
-                        # Save full-photo thumbnail (cache)
-                        thumb_path = self.paths.thumbs_dir / f"{img.file_hash}.jpg"
-                        if not thumb_path.exists():
-                            generate_thumbnail(path, thumb_path)
-
+                        new_face_count = self._index_single_image(
+                            img, session, embedder
+                        )
                         indexed_count += 1
-                        total_faces += len(faces_info)
+                        total_faces += new_face_count
                         self.progress.emit(indexed_count, total_images, total_faces)
-
                     except Exception as e:
                         print(f"Error indexing {img.file_path}: {e}")
-                        # Mark as failed somehow?
                         img.file_hash = "ERROR"
                         session.commit()
 
-            # Final save of FAISS index before finishing
             self.vector_store.save(self.paths.faiss_path)
             self.finished.emit()

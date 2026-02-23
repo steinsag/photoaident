@@ -12,9 +12,9 @@ class VectorStore:
     is equivalent to cosine similarity.
     """
 
-    DIMENSION = 512
+    DEFAULT_DIMENSION = 512
 
-    def __init__(self, dimension: int = DIMENSION):
+    def __init__(self, dimension: int = DEFAULT_DIMENSION):
         self.dimension = dimension
         # IndexFlatIP does not support IDs by default, but it returns the 0-indexed
         # position which acts as the faiss_id.

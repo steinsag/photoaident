@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from photoaident.core.indexer import InventoryTask, IndexingTask
 from photoaident.db.database import Image
 
+_rng = np.random.default_rng(seed=42)
+
 
 @pytest.fixture
 def session_factory(db_engine):
@@ -137,7 +139,7 @@ def test_indexing_task_success(
     mock_embedder.process_image.return_value = [
         {
             "bbox": [10, 10, 60, 60],
-            "embedding": np.random.rand(512).astype(np.float32),
+            "embedding": _rng.random(512).astype(np.float32),
             "det_score": 0.95,
             "gender": 1,
             "age": 30,

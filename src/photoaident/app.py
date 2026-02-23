@@ -56,12 +56,11 @@ def load_translations(app: QtWidgets.QApplication):
     for loc in search_locales:
         filename = f"photoaident_{loc}.qm"
         path = get_resource_path(os.path.join("assets", "translations", filename))
-        if os.path.exists(path):
-            if translator.load(path):
-                app.installTranslator(translator)
-                # Keep a reference to prevent garbage collection
-                app._translator = translator  # type: ignore[attr-defined]
-                break
+        if os.path.exists(path) and translator.load(path):
+            app.installTranslator(translator)
+            # Keep a reference to prevent garbage collection
+            app._translator = translator  # type: ignore[attr-defined]
+            break
 
 
 class _GPUStatusSignal(QtCore.QObject):

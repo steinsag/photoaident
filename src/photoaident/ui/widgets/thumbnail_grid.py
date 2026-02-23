@@ -7,6 +7,57 @@ from photoaident.db.database import Face
 from photoaident.utils.image_utils import generate_thumbnail
 
 
+def _get_scaled_size(path: Path) -> QtCore.QSize:
+    """Return the size to render 'path' within a 150×150 box, keeping aspect ratio."""
+    reader = QtGui.QImageReader(str(path))
+    if not reader.canRead():
+        return QtCore.QSize()
+    orig_size = reader.size()
+    if not orig_size.isValid():
+        return QtCore.QSize()
+    w = orig_size.width()
+    h = orig_size.height()
+    scale = min(150 / w, 150 / h)
+    return QtCore.QSize(int(w * scale), int(h * scale))
+
+
+def _read_pixmap(target_path: Path, scaled_size: QtCore.QSize) -> QtGui.QPixmap:
+    """Read and scale an image file into a QPixmap."""
+    if not scaled_size.isValid():
+        return QtGui.QPixmap()
+    reader = QtGui.QImageReader(str(target_path))
+    reader.setScaledSize(scaled_size)
+    image = reader.read()
+    if image.isNull():
+        return QtGui.QPixmap()
+    return QtGui.QPixmap.fromImage(image)
+
+
+def _draw_face_rects(
+    pixmap: QtGui.QPixmap,
+    faces: List[Face],
+    orig_size: Tuple[int, int],
+) -> QtGui.QPixmap:
+    """Draw red rectangles on pixmap for each detected face."""
+    orig_w, orig_h = orig_size
+    if orig_w <= 0 or orig_h <= 0:
+        return pixmap
+    painter = QtGui.QPainter(pixmap)
+    pen = QtGui.QPen(QtGui.QColor("red"), 2)
+    painter.setPen(pen)
+    pw = pixmap.width()
+    ph = pixmap.height()
+    scale = min(pw / orig_w, ph / orig_h)
+    for face in faces:
+        fx = face.bbox_x * scale
+        fy = face.bbox_y * scale
+        fw = face.bbox_w * scale
+        fh = face.bbox_h * scale
+        painter.drawRect(QtCore.QRectF(fx, fy, fw, fh))
+    painter.end()
+    return pixmap
+
+
 class ThumbnailWidget(QtWidgets.QWidget):
     """Displays a single image thumbnail with face highlights."""
 
@@ -47,69 +98,18 @@ class ThumbnailWidget(QtWidgets.QWidget):
             except Exception as e:
                 print(f"Error generating thumbnail for {self.file_path}: {e}")
 
-        # Calculate scaled size while keeping aspect ratio
-        def get_scaled_size(path):
-            reader = QtGui.QImageReader(str(path))
-            if not reader.canRead():
-                return QtCore.QSize()
-            orig_size = reader.size()
-            if not orig_size.isValid():
-                return QtCore.QSize()
-
-            w = orig_size.width()
-            h = orig_size.height()
-            scale = min(150 / w, 150 / h)
-            return QtCore.QSize(int(w * scale), int(h * scale))
-
         target_path = (
             self.thumb_path if self.thumb_path.exists() else Path(self.file_path)
         )
-        scaled_size = get_scaled_size(target_path)
-
-        if scaled_size.isValid():
-            reader = QtGui.QImageReader(str(target_path))
-            reader.setScaledSize(scaled_size)
-            image = reader.read()
-            if image.isNull():
-                pixmap = QtGui.QPixmap()
-            else:
-                pixmap = QtGui.QPixmap.fromImage(image)
-        else:
-            pixmap = QtGui.QPixmap()
+        scaled_size = _get_scaled_size(target_path)
+        pixmap = _read_pixmap(target_path, scaled_size)
 
         if pixmap.isNull():
             self.image_label.setText(self.tr("Error loading image"))
             return
 
-        # Draw faces
         if self.faces and self.orig_size:
-            orig_w, orig_h = self.orig_size
-            if orig_w > 0 and orig_h > 0:
-                painter = QtGui.QPainter(pixmap)
-                pen = QtGui.QPen(QtGui.QColor("red"), 2)
-                painter.setPen(pen)
-
-                # pixmap size
-                pw = pixmap.width()
-                ph = pixmap.height()
-
-                # Scale factor (pixmap is KeepAspectRatio)
-                scale = min(pw / orig_w, ph / orig_h)
-
-                # Offsets if pixmap is centered (it might not be if scaled to fit
-                # exactly). But here pixmap is the result of scaled(), so it
-                # has exactly the scaled size.
-
-                for face in self.faces:
-                    # Face bboxes are [x, y, w, h] or [x1, y1, x2, y2]?
-                    # Looking at database.py: bbox_x, bbox_y, bbox_w, bbox_h
-                    fx = face.bbox_x * scale
-                    fy = face.bbox_y * scale
-                    fw = face.bbox_w * scale
-                    fh = face.bbox_h * scale
-                    painter.drawRect(QtCore.QRectF(fx, fy, fw, fh))
-
-                painter.end()
+            pixmap = _draw_face_rects(pixmap, self.faces, self.orig_size)
 
         self.image_label.setPixmap(pixmap)
 

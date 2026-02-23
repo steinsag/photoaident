@@ -31,8 +31,11 @@ def vs():
     return VectorStore()
 
 
+_rng = np.random.default_rng(seed=42)
+
+
 def _rand_norm_emb() -> np.ndarray:
-    v = np.random.rand(512).astype(np.float32)
+    v = _rng.random(512).astype(np.float32)
     v /= np.linalg.norm(v)
     return v
 

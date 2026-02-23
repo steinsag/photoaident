@@ -52,10 +52,13 @@ def test_process_image_returns_empty_when_unreadable(tmp_path):
     assert result == []
 
 
+_rng = np.random.default_rng(seed=42)
+
+
 def _make_mock_face() -> MagicMock:
     face = MagicMock()
     face.bbox = np.array([10.0, 20.0, 50.0, 60.0])
-    face.normed_embedding = np.random.rand(512).astype(np.float32)
+    face.normed_embedding = _rng.random(512).astype(np.float32)
     face.det_score = np.float32(0.98)
     face.gender = 1
     face.age = 25
