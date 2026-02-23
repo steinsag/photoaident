@@ -220,6 +220,10 @@ Please close it before starting a new one.</source>
         <translation>Beschriften</translation>
     </message>
     <message>
+        <source>Persons</source>
+        <translation>Personen</translation>
+    </message>
+    <message>
         <source>Scanning for new photos...</source>
         <translation>Suche nach neuen Fotos...</translation>
     </message>
@@ -287,6 +291,53 @@ Do you really want to proceed?</source>
     </message>
 </context>
 <context>
+    <name>PersonsPage</name>
+    <message>
+        <source>Search persons…</source>
+        <translation>Personen suchen…</translation>
+    </message>
+    <message>
+        <source>Select a person to view their reference faces.</source>
+        <translation>Person auswählen, um Referenzgesichter zu sehen.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation>Bestätigen</translation>
+    </message>
+    <message>
+        <source>(No faces)</source>
+        <translation>(Keine Gesichter)</translation>
+    </message>
+    <message>
+        <source>{n} pending change(s)</source>
+        <translation>{n} ausstehende Änderung(en)</translation>
+    </message>
+    <message>
+        <source>Infant (0–3)</source>
+        <translation>Kleinkind (0–3)</translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation>Kind (4–12)</translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation>Teenager (13–19)</translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation>Erwachsener (20–75)</translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
+        <translation>Senior (75+)</translation>
+    </message>
+</context>
+<context>
     <name>PreferencesDialog</name>
     <message>
         <source>Preferences</source>
@@ -314,6 +365,29 @@ Do you really want to proceed?</source>
     </message>
 </context>
 <context>
+    <name>ReferenceFaceWidget</name>
+    <message>
+        <source>Remove</source>
+        <translation>Entfernen</translation>
+    </message>
+    <message>
+        <source>Move to…</source>
+        <translation>Verschieben nach…</translation>
+    </message>
+    <message>
+        <source>Will be removed</source>
+        <translation>Wird entfernt</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Rückgängig</translation>
+    </message>
+    <message>
+        <source>Will move to: {cluster}</source>
+        <translation>Wird verschoben nach: {cluster}</translation>
+    </message>
+</context>
+<context>
     <name>ThumbnailGrid</name>
     <message>
         <source>No images found.</source>
@@ -329,6 +403,29 @@ Do you really want to proceed?</source>
     <message>
         <source>Error loading image</source>
         <translation>Fehler beim Laden des Bildes</translation>
+    </message>
+</context>
+<context>
+    <name>widget</name>
+    <message>
+        <source>Infant (0–3)</source>
+        <translation type="obsolete">Kleinkind (0–3)</translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation type="obsolete">Kind (4–12)</translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation type="obsolete">Teenager (13–19)</translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation type="obsolete">Erwachsener (20–75)</translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
+        <translation type="obsolete">Senior (75+)</translation>
     </message>
 </context>
 </TS>

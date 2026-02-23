@@ -199,7 +199,7 @@ photo-aident/
 │   │   ├── pages/
 │   │   │   ├── library.py       # LibraryPage: thumbnail grid + filter
 │   │   │   ├── labelling.py     # LabellingPage: face-by-face labelling queue
-│   │   │   └── persons.py       # [TODO] PersonsPage: manage known persons
+│   │   │   └── persons.py       # PersonsPage: reference face management
 │   │   └── widgets/
 │   │       ├── thumbnail_grid.py
 │   │       ├── image_detail_dialog.py
@@ -223,6 +223,7 @@ photo-aident/
 │   ├── test_settings.py
 │   ├── test_thumbnail_grid.py
 │   ├── test_vector_store.py
+│   ├── test_persons_page.py
 │   ├── test_search.py           # [TODO] once search.py exists
 │   ├── test_labeller.py         # [TODO] once labeller.py exists
 │   └── fixtures/
@@ -243,13 +244,13 @@ photo-aident/
 | Indexer (inventory + embed)| ✓ Complete | Qt-threaded, auto-runs at startup            |
 | AppPaths / XDG             | ✓ Complete |                                              |
 | Settings                   | ✓ Minimal  | Only `collection_path` so far               |
-| MainWindow (app.py)        | ✓ Functional| Sidebar navigation, 2 pages                 |
+| MainWindow (app.py)        | ✓ Functional| Sidebar navigation, 3 pages                 |
 | LibraryPage                | ✓ Functional| Thumbnail grid + 3-way filter + detail view |
 | LabellingPage              | ✓ Functional| Face-by-face queue + assign/skip/anonymous  |
 | FaceCropWidget             | ✓ Complete | Crop + thumbnail + date/confidence display  |
 | AssignPersonDialog         | ✓ Complete | Age-group cluster table + similarity scoring|
 | PreferencesDialog          | ✓ Complete |                                              |
-| PersonsPage                | ✗ TODO     | Phase 7                                      |
+| PersonsPage                | ✓ Complete | Reference face review + staged remove/move  |
 | core/search.py             | ✗ TODO     | Phase 8                                      |
 | core/labeller.py           | ✗ TODO     | Phase 6                                      |
 

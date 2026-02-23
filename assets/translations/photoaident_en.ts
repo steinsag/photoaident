@@ -29,23 +29,23 @@
     </message>
     <message>
         <source>Infant (0–3)</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Infant (0–3)</translation>
     </message>
     <message>
         <source>Youngster (4–12)</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Youngster (4–12)</translation>
     </message>
     <message>
         <source>Teenager (13–19)</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Teenager (13–19)</translation>
     </message>
     <message>
         <source>Adult (20–75)</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Adult (20–75)</translation>
     </message>
     <message>
         <source>Senior (75+)</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Senior (75+)</translation>
     </message>
     <message>
         <source>New Person</source>
@@ -199,6 +199,10 @@ Please close it before starting a new one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Persons</source>
+        <translation>Persons</translation>
+    </message>
+    <message>
         <source>Scanning for new photos...</source>
         <translation type="unfinished"></translation>
     </message>
@@ -266,6 +270,53 @@ Do you really want to proceed?</source>
     </message>
 </context>
 <context>
+    <name>PersonsPage</name>
+    <message>
+        <source>Search persons…</source>
+        <translation>Search persons…</translation>
+    </message>
+    <message>
+        <source>Select a person to view their reference faces.</source>
+        <translation>Select a person to view their reference faces.</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Cancel</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation>Confirm</translation>
+    </message>
+    <message>
+        <source>(No faces)</source>
+        <translation>(No faces)</translation>
+    </message>
+    <message>
+        <source>{n} pending change(s)</source>
+        <translation>{n} pending change(s)</translation>
+    </message>
+    <message>
+        <source>Infant (0–3)</source>
+        <translation>Infant (0–3)</translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation>Youngster (4–12)</translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation>Teenager (13–19)</translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation>Adult (20–75)</translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
+        <translation>Senior (75+)</translation>
+    </message>
+</context>
+<context>
     <name>PreferencesDialog</name>
     <message>
         <source>Preferences</source>
@@ -290,6 +341,29 @@ Do you really want to proceed?</source>
     <message>
         <source>Select Photo Collection Folder</source>
         <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>ReferenceFaceWidget</name>
+    <message>
+        <source>Remove</source>
+        <translation>Remove</translation>
+    </message>
+    <message>
+        <source>Move to…</source>
+        <translation>Move to…</translation>
+    </message>
+    <message>
+        <source>Will be removed</source>
+        <translation>Will be removed</translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Undo</translation>
+    </message>
+    <message>
+        <source>Will move to: {cluster}</source>
+        <translation>Will move to: {cluster}</translation>
     </message>
 </context>
 <context>
