@@ -2,6 +2,9 @@ name: Reusable CI Job
 
 on:
   workflow_call:
+    secrets:
+      SONAR_TOKEN:
+        required: true
 
 jobs:
   build-and-test:
