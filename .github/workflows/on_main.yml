@@ -13,5 +13,3 @@ on:
 jobs:
   build-and-test:
     uses: ./.github/workflows/job_ci.yml
-    secrets:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}

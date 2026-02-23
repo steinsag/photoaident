@@ -2,9 +2,6 @@ name: Reusable CI Job
 
 on:
   workflow_call:
-    secrets:
-      SONAR_TOKEN:
-        required: true
 
 jobs:
   build-and-test:
@@ -48,8 +45,3 @@ jobs:
         run: |
           # Use xvfb-run for tests that require a display (pyside6 + pytest-qt)
           xvfb-run --auto-servernum uv run pytest
-
-      - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@v7
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
