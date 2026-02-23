@@ -143,13 +143,42 @@ class MainWindow(QtWidgets.QMainWindow):
         if check_gpu:
             threading.Thread(target=self._check_gpu, daemon=True).start()
 
-        # Start indexing if we have images
-        self._indexing_task = None
-        self._indexing_thread = None
+        # Start inventory then indexing at startup
+        self._inventory_task: InventoryTask | None = None
+        self._inventory_thread: QtCore.QThread | None = None
+        self._indexing_task: IndexingTask | None = None
+        self._indexing_thread: QtCore.QThread | None = None
         QtCore.QTimer.singleShot(1000, self._maybe_start_indexing)
 
-    def _maybe_start_indexing(self):
-        """Start indexing if there are images that need it."""
+    def _maybe_start_indexing(self) -> None:
+        """Run a silent inventory scan then start indexing."""
+        if self._indexing_task is not None or self._inventory_task is not None:
+            return
+
+        collection_path = self.settings.collection_path
+        if not collection_path:
+            return
+
+        self.indexing_label.setText(self.tr("Scanning for new photos..."))
+
+        self._inventory_task = InventoryTask(collection_path, self.session_factory)
+        self._inventory_thread = QtCore.QThread()
+        self._inventory_task.moveToThread(self._inventory_thread)
+        self._inventory_task.finished.connect(self._on_startup_inventory_finished)
+        self._inventory_thread.started.connect(self._inventory_task.run)
+        self._inventory_thread.start()
+
+    def _on_startup_inventory_finished(self, _added: int) -> None:
+        """Called when the silent startup inventory scan completes."""
+        if self._inventory_thread:
+            self._inventory_thread.quit()
+            self._inventory_thread.wait()
+            self._inventory_thread = None
+        self._inventory_task = None
+        self._start_indexing_task()
+
+    def _start_indexing_task(self) -> None:
+        """Create and start the background indexing task."""
         if self._indexing_task is not None:
             return
 
@@ -272,7 +301,7 @@ class MainWindow(QtWidgets.QMainWindow):
         task.progress.connect(dialog.update_progress)
         task.finished.connect(dialog.accept)
         task.finished.connect(thread.quit)
-        task.finished.connect(self._maybe_start_indexing)
+        task.finished.connect(self._start_indexing_task)
         thread.started.connect(task.run)
         thread.finished.connect(thread.deleteLater)
 
@@ -317,7 +346,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_bar.showMessage(msg, 5000)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        # Graceful shutdown: cancel indexing and persist FAISS index
+        # Graceful shutdown: cancel any running inventory/indexing tasks
+        if self._inventory_task is not None and self._inventory_thread is not None:
+            try:
+                self._inventory_task.cancel()
+                self._inventory_thread.quit()
+                self._inventory_thread.wait(3000)
+            except Exception:
+                pass
         if self._indexing_task is not None and self._indexing_thread is not None:
             try:
                 self._indexing_task.cancel()

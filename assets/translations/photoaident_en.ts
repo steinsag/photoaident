@@ -191,6 +191,10 @@ Please close it before starting a new one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Scanning for new photos...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
         <translation type="unfinished"></translation>
     </message>
