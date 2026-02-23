@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from photoaident.utils.instance_lock import InstanceLock
 
 
@@ -33,3 +35,32 @@ def test_instance_lock_context_independence(tmp_path):
     lock1.release()
     assert lock2.acquire() is True
     lock2.release()
+
+
+def test_release_handles_flock_error(tmp_path):
+    """release() silently swallows IOError from fcntl.flock."""
+    lock_path = tmp_path / "photoaident.lock"
+    lock = InstanceLock(lock_path)
+    assert lock.acquire() is True
+
+    with patch(
+        "photoaident.utils.instance_lock.fcntl.flock",
+        side_effect=IOError("flock failed"),
+    ):
+        lock.release()  # must not raise
+
+    # Lock file should be cleaned up despite the flock error
+    assert not lock_path.exists()
+
+
+def test_release_handles_unlink_error(tmp_path):
+    """release() silently swallows OSError from lock_path.unlink()."""
+    lock_path = tmp_path / "photoaident.lock"
+    lock = InstanceLock(lock_path)
+    assert lock.acquire() is True
+
+    with patch("pathlib.Path.unlink", side_effect=OSError("unlink failed")):
+        lock.release()  # must not raise
+
+    # _lock_file should be cleared even though unlink failed
+    assert lock._lock_file is None
