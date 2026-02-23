@@ -2,8 +2,24 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Any
 
 import cv2
+import onnxruntime
 from PIL import Image
 from insightface.app import FaceAnalysis
+
+# Ordered preference: CUDA (NVIDIA) → CoreML (Apple Silicon/macOS) → CPU
+_PREFERRED_PROVIDERS = [
+    "CUDAExecutionProvider",
+    "CoreMLExecutionProvider",
+    "CPUExecutionProvider",
+]
+
+
+def _select_providers() -> list[str]:
+    """Return available ONNX providers in preferred priority order."""
+    available = set(onnxruntime.get_available_providers())  # type: ignore[attr-defined]
+    return [p for p in _PREFERRED_PROVIDERS if p in available] or [
+        "CPUExecutionProvider"
+    ]
 
 
 class FaceEmbedder:
@@ -16,8 +32,7 @@ class FaceEmbedder:
             model_name: The name of the InsightFace model bundle.
             ctx_id: Context ID (0 for GPU if available, -1 for CPU).
         """
-        # Ensure we use available providers
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = _select_providers()
         self.app = FaceAnalysis(name=model_name, providers=providers)
         self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
 
