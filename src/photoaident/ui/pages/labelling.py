@@ -13,6 +13,7 @@ from photoaident.ui.widgets.face_crop import FaceCropWidget
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
+    from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
 
 
@@ -23,11 +24,13 @@ class LabellingPage(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         paths: "AppPaths",
+        vector_store: "VectorStore",
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self.session_factory = session_factory
         self.paths = paths
+        self.vector_store = vector_store
         self._current_face_id: Optional[int] = None
         self._skipped: set[int] = set()
         self._setup_ui()
@@ -156,7 +159,20 @@ class LabellingPage(QtWidgets.QWidget):
     def _assign_face(self) -> None:
         if self._current_face_id is None:
             return
-        dialog = AssignPersonDialog(self.session_factory, self)
+        query_embedding = None
+        with self.session_factory() as session:
+            face = session.get(Face, self._current_face_id)
+            if face is not None:
+                try:
+                    query_embedding = self.vector_store.get_embedding(face.faiss_id)
+                except Exception:
+                    pass
+        dialog = AssignPersonDialog(
+            self.session_factory,
+            query_embedding=query_embedding,
+            vector_store=self.vector_store,
+            parent=self,
+        )
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
         result = dialog.result_person_cluster()

@@ -20,15 +20,31 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Cluster</source>
+        <source>Age Group</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>New cluster…</source>
+        <source>Similarity</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>(unlabelled)</source>
+        <source>Infant (0–3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -37,14 +53,6 @@
     </message>
     <message>
         <source>Name:</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>New Cluster</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Label (optional):</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

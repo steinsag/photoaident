@@ -53,6 +53,11 @@ class SuggestionState(PyEnum):
     REJECTED = "rejected"
 
 
+# Ordered list of the 5 canonical age-group slot keys
+# (display names are translated in the UI).
+AGE_CLUSTERS: list[str] = ["infant", "youngster", "teenager", "adult", "senior"]
+
+
 class Image(Base):
     """Stores information about indexed image files.
 
@@ -236,6 +241,7 @@ class EmbeddingCluster(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     person_id: Mapped[int] = mapped_column(ForeignKey("persons.id"), nullable=False)
     label: Mapped[Optional[str]] = mapped_column(String)
+    age_group: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     person: Mapped["Person"] = relationship("Person", back_populates="clusters")

@@ -97,7 +97,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.library_page = LibraryPage(
             self.session_factory, self.paths, self.vector_store
         )
-        self.labelling_page = LabellingPage(self.session_factory, self.paths)
+        self.labelling_page = LabellingPage(
+            self.session_factory, self.paths, self.vector_store
+        )
 
         # Stacked widget holding the pages
         self.stacked = QtWidgets.QStackedWidget()

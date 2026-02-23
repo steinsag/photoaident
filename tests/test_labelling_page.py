@@ -16,6 +16,7 @@ from photoaident.db.database import (
     get_session_factory,
 )
 from photoaident.db.migrate import apply_migrations
+from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 from photoaident.ui.pages.labelling import LabellingPage
 
@@ -37,6 +38,11 @@ def session_factory(tmp_path):
     engine = get_engine(str(db_path))
     apply_migrations(f"sqlite:///{db_path}")
     return get_session_factory(engine)
+
+
+@pytest.fixture
+def vector_store():
+    return VectorStore()
 
 
 def _insert_face(session_factory, file_path: str = "/path/to/img.jpg") -> int:
@@ -71,9 +77,9 @@ def _insert_face(session_factory, file_path: str = "/path/to/img.jpg") -> int:
         return face.id
 
 
-def test_labelling_page_no_faces(qtbot, session_factory, test_paths):
+def test_labelling_page_no_faces(qtbot, session_factory, test_paths, vector_store):
     """Page shows done state when the DB has no unidentified faces."""
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -83,11 +89,11 @@ def test_labelling_page_no_faces(qtbot, session_factory, test_paths):
     assert "done" in page.status_label.text().lower()
 
 
-def test_labelling_page_shows_face(qtbot, session_factory, test_paths):
+def test_labelling_page_shows_face(qtbot, session_factory, test_paths, vector_store):
     """Page loads and displays a face when one exists in the DB."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
 
     with patch.object(page.face_crop, "load") as mock_load:
@@ -100,11 +106,11 @@ def test_labelling_page_shows_face(qtbot, session_factory, test_paths):
     assert page.skip_btn.isEnabled()
 
 
-def test_mark_anonymous(qtbot, session_factory, test_paths):
+def test_mark_anonymous(qtbot, session_factory, test_paths, vector_store):
     """Clicking Mark Anonymous sets face.state = ANONYMOUS and advances."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -124,11 +130,11 @@ def test_mark_anonymous(qtbot, session_factory, test_paths):
     assert page._current_face_id is None
 
 
-def test_skip_face(qtbot, session_factory, test_paths):
+def test_skip_face(qtbot, session_factory, test_paths, vector_store):
     """Skip does not change face state and moves to next (or done when all skipped)."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -150,7 +156,9 @@ def test_skip_face(qtbot, session_factory, test_paths):
     assert not page.assign_btn.isEnabled()
 
 
-def test_face_with_taken_at_displays_date(qtbot, session_factory, test_paths):
+def test_face_with_taken_at_displays_date(
+    qtbot, session_factory, test_paths, vector_store
+):
     """When metadata has taken_at, it is formatted as YYYY-MM-DD."""
     with session_factory() as session:
         img = Image(file_path="/dated.jpg", file_size=1000, file_hash="datehash")
@@ -181,7 +189,7 @@ def test_face_with_taken_at_displays_date(qtbot, session_factory, test_paths):
         )
         session.commit()
 
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
 
     with patch.object(page.face_crop, "load") as mock_load:
@@ -190,7 +198,9 @@ def test_face_with_taken_at_displays_date(qtbot, session_factory, test_paths):
         assert mock_load.call_args.kwargs["taken_at"] == "2020-06-15"
 
 
-def test_assign_face_identifies_and_advances(qtbot, session_factory, test_paths):
+def test_assign_face_identifies_and_advances(
+    qtbot, session_factory, test_paths, vector_store
+):
     """_assign_face sets state=IDENTIFIED and advances to the next face."""
     with session_factory() as session:
         p = Person(name="Target")
@@ -204,7 +214,7 @@ def test_assign_face_identifies_and_advances(qtbot, session_factory, test_paths)
 
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -230,11 +240,13 @@ def test_assign_face_identifies_and_advances(qtbot, session_factory, test_paths)
         assert face.labelled_at is not None
 
 
-def test_assign_face_cancelled_does_nothing(qtbot, session_factory, test_paths):
+def test_assign_face_cancelled_does_nothing(
+    qtbot, session_factory, test_paths, vector_store
+):
     """Cancelling AssignPersonDialog leaves face state unchanged."""
     face_id = _insert_face(session_factory, "/cancel.jpg")
 
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -249,9 +261,11 @@ def test_assign_face_cancelled_does_nothing(qtbot, session_factory, test_paths):
         assert face.state == FaceState.UNIDENTIFIED
 
 
-def test_mark_anonymous_noop_when_no_current_face(qtbot, session_factory, test_paths):
+def test_mark_anonymous_noop_when_no_current_face(
+    qtbot, session_factory, test_paths, vector_store
+):
     """_mark_anonymous does nothing when _current_face_id is None."""
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
 
     assert page._current_face_id is None
@@ -259,11 +273,35 @@ def test_mark_anonymous_noop_when_no_current_face(qtbot, session_factory, test_p
     assert page._current_face_id is None
 
 
-def test_skip_face_noop_when_no_current_face(qtbot, session_factory, test_paths):
+def test_skip_face_noop_when_no_current_face(
+    qtbot, session_factory, test_paths, vector_store
+):
     """_skip_face does nothing when _current_face_id is None."""
-    page = LabellingPage(session_factory, test_paths)
+    page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
 
     assert page._current_face_id is None
     page._skip_face()  # should not raise
     assert page._current_face_id is None
+
+
+def test_assign_face_passes_vector_store_to_dialog(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """_assign_face passes vector_store to AssignPersonDialog."""
+    _insert_face(session_factory)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    assert page._current_face_id is not None
+
+    with patch("photoaident.ui.pages.labelling.AssignPersonDialog") as MockDlg:
+        inst = MockDlg.return_value
+        inst.exec.return_value = QtWidgets.QDialog.DialogCode.Rejected
+        page._assign_face()
+
+        # Verify vector_store was passed as keyword argument
+        call_kwargs = MockDlg.call_args.kwargs
+        assert call_kwargs.get("vector_store") is vector_store

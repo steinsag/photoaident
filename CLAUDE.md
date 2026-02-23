@@ -120,12 +120,25 @@ than constructing them inline, so they can be overridden cleanly in tests.
 ## Embedding Clusters (Multi-Era Persons)
 
 The 30-year span means a single mean embedding per person fails at the appearance
-extremes (baby → adult). Each person therefore has one or more **embedding
-clusters** — named groups representing distinct life stages or appearances.
+extremes (baby → adult). Each person therefore has exactly **5 fixed age-group
+clusters**, created automatically when the person record is first inserted:
+
+| Key          | Display label    | Age range |
+|--------------|-----------------|-----------|
+| `infant`     | Infant (0–3)    | 0–3       |
+| `youngster`  | Youngster (4–12)| 4–12      |
+| `teenager`   | Teenager (13–19)| 13–19     |
+| `adult`      | Adult (20–75)   | 20–75     |
+| `senior`     | Senior (75+)    | 75+       |
+
+The canonical key list is `AGE_CLUSTERS` in `db/database.py`. The
+`EmbeddingCluster.age_group` column stores the key; `label` is set to the same
+value at creation time. Free-form cluster creation is not supported.
 
 A face matches a person if it is within the similarity threshold of **any** of
-their clusters. Clusters can be named manually ("childhood", "adult") or left
-unlabelled. New clusters can be added at any time as new eras are encountered.
+their clusters. When labelling a face the UI computes cosine similarity between
+the query embedding and each cluster's mean embedding, and pre-selects the
+best-matching slot.
 
 ---
 
@@ -185,13 +198,13 @@ photo-aident/
 │   │   ├── preferences_dialog.py
 │   │   ├── pages/
 │   │   │   ├── library.py       # LibraryPage: thumbnail grid + filter
-│   │   │   ├── labelling.py     # [TODO] LabellingPage: face-by-face queue
+│   │   │   ├── labelling.py     # LabellingPage: face-by-face labelling queue
 │   │   │   └── persons.py       # [TODO] PersonsPage: manage known persons
 │   │   └── widgets/
 │   │       ├── thumbnail_grid.py
 │   │       ├── image_detail_dialog.py
 │   │       ├── progress_dialog.py
-│   │       ├── face_crop.py     # [TODO] FaceCropWidget for labelling UI
+│   │       ├── face_crop.py     # FaceCropWidget: crop + thumbnail display
 │   │       └── person_card.py   # [TODO] PersonCard for persons page
 │   └── utils/
 │       ├── image_utils.py       # generate_thumbnail() (read-only)
@@ -224,20 +237,21 @@ photo-aident/
 
 | Component                  | Status     | Notes                                        |
 |----------------------------|------------|----------------------------------------------|
-| DB schema + migrations     | ✓ Complete | 3 migrations applied                         |
+| DB schema + migrations     | ✓ Complete | 4 migrations applied                         |
 | FAISS vector store         | ✓ Complete | IndexFlatIP, save/load                       |
 | Face embedding (ArcFace)   | ✓ Complete | GPU with CPU fallback                        |
 | Indexer (inventory + embed)| ✓ Complete | Qt-threaded, auto-runs at startup            |
 | AppPaths / XDG             | ✓ Complete |                                              |
 | Settings                   | ✓ Minimal  | Only `collection_path` so far               |
-| MainWindow (app.py)        | ⚠ Partial  | Single-page; no sidebar navigation yet      |
+| MainWindow (app.py)        | ✓ Functional| Sidebar navigation, 2 pages                 |
 | LibraryPage                | ✓ Functional| Thumbnail grid + 3-way filter + detail view |
+| LabellingPage              | ✓ Functional| Face-by-face queue + assign/skip/anonymous  |
+| FaceCropWidget             | ✓ Complete | Crop + thumbnail + date/confidence display  |
+| AssignPersonDialog         | ✓ Complete | Age-group cluster table + similarity scoring|
 | PreferencesDialog          | ✓ Complete |                                              |
-| LabellingPage              | ✗ TODO     | Phase 5                                      |
 | PersonsPage                | ✗ TODO     | Phase 7                                      |
 | core/search.py             | ✗ TODO     | Phase 8                                      |
 | core/labeller.py           | ✗ TODO     | Phase 6                                      |
-| FaceCropWidget             | ✗ TODO     | Phase 5                                      |
 
 ---
 
@@ -322,6 +336,7 @@ erDiagram
         int id PK
         int person_id FK
         string label
+        string age_group "infant|youngster|teenager|adult|senior"
         datetime created_at
     }
 

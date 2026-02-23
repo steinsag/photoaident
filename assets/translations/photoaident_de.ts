@@ -20,16 +20,44 @@
         <translation>Neue Person…</translation>
     </message>
     <message>
+        <source>Age Group</source>
+        <translation>Altersgruppe</translation>
+    </message>
+    <message>
+        <source>Similarity</source>
+        <translation>Ähnlichkeit</translation>
+    </message>
+    <message>
+        <source>Infant (0–3)</source>
+        <translation>Kleinkind (0–3)</translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation>Kind (4–12)</translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation>Teenager (13–19)</translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation>Erwachsener (20–75)</translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
+        <translation>Senior (75+)</translation>
+    </message>
+    <message>
         <source>Cluster</source>
-        <translation>Cluster</translation>
+        <translation type="vanished">Cluster</translation>
     </message>
     <message>
         <source>New cluster…</source>
-        <translation>Neuen Cluster…</translation>
+        <translation type="vanished">Neuen Cluster…</translation>
     </message>
     <message>
         <source>(unlabelled)</source>
-        <translation>(ohne Bezeichnung)</translation>
+        <translation type="vanished">(ohne Bezeichnung)</translation>
     </message>
     <message>
         <source>New Person</source>
@@ -41,11 +69,11 @@
     </message>
     <message>
         <source>New Cluster</source>
-        <translation>Neuer Cluster</translation>
+        <translation type="vanished">Neuer Cluster</translation>
     </message>
     <message>
         <source>Label (optional):</source>
-        <translation>Bezeichnung (optional):</translation>
+        <translation type="vanished">Bezeichnung (optional):</translation>
     </message>
 </context>
 <context>
