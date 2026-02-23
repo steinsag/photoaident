@@ -1,6 +1,7 @@
 from photoaident.app import MainWindow
 from photoaident.paths import AppPaths
 from photoaident.db.migrate import apply_migrations
+from photoaident.db.database import Image, Face
 
 
 def _make_window(tmp_path, qtbot, collection_path: str = "") -> MainWindow:
@@ -126,3 +127,67 @@ def test_startup_scan_idempotent_when_already_running(qtbot, tmp_path):
         window._inventory_thread.wait(3000)
     window._inventory_task = None
     window._inventory_thread = None
+
+
+def test_counts_label_shows_zeros_on_empty_db(qtbot, tmp_path):
+    """counts_label shows 0 images and 0 faces when the database is empty."""
+    window = _make_window(tmp_path, qtbot)
+    text = window.counts_label.text()
+    assert "0" in text
+
+
+def test_counts_label_reflects_db_contents(qtbot, tmp_path):
+    """counts_label shows the correct totals loaded from the database."""
+    window = _make_window(tmp_path, qtbot)
+
+    # Insert one image and two faces directly via the session factory
+    with window.session_factory() as session:
+        img = Image(file_path="/test/photo.jpg", file_hash="abc123", file_size=1000)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=0,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.99,
+                model_version="v1",
+            )
+        )
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=1,
+                bbox_x=20,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.95,
+                model_version="v1",
+            )
+        )
+        session.commit()
+
+    window._update_db_counts()
+
+    text = window.counts_label.text()
+    assert "1" in text  # 1 image
+    assert "2" in text  # 2 faces
+
+
+def test_counts_label_updated_after_indexing_finished(qtbot, tmp_path):
+    """_on_indexing_finished refreshes the counts label."""
+    window = _make_window(tmp_path, qtbot)
+
+    with window.session_factory() as session:
+        img = Image(file_path="/test/photo2.jpg", file_hash="def456", file_size=500)
+        session.add(img)
+        session.commit()
+
+    window._on_indexing_finished()
+
+    text = window.counts_label.text()
+    assert "1" in text  # 1 image

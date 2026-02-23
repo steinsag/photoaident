@@ -199,6 +199,10 @@ Please close it before starting a new one.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Images: {images} | Faces: {faces}</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Indexing complete</source>
         <translation type="unfinished"></translation>
     </message>

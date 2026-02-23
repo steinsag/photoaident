@@ -88,6 +88,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Status bar
         self.status_bar = self.statusBar()
+        self.counts_label = QtWidgets.QLabel()
+        self.status_bar.addPermanentWidget(self.counts_label)
         self.indexing_label = QtWidgets.QLabel()
         self.status_bar.addPermanentWidget(self.indexing_label)
 
@@ -148,6 +150,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._inventory_thread: QtCore.QThread | None = None
         self._indexing_task: IndexingTask | None = None
         self._indexing_thread: QtCore.QThread | None = None
+        self._update_db_counts()
         QtCore.QTimer.singleShot(1000, self._maybe_start_indexing)
 
     def _maybe_start_indexing(self) -> None:
@@ -204,6 +207,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if indexed % 50 == 0 or indexed == total:
             self.library_page.load_images()
 
+    def _update_db_counts(self) -> None:
+        """Refresh the images/faces totals shown in the status bar."""
+        image_count, face_count = get_counts(self.session_factory)
+        self.counts_label.setText(
+            self.tr("Images: {images} | Faces: {faces}").format(
+                images=image_count, faces=face_count
+            )
+        )
+
     def _on_indexing_finished(self):
         self.indexing_label.setText(self.tr("Indexing complete"))
         if self._indexing_thread:
@@ -211,6 +223,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self._indexing_thread.wait()
             self._indexing_thread = None
         self._indexing_task = None
+        self._update_db_counts()
         self.library_page.load_images()
 
     def _switch_page(self, index: int) -> None:
