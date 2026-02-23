@@ -1,5 +1,7 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=steinsag_photoaident&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=steinsag_photoaident)
 
+![Build Status](https://img.shields.io/github/actions/workflow/status/steinsag/photoaident/on_main.yml?branch=main)
+
 # PhotoAIdent
 
 PhotoAIdent is a local, privacy-first desktop application for AI-powered face
