@@ -4,8 +4,6 @@
   },
   "enabledPlugins": {
     "commit-commands@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "bash-language-server@claude-code-lsps": true,
-    "pyright@claude-code-lsps": true
+    "pyright-lsp@claude-plugins-official": true
   }
 }
