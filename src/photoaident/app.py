@@ -92,7 +92,9 @@ class MainWindow(QtWidgets.QMainWindow):
         self.status_bar.addPermanentWidget(self.indexing_label)
 
         # Pages
-        self.library_page = LibraryPage(self.session_factory, self.paths)
+        self.library_page = LibraryPage(
+            self.session_factory, self.paths, self.vector_store
+        )
         self.labelling_page = LabellingPage(self.session_factory, self.paths)
 
         # Stacked widget holding the pages

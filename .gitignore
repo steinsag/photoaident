@@ -62,7 +62,7 @@ coverage.xml
 .idea/
 
 # Claude Code local settings (user-specific; .claude/settings.json can be committed)
-.claude/settings.local.json
+.claude
 
 # OS files
 .DS_Store

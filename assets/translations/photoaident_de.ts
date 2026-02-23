@@ -161,20 +161,20 @@ Please close it before starting a new one.</source>
 <context>
     <name>LibraryPage</name>
     <message>
-        <source>All Images</source>
-        <translation>Alle Bilder</translation>
+        <source>Filter by Person</source>
+        <translation>Nach Person filtern</translation>
     </message>
     <message>
-        <source>With Faces</source>
-        <translation>Mit Gesichtern</translation>
+        <source>Search persons…</source>
+        <translation>Personen suchen…</translation>
     </message>
     <message>
-        <source>Without Faces</source>
-        <translation>Ohne Gesichter</translation>
+        <source>Deselect All</source>
+        <translation>Alle abwählen</translation>
     </message>
     <message>
-        <source>Filter:</source>
-        <translation>Filter:</translation>
+        <source>{n} person(s) selected</source>
+        <translation>{n} Person(en) ausgewählt</translation>
     </message>
 </context>
 <context>

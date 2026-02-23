@@ -1,7 +1,9 @@
-import pytest
-from PySide6 import QtWidgets, QtCore
+from datetime import datetime
 
-from photoaident.db.database import Image, ImageMetadata, Face, FaceState, TakenAtSource
+import pytest
+from PySide6 import QtCore, QtGui, QtWidgets
+
+from photoaident.db.database import Face, FaceState, Image, ImageMetadata, TakenAtSource
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 
 
@@ -87,3 +89,79 @@ def test_image_detail_dialog_close(qtbot, sample_image_with_metadata):
 
     with qtbot.wait_signal(dialog.finished):
         qtbot.mouseClick(close_button, QtCore.Qt.MouseButton.LeftButton)
+
+
+def test_large_file_size_shows_mb(qtbot, tmp_path):
+    """File size ≥ 1 MB is displayed in MB units."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "big.jpg"
+    PILImage.new("RGB", (10, 10), "green").save(img_path)
+
+    db_image = Image(
+        id=200,
+        file_path=str(img_path),
+        file_size=2 * 1024 * 1024,  # 2 MB
+    )
+    dialog = ImageDetailDialog(db_image)
+    qtbot.add_widget(dialog)
+
+    labels = dialog.findChildren(QtWidgets.QLabel)
+    texts = [label.text() for label in labels]
+    assert any("MB" in t for t in texts)
+
+
+def test_taken_at_in_metadata_is_displayed(qtbot, tmp_path):
+    """taken_at field in ImageMetadata appears in the dialog."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "dated.jpg"
+    PILImage.new("RGB", (10, 10), "yellow").save(img_path)
+
+    db_image = Image(id=300, file_path=str(img_path), file_size=500)
+    db_image.metadata_rel = ImageMetadata(
+        width=100,
+        height=100,
+        taken_at=datetime(2021, 3, 14, 15, 9, 26),
+        taken_at_source=TakenAtSource.EXIF,
+    )
+    db_image.faces = []
+
+    dialog = ImageDetailDialog(db_image)
+    qtbot.add_widget(dialog)
+
+    labels = dialog.findChildren(QtWidgets.QLabel)
+    texts = [label.text() for label in labels]
+    assert any("2021-03-14" in t for t in texts)
+
+
+def test_load_image_failure_shows_error(qtbot, tmp_path):
+    """A file with invalid image content shows a failure message."""
+    bad_file = tmp_path / "bad.jpg"
+    bad_file.write_bytes(b"this is not a valid jpeg")
+
+    db_image = Image(id=400, file_path=str(bad_file), file_size=25)
+    dialog = ImageDetailDialog(db_image)
+    qtbot.add_widget(dialog)
+
+    text = dialog.image_label.text().lower()
+    assert "failed" in text
+
+
+def test_update_image_display_without_pixmap_is_noop(qtbot):
+    """_update_image_display returns early if _original_pixmap is not set."""
+    db_image = Image(id=500, file_path="/nonexistent.jpg", file_size=0)
+    dialog = ImageDetailDialog(db_image)
+    qtbot.add_widget(dialog)
+
+    assert not hasattr(dialog, "_original_pixmap")
+    dialog._update_image_display()  # must not raise
+
+
+def test_resize_event_schedules_redisplay(qtbot, sample_image_with_metadata):
+    """resizeEvent does not raise and schedules a display update."""
+    dialog = ImageDetailDialog(sample_image_with_metadata)
+    qtbot.add_widget(dialog)
+
+    event = QtGui.QResizeEvent(QtCore.QSize(900, 700), QtCore.QSize(800, 600))
+    dialog.resizeEvent(event)  # must not raise

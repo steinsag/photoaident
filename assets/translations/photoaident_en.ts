@@ -160,20 +160,20 @@ Please close it before starting a new one.</source>
 <context>
     <name>LibraryPage</name>
     <message>
-        <source>All Images</source>
-        <translation>All Images</translation>
+        <source>Filter by Person</source>
+        <translation>Filter by Person</translation>
     </message>
     <message>
-        <source>With Faces</source>
-        <translation>With Faces</translation>
+        <source>Search persons…</source>
+        <translation>Search persons…</translation>
     </message>
     <message>
-        <source>Without Faces</source>
-        <translation>Without Faces</translation>
+        <source>Deselect All</source>
+        <translation>Deselect All</translation>
     </message>
     <message>
-        <source>Filter:</source>
-        <translation>Filter:</translation>
+        <source>{n} person(s) selected</source>
+        <translation>{n} person(s) selected</translation>
     </message>
 </context>
 <context>
