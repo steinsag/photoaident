@@ -10,6 +10,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # required for SonarCloud blame / new code detection
 
       - name: Set up Python and uv
         uses: astral-sh/setup-uv@v7
@@ -43,3 +45,8 @@ jobs:
         run: |
           # Use xvfb-run for tests that require a display (pyside6 + pytest-qt)
           xvfb-run --auto-servernum uv run pytest
+
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v7
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
