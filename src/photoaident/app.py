@@ -70,10 +70,16 @@ class _GPUStatusSignal(QtCore.QObject):
 class MainWindow(QtWidgets.QMainWindow):
     """Main application window."""
 
-    def __init__(self, paths: "AppPaths", check_gpu: bool = True):
+    def __init__(
+        self,
+        paths: "AppPaths",
+        check_gpu: bool = True,
+        enable_onboarding: bool = True,
+    ):
         super().__init__()
         self.paths = paths
         self.settings = Settings.load(self.paths.config_file)
+        self._onboarding_enabled = enable_onboarding
 
         # Database and vector store
         self.db_engine = get_engine(str(self.paths.db_path))
@@ -162,6 +168,66 @@ class MainWindow(QtWidgets.QMainWindow):
         self._update_db_counts()
         QtCore.QTimer.singleShot(1000, self._maybe_start_indexing)
 
+    def _show_onboarding(self) -> None:
+        """Show the first-run dialog to select the photo collection folder."""
+        dialog = QtWidgets.QDialog(self)
+        dialog.setWindowTitle(self.tr("Welcome to PhotoAIdent"))
+        dialog.setMinimumWidth(500)
+
+        layout = QtWidgets.QVBoxLayout(dialog)
+
+        welcome_label = QtWidgets.QLabel(
+            self.tr(
+                "Welcome to PhotoAIdent!\n\n"
+                "To get started, please select your photo collection folder."
+            )
+        )
+        welcome_label.setWordWrap(True)
+        layout.addWidget(welcome_label)
+        layout.addSpacing(12)
+
+        path_layout = QtWidgets.QHBoxLayout()
+        path_edit = QtWidgets.QLineEdit()
+        path_edit.setReadOnly(True)
+        path_edit.setPlaceholderText(self.tr("No folder selected"))
+        browse_btn = QtWidgets.QPushButton(self.tr("Browse..."))
+        path_layout.addWidget(path_edit)
+        path_layout.addWidget(browse_btn)
+        layout.addLayout(path_layout)
+        layout.addSpacing(12)
+
+        button_box = QtWidgets.QDialogButtonBox()
+        start_btn = button_box.addButton(
+            self.tr("Start Indexing"),
+            QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole,
+        )
+        start_btn.setEnabled(False)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+
+        def browse() -> None:
+            folder = QtWidgets.QFileDialog.getExistingDirectory(
+                dialog, self.tr("Select Photo Collection Folder"), ""
+            )
+            if folder:
+                path_edit.setText(folder)
+                start_btn.setEnabled(True)
+
+        browse_btn.clicked.connect(browse)
+
+        if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+
+        path = path_edit.text()
+        if path:
+            self._on_onboarding_accepted(path)
+
+    def _on_onboarding_accepted(self, path: str) -> None:
+        """Save the selected collection path and start the initial inventory scan."""
+        self.settings.collection_path = path
+        self.settings.save(self.paths.config_file)
+        self._run_inventory_scan(path)
+
     def _maybe_start_indexing(self) -> None:
         """Run a silent inventory scan then start indexing."""
         if self._indexing_task is not None or self._inventory_task is not None:
@@ -169,6 +235,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         collection_path = self.settings.collection_path
         if not collection_path:
+            if self._onboarding_enabled:
+                self._show_onboarding()
             return
 
         self.indexing_label.setText(self.tr("Scanning for new photos..."))

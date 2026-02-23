@@ -2,10 +2,11 @@ from photoaident.app import MainWindow
 from photoaident.paths import AppPaths
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.database import Image, Face
+from photoaident.settings import Settings
 
 
 def _make_window(tmp_path, qtbot, collection_path: str = "") -> MainWindow:
-    """Helper: create a MainWindow with migrations applied."""
+    """Helper: create a MainWindow with migrations applied. Onboarding is disabled."""
     paths = AppPaths(
         base_data=tmp_path / "data",
         base_cache=tmp_path / "cache",
@@ -13,7 +14,7 @@ def _make_window(tmp_path, qtbot, collection_path: str = "") -> MainWindow:
     )
     paths.ensure_dirs()
     apply_migrations(f"sqlite:///{paths.db_path}")
-    window = MainWindow(paths, check_gpu=False)
+    window = MainWindow(paths, check_gpu=False, enable_onboarding=False)
     window.settings.collection_path = collection_path
     qtbot.addWidget(window)
     return window
@@ -191,3 +192,72 @@ def test_counts_label_updated_after_indexing_finished(qtbot, tmp_path):
 
     text = window.counts_label.text()
     assert "1" in text  # 1 image
+
+
+def test_onboarding_triggered_when_no_path(qtbot, tmp_path, monkeypatch):
+    """_maybe_start_indexing triggers onboarding when no collection path is set."""
+    window = _make_window(tmp_path, qtbot)
+    window._onboarding_enabled = True  # re-enable for this test
+
+    onboarding_called: list[bool] = []
+    monkeypatch.setattr(
+        window, "_show_onboarding", lambda: onboarding_called.append(True)
+    )
+
+    window._maybe_start_indexing()
+
+    assert len(onboarding_called) == 1
+    assert window._inventory_task is None
+    assert window._indexing_task is None
+
+
+def test_onboarding_not_triggered_when_path_set(qtbot, tmp_path, monkeypatch):
+    """_maybe_start_indexing does not trigger onboarding when a path is already set."""
+    collection_dir = tmp_path / "photos"
+    collection_dir.mkdir()
+    window = _make_window(tmp_path, qtbot, collection_path=str(collection_dir))
+    window._onboarding_enabled = True
+
+    # Ensure no background tasks from constructor timer interfere
+    for attr in ("_inventory_task", "_indexing_task"):
+        task = getattr(window, attr)
+        if task is not None:
+            task.cancel()
+            thread = getattr(window, attr.replace("task", "thread"))
+            if thread:
+                thread.quit()
+                thread.wait(3000)
+            setattr(window, attr, None)
+            setattr(window, attr.replace("task", "thread"), None)
+
+    onboarding_called: list[bool] = []
+    monkeypatch.setattr(
+        window, "_show_onboarding", lambda: onboarding_called.append(True)
+    )
+
+    window._maybe_start_indexing()
+
+    assert len(onboarding_called) == 0
+
+
+def test_onboarding_accepted_saves_settings_and_starts_scan(
+    qtbot, tmp_path, monkeypatch
+):
+    """_on_onboarding_accepted persists the path and kicks off the inventory scan."""
+    collection_dir = tmp_path / "photos"
+    collection_dir.mkdir()
+    window = _make_window(tmp_path, qtbot)
+
+    scan_called_with: list[str] = []
+    monkeypatch.setattr(
+        window, "_run_inventory_scan", lambda p: scan_called_with.append(p)
+    )
+
+    window._on_onboarding_accepted(str(collection_dir))
+
+    assert window.settings.collection_path == str(collection_dir)
+    assert scan_called_with == [str(collection_dir)]
+
+    # Settings must be persisted to disk
+    loaded = Settings.load(window.paths.config_file)
+    assert loaded.collection_path == str(collection_dir)

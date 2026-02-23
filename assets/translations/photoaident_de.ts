@@ -224,6 +224,34 @@ Please close it before starting a new one.</source>
         <translation>Personen</translation>
     </message>
     <message>
+        <source>Welcome to PhotoAIdent</source>
+        <translation>Willkommen bei PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Welcome to PhotoAIdent!
+
+To get started, please select your photo collection folder.</source>
+        <translation>Willkommen bei PhotoAIdent!
+
+Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
+    </message>
+    <message>
+        <source>No folder selected</source>
+        <translation>Kein Ordner ausgewählt</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation>Durchsuchen...</translation>
+    </message>
+    <message>
+        <source>Start Indexing</source>
+        <translation>Indexierung starten</translation>
+    </message>
+    <message>
+        <source>Select Photo Collection Folder</source>
+        <translation>Fotosammlungsordner auswählen</translation>
+    </message>
+    <message>
         <source>Scanning for new photos...</source>
         <translation>Suche nach neuen Fotos...</translation>
     </message>
