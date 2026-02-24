@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import Enum as PyEnum
+from pathlib import Path
 from typing import List, Optional
 
 from sqlalchemy import (
@@ -327,6 +328,36 @@ def clear_database(session_factory: sessionmaker) -> None:
         session.execute(delete(EmbeddingCluster))
         session.execute(delete(Person))
         session.commit()
+
+
+def delete_cache_files(
+    session_factory: sessionmaker,
+    face_crops_dir: Path,
+    thumbs_dir: Path,
+) -> None:
+    """Deletes cached face crop and thumbnail files for all DB entries.
+
+    Only files whose names match a face ID or image hash currently in the
+    database are removed. Any other files in those directories are left intact.
+
+    Args:
+        session_factory: The SQLAlchemy session factory.
+        face_crops_dir: Directory containing face crop JPEG files.
+        thumbs_dir: Directory containing photo thumbnail JPEG files.
+    """
+    with session_factory() as session:
+        face_ids = session.execute(select(Face.id)).scalars().all()
+        image_hashes = (
+            session.execute(select(Image.file_hash).where(Image.file_hash.isnot(None)))
+            .scalars()
+            .all()
+        )
+
+    for face_id in face_ids:
+        (face_crops_dir / f"{face_id}.jpg").unlink(missing_ok=True)
+
+    for file_hash in image_hashes:
+        (thumbs_dir / f"{file_hash}.jpg").unlink(missing_ok=True)
 
 
 def get_counts(session_factory: sessionmaker) -> tuple[int, int]:

@@ -5,6 +5,7 @@ from photoaident.db.database import (
     get_session_factory,
     get_counts,
     clear_database,
+    delete_cache_files,
     Image,
     ImageMetadata,
     ImageTag,
@@ -184,3 +185,98 @@ def test_get_counts_and_clear_database(db_session, db_engine):
     img_count, face_count = get_counts(factory)
     assert img_count == 0
     assert face_count == 0
+
+
+def test_delete_cache_files(db_session, tmp_path):
+    """Cache files matching DB face IDs and image hashes are removed."""
+    face_crops_dir = tmp_path / "faces"
+    thumbs_dir = tmp_path / "thumbs"
+    face_crops_dir.mkdir()
+    thumbs_dir.mkdir()
+
+    factory = sessionmaker(bind=db_session.get_bind())
+
+    img = Image(file_path="img_del1.jpg", file_hash="hash_del1", file_size=100)
+    db_session.add(img)
+    db_session.flush()
+
+    face = Face(
+        image_id=img.id,
+        faiss_id=0,
+        bbox_x=0,
+        bbox_y=0,
+        bbox_w=10,
+        bbox_h=10,
+        detection_confidence=0.9,
+        state=FaceState.UNIDENTIFIED,
+        model_version="v1",
+    )
+    db_session.add(face)
+    db_session.flush()
+
+    # Cache files that should be deleted
+    face_crop = face_crops_dir / f"{face.id}.jpg"
+    thumb = thumbs_dir / "hash_del1.jpg"
+    face_crop.write_bytes(b"face-data")
+    thumb.write_bytes(b"thumb-data")
+
+    # Extra files NOT in the DB — must NOT be deleted
+    extra_face = face_crops_dir / "99999.jpg"
+    extra_thumb = thumbs_dir / "unknown_hash.jpg"
+    extra_face.write_bytes(b"other")
+    extra_thumb.write_bytes(b"other")
+
+    delete_cache_files(factory, face_crops_dir, thumbs_dir)
+
+    assert not face_crop.exists()
+    assert not thumb.exists()
+    assert extra_face.exists()
+    assert extra_thumb.exists()
+
+
+def test_delete_cache_files_missing_ok(db_session, tmp_path):
+    """delete_cache_files does not raise when cache files are absent."""
+    face_crops_dir = tmp_path / "faces"
+    thumbs_dir = tmp_path / "thumbs"
+    face_crops_dir.mkdir()
+    thumbs_dir.mkdir()
+
+    factory = sessionmaker(bind=db_session.get_bind())
+
+    img = Image(file_path="img_del2.jpg", file_hash="hash_del2", file_size=100)
+    db_session.add(img)
+    db_session.flush()
+
+    face = Face(
+        image_id=img.id,
+        faiss_id=0,
+        bbox_x=0,
+        bbox_y=0,
+        bbox_w=10,
+        bbox_h=10,
+        detection_confidence=0.9,
+        state=FaceState.UNIDENTIFIED,
+        model_version="v1",
+    )
+    db_session.add(face)
+    db_session.flush()
+
+    # No files exist — should complete without error
+    delete_cache_files(factory, face_crops_dir, thumbs_dir)
+
+
+def test_delete_cache_files_null_hash(db_session, tmp_path):
+    """Images with a null file_hash are silently skipped."""
+    face_crops_dir = tmp_path / "faces"
+    thumbs_dir = tmp_path / "thumbs"
+    face_crops_dir.mkdir()
+    thumbs_dir.mkdir()
+
+    factory = sessionmaker(bind=db_session.get_bind())
+
+    img = Image(file_path="img_del3.jpg", file_hash=None, file_size=100)
+    db_session.add(img)
+    db_session.flush()
+
+    # Should not raise or create a "None.jpg" deletion attempt
+    delete_cache_files(factory, face_crops_dir, thumbs_dir)

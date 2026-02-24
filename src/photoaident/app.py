@@ -10,6 +10,7 @@ from photoaident.core.indexer import InventoryTask, IndexingTask
 from photoaident.db.database import (
     get_counts,
     clear_database,
+    delete_cache_files,
     get_engine,
     get_session_factory,
 )
@@ -363,7 +364,12 @@ class MainWindow(QtWidgets.QMainWindow):
                 )
 
                 if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-                    # Clear data
+                    # Clear data — delete cache files before wiping the DB
+                    delete_cache_files(
+                        self.session_factory,
+                        self.paths.face_crops_dir,
+                        self.paths.thumbs_dir,
+                    )
                     clear_database(self.session_factory)
                     self.vector_store.reset()
                     self.vector_store.save(self.paths.faiss_path)
