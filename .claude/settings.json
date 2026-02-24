@@ -5,5 +5,18 @@
   "enabledPlugins": {
     "commit-commands@claude-plugins-official": true,
     "pyright-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run black ."
+          }
+        ]
+      }
+    ]
   }
 }
