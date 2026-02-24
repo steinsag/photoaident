@@ -112,3 +112,95 @@ What it does:
 - Blocks the commit if linting, formatting, or typing issues are found
 
 To bypass the hook: `git commit --no-verify`
+
+## Database Schema
+
+```mermaid
+erDiagram
+    images ||--o| image_metadata: "1:1"
+    images ||--o{ image_tags: "1:N"
+    images ||--o{ faces: "1:N"
+    persons ||--o{ faces: "1:N"
+    persons ||--o{ embedding_clusters: "1:N"
+    persons ||--o{ suggestions: "1:N"
+    embedding_clusters ||--o{ faces: "1:N"
+    embedding_clusters ||--o{ suggestions: "1:N"
+    faces ||--o{ suggestions: "1:N"
+
+    images {
+        int id PK
+        string file_path UK
+        string file_hash "SHA256"
+        int file_size
+        datetime indexed_at
+        datetime updated_at
+        int index_version
+    }
+
+    image_metadata {
+        int id PK
+        int image_id FK, UK
+        datetime taken_at
+        string taken_at_source "exif|filesystem|manual"
+        string camera_make
+        string camera_model
+        numeric gps_lat
+        numeric gps_lon
+        float gps_altitude
+        int width
+        int height
+        int orientation "EXIF 1-8"
+    }
+
+    image_tags {
+        int id PK
+        int image_id FK
+        string tag_key
+        string tag_value
+        string tag_source "model|manual"
+        string model_name
+        datetime created_at
+    }
+
+    faces {
+        int id PK
+        int image_id FK
+        int faiss_id
+        int bbox_x
+        int bbox_y
+        int bbox_w
+        int bbox_h
+        float detection_confidence
+        int person_id FK
+        int cluster_id FK
+        string state "unidentified|identified|anonymous"
+        datetime labelled_at
+        string model_version
+        datetime deleted_at
+    }
+
+    persons {
+        int id PK
+        string name
+        string notes
+        datetime created_at
+    }
+
+    embedding_clusters {
+        int id PK
+        int person_id FK
+        string label
+        string age_group "infant|youngster|teenager|adult|senior"
+        datetime created_at
+    }
+
+    suggestions {
+        int id PK
+        int face_id FK
+        int person_id FK
+        int cluster_id FK
+        float similarity_score
+        string state "pending|confirmed|rejected"
+        datetime created_at
+    }
+```
