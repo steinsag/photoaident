@@ -166,8 +166,8 @@ uv run photoaident                   # Run the app
 uv run scripts/verify.py             # Format + lint + type check + translations + tests
 uv run pytest                        # Tests only
 uv run pytest -m gpu                 # GPU integration tests only
-uv run ruff check --fix              # Lint (auto-fix)
-uv run black .                       # Format
+uv run ruff check --fix --quiet      # Lint (auto-fix)
+uv run black --quiet .               # Format
 uv run ty check                      # Type check
 uv run alembic revision --autogenerate -m "description"  # New migration
 uv run alembic upgrade head          # Apply migrations manually (dev use)

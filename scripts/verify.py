@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 COMMANDS: list[list[str]] = [
-    ["ruff", "check", "--fix", "."],
-    ["black", "."],
+    ["ruff", "check", "--fix", "--quiet", "."],
+    ["black", "--quiet", "."],
     ["ty", "check"],
     ["pytest"],
 ]
@@ -36,8 +36,6 @@ def check_translations() -> int:
     reformatting.  A before/after comparison in Python avoids any dependency
     on the git index state and works correctly in a single run.
     """
-    print("\n[verify] checking translations (i18n)...\n", flush=True)
-
     ts_paths = [
         Path("assets/translations/photoaident_de.ts"),
         Path("assets/translations/photoaident_en.ts"),
@@ -87,7 +85,6 @@ def check_translations() -> int:
         )
         return 1
 
-    print("[verify] Translations are up-to-date.")
     return 0
 
 
@@ -112,14 +109,12 @@ def run() -> int:
 
     for command in COMMANDS:
         full_command = " ".join(command)
-        print(f"\n[verify] running: {full_command}\n", flush=True)
         try:
             # Inherit stdout/stderr so users see the full output
             subprocess.run(command, check=True)
         except subprocess.CalledProcessError as e:
             print(f"[verify] step failed with exit code {e.returncode}: {full_command}")
             return e.returncode
-    print("\n[verify] all steps passed ✔")
     return 0
 
 
