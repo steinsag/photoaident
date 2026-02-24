@@ -1,5 +1,6 @@
 import os
 import pathlib
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -8,8 +9,53 @@ from PIL import Image as PILImage
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from photoaident.core.indexer import InventoryTask, IndexingTask
+from photoaident.core.indexer import InventoryTask, IndexingTask, _dms_to_decimal
 from photoaident.db.database import Image, ImageMetadata, TakenAtSource
+
+
+class _Ratio:
+    """Minimal Ratio stub matching exifread's Ratio type."""
+
+    def __init__(self, num: int, den: int) -> None:
+        self.num = num
+        self.den = den
+
+
+class _MockTag:
+    """Minimal exifread IfdTag stub."""
+
+    def __init__(self, values) -> None:
+        self.values = values
+
+    def __str__(self) -> str:
+        if isinstance(self.values, str):
+            return self.values
+        return str(self.values)
+
+
+def _make_indexed_image(tmp_path, session_factory, filename="img.jpg"):
+    """Create a real JPEG on disk and a matching unindexed Image row."""
+    img_file = tmp_path / filename
+    PILImage.new("RGB", (100, 100)).save(img_file, "JPEG")
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+    return img_file, img_id
+
+
+def _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags):
+    """Run IndexingTask with mocked exifread returning fake_tags."""
+    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+    with patch(
+        "photoaident.core.indexer.exifread.process_file", return_value=fake_tags
+    ):
+        task.run()
+
 
 _rng = np.random.default_rng(seed=42)
 
@@ -193,11 +239,6 @@ def test_indexing_task_success(
         assert meta.taken_at_source == TakenAtSource.FILESYSTEM
 
 
-# ---------------------------------------------------------------------------
-# InventoryTask — additional branch coverage
-# ---------------------------------------------------------------------------
-
-
 def test_inventory_task_skips_duplicate_image(tmp_path, session_factory, db_engine):
     """An image already in the DB is not inserted a second time."""
     img_file = tmp_path / "img.jpg"
@@ -273,11 +314,6 @@ def test_inventory_task_skips_file_with_stat_error(
         images = session.scalars(select(Image)).all()
     assert len(images) == 1
     assert images[0].file_path.endswith("good.jpg")
-
-
-# ---------------------------------------------------------------------------
-# IndexingTask — additional branch coverage
-# ---------------------------------------------------------------------------
 
 
 def test_indexing_task_cancel_method(session_factory, vector_store, tmp_paths):
@@ -479,3 +515,196 @@ def test_indexing_task_exif_failure_does_not_abort(
     assert img is not None
     # Image should be fully indexed (hash set, not ERROR) despite EXIF failure
     assert img.file_hash not in (None, "ERROR", "MISSING")
+
+
+def test_dms_to_decimal_north():
+    """N reference → positive decimal degrees."""
+    values = [_Ratio(10, 1), _Ratio(30, 1), _Ratio(0, 1)]  # 10°30'0"
+    assert _dms_to_decimal(values, "N") == pytest.approx(10.5)
+
+
+def test_dms_to_decimal_east():
+    """E reference → positive decimal degrees."""
+    values = [_Ratio(2, 1), _Ratio(21, 1), _Ratio(0, 1)]  # 2°21'0"
+    assert _dms_to_decimal(values, "E") == pytest.approx(2.35)
+
+
+def test_dms_to_decimal_south_negated():
+    """S reference → negated decimal degrees."""
+    values = [_Ratio(10, 1), _Ratio(30, 1), _Ratio(0, 1)]
+    assert _dms_to_decimal(values, "S") == pytest.approx(-10.5)
+
+
+def test_dms_to_decimal_west_negated():
+    """W reference → negated decimal degrees."""
+    values = [_Ratio(10, 1), _Ratio(30, 1), _Ratio(0, 1)]
+    assert _dms_to_decimal(values, "W") == pytest.approx(-10.5)
+
+
+def test_dms_to_decimal_returns_none_on_error():
+    """Empty list causes IndexError → returns None."""
+    assert _dms_to_decimal([], "N") is None
+
+
+def test_exif_datetime_from_exif_tag(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """taken_at and taken_at_source == EXIF when DateTimeOriginal is present."""
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "dt_exif.jpg")
+    fake_tags = {"EXIF DateTimeOriginal": _MockTag("2022:08:20 10:15:30")}
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.taken_at_source == TakenAtSource.EXIF
+    assert meta.taken_at == datetime(2022, 8, 20, 10, 15, 30)
+
+
+def test_exif_invalid_datetime_falls_through_to_next_tag(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """Invalid DateTimeOriginal (ValueError) → falls through to DateTimeDigitized."""
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "dt_fallback.jpg")
+    fake_tags = {
+        "EXIF DateTimeOriginal": _MockTag("not-a-date"),
+        "EXIF DateTimeDigitized": _MockTag("2021:03:01 09:00:00"),
+    }
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.taken_at_source == TakenAtSource.EXIF
+    assert meta.taken_at is not None
+    assert meta.taken_at.year == 2021
+
+
+def test_exif_gps_coordinates(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """GPS lat/lon are extracted and stored when GPS tags are present."""
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "gps.jpg")
+    fake_tags = {
+        "GPS GPSLatitude": _MockTag([_Ratio(48, 1), _Ratio(51, 1), _Ratio(0, 1)]),
+        "GPS GPSLatitudeRef": _MockTag("N"),
+        "GPS GPSLongitude": _MockTag([_Ratio(2, 1), _Ratio(21, 1), _Ratio(0, 1)]),
+        "GPS GPSLongitudeRef": _MockTag("E"),
+    }
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.gps_lat is not None
+    assert meta.gps_lon is not None
+    assert float(meta.gps_lat) == pytest.approx(48.85)
+    assert float(meta.gps_lon) == pytest.approx(2.35)
+
+
+def test_exif_gps_altitude_above_sea_level(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """Altitude ref 0 (above sea level) → positive gps_altitude."""
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "alt_above.jpg")
+    fake_tags = {
+        "GPS GPSAltitude": _MockTag([_Ratio(1000, 1)]),
+        "GPS GPSAltitudeRef": _MockTag("0"),
+    }
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.gps_altitude == pytest.approx(1000.0)
+
+
+def test_exif_gps_altitude_below_sea_level(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """Altitude ref 1 (below sea level) → negated gps_altitude."""
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "alt_below.jpg")
+    fake_tags = {
+        "GPS GPSAltitude": _MockTag([_Ratio(50, 1)]),
+        "GPS GPSAltitudeRef": _MockTag("1"),
+    }
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.gps_altitude == pytest.approx(-50.0)
+
+
+def test_exif_gps_altitude_exception_silenced(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """Malformed altitude tag is silently ignored; gps_altitude stays None."""
+
+    class _BadAltTag:
+        values = [
+            object()
+        ]  # no .num/.den → AttributeError inside _extract_exif_metadata
+
+        def __str__(self) -> str:
+            return "bad"
+
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "alt_err.jpg")
+    fake_tags = {"GPS GPSAltitude": _BadAltTag()}
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.gps_altitude is None
+
+
+def test_exif_orientation_stored(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """Orientation from EXIF is stored correctly."""
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "orient.jpg")
+    fake_tags = {"Image Orientation": _MockTag([6])}
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.orientation == 6
+
+
+def test_exif_orientation_invalid_falls_back_to_1(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """Non-integer orientation value falls back to default (1)."""
+
+    class _BadOrientTag:
+        values = ["not-an-int"]
+
+        def __str__(self) -> str:
+            return "bad"
+
+    _, img_id = _make_indexed_image(tmp_path, session_factory, "orient_inv.jpg")
+    fake_tags = {"Image Orientation": _BadOrientTag()}
+    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.orientation == 1
