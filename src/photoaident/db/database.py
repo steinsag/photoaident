@@ -7,6 +7,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Numeric,
@@ -127,9 +128,8 @@ class ImageMetadata(Base):
     image: Mapped["Image"] = relationship("Image", back_populates="metadata_rel")
 
     __table_args__ = (
-        # For bounding-box GPS queries
-        # SQLite doesn't have spatial indexes, so we just index the columns
-        # Index('idx_metadata_gps', 'gps_lat', 'gps_lon'),
+        # Composite index for bounding-box GPS queries (lat/lon range predicates)
+        Index("idx_metadata_gps", "gps_lat", "gps_lon"),
     )
 
 

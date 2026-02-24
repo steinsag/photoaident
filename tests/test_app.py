@@ -197,7 +197,8 @@ def test_counts_label_updated_after_indexing_finished(qtbot, tmp_path):
 def test_onboarding_triggered_when_no_path(qtbot, tmp_path, monkeypatch):
     """_maybe_start_indexing triggers onboarding when no collection path is set."""
     window = _make_window(tmp_path, qtbot)
-    window._onboarding_enabled = True  # re-enable for this test
+    # Use monkeypatch so the flag is restored to False before the 1-second timer fires
+    monkeypatch.setattr(window, "_onboarding_enabled", True)
 
     onboarding_called: list[bool] = []
     monkeypatch.setattr(
@@ -216,7 +217,7 @@ def test_onboarding_not_triggered_when_path_set(qtbot, tmp_path, monkeypatch):
     collection_dir = tmp_path / "photos"
     collection_dir.mkdir()
     window = _make_window(tmp_path, qtbot, collection_path=str(collection_dir))
-    window._onboarding_enabled = True
+    monkeypatch.setattr(window, "_onboarding_enabled", True)
 
     # Ensure no background tasks from constructor timer interfere
     for attr in ("_inventory_task", "_indexing_task"):

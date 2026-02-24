@@ -3,7 +3,6 @@ from typing import List, Tuple
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from photoaident.db.database import Face
 from photoaident.utils.image_utils import generate_thumbnail
 
 
@@ -33,33 +32,8 @@ def _read_pixmap(target_path: Path, scaled_size: QtCore.QSize) -> QtGui.QPixmap:
     return QtGui.QPixmap.fromImage(image)
 
 
-def _draw_face_rects(
-    pixmap: QtGui.QPixmap,
-    faces: List[Face],
-    orig_size: Tuple[int, int],
-) -> QtGui.QPixmap:
-    """Draw red rectangles on pixmap for each detected face."""
-    orig_w, orig_h = orig_size
-    if orig_w <= 0 or orig_h <= 0:
-        return pixmap
-    painter = QtGui.QPainter(pixmap)
-    pen = QtGui.QPen(QtGui.QColor("red"), 2)
-    painter.setPen(pen)
-    pw = pixmap.width()
-    ph = pixmap.height()
-    scale = min(pw / orig_w, ph / orig_h)
-    for face in faces:
-        fx = face.bbox_x * scale
-        fy = face.bbox_y * scale
-        fw = face.bbox_w * scale
-        fh = face.bbox_h * scale
-        painter.drawRect(QtCore.QRectF(fx, fy, fw, fh))
-    painter.end()
-    return pixmap
-
-
 class ThumbnailWidget(QtWidgets.QWidget):
-    """Displays a single image thumbnail with face highlights."""
+    """Displays a single image thumbnail."""
 
     clicked = QtCore.Signal(int)  # image_id
 
@@ -67,17 +41,13 @@ class ThumbnailWidget(QtWidgets.QWidget):
         self,
         image_id: int,
         file_path: str,
-        faces: List[Face],
         thumb_path: Path,
-        orig_size: Tuple[int, int] | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.image_id = image_id
         self.file_path = file_path
-        self.faces = faces
         self.thumb_path = thumb_path
-        self.orig_size = orig_size
 
         self.setFixedSize(160, 160)
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
@@ -107,9 +77,6 @@ class ThumbnailWidget(QtWidgets.QWidget):
         if pixmap.isNull():
             self.image_label.setText(self.tr("Error loading image"))
             return
-
-        if self.faces and self.orig_size:
-            pixmap = _draw_face_rects(pixmap, self.faces, self.orig_size)
 
         self.image_label.setPixmap(pixmap)
 
@@ -178,11 +145,9 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self,
         image_id: int,
         file_path: str,
-        faces: List[Face],
         thumb_path: Path,
-        orig_size: Tuple[int, int] | None = None,
     ):
-        thumb = ThumbnailWidget(image_id, file_path, faces, thumb_path, orig_size)
+        thumb = ThumbnailWidget(image_id, file_path, thumb_path)
         thumb.clicked.connect(self.image_selected.emit)
 
         idx = len(self.thumbnails)
@@ -194,7 +159,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     def set_images_with_total(
         self,
-        images_data: List[Tuple[int, str, List[Face], Path, Tuple[int, int] | None]],
+        images_data: List[Tuple[int, str, Path]],
         total_count: int,
     ):
         self.clear()
@@ -206,8 +171,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
                 self.main_layout.insertWidget(1, label)
             return
 
-        for img_id, path, faces, thumb_path, orig_size in images_data:
-            self.add_thumbnail(img_id, path, faces, thumb_path, orig_size)
+        for img_id, path, thumb_path in images_data:
+            self.add_thumbnail(img_id, path, thumb_path)
 
         if total_count > len(images_data):
             label = QtWidgets.QLabel(
@@ -220,7 +185,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     def set_images(
         self,
-        images_data: List[Tuple[int, str, List[Face], Path, Tuple[int, int] | None]],
+        images_data: List[Tuple[int, str, Path]],
     ):
         self.set_images_with_total(images_data, len(images_data))
 

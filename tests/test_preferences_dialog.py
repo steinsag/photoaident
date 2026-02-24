@@ -66,7 +66,7 @@ def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
     apply_migrations(f"sqlite:///{test_paths.db_path}")
 
     # Create a MainWindow
-    window = MainWindow(test_paths, check_gpu=False)
+    window = MainWindow(test_paths, check_gpu=False, enable_onboarding=False)
     qtbot.add_widget(window)
 
     # Mock PreferencesDialog.exec to simulate OK
@@ -110,7 +110,7 @@ def test_preferences_cancel_not_saved(qtbot, test_paths, monkeypatch):
     test_paths.config_file.parent.mkdir(parents=True, exist_ok=True)
     Settings(collection_path=initial_path).save(test_paths.config_file)
 
-    window = MainWindow(test_paths, check_gpu=False)
+    window = MainWindow(test_paths, check_gpu=False, enable_onboarding=False)
     qtbot.add_widget(window)
 
     # Mock PreferencesDialog.exec to simulate Cancel

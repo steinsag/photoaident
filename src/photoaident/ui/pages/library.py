@@ -161,10 +161,7 @@ class LibraryPage(QtWidgets.QWidget):
                 if img.file_hash
                 else self.paths.thumbs_dir / "unknown.jpg"
             )
-            orig_size = None
-            if img.metadata_rel:
-                orig_size = (img.metadata_rel.width, img.metadata_rel.height)
-            result.append((img.id, img.file_path, img.faces, thumb_path, orig_size))
+            result.append((img.id, img.file_path, thumb_path))
         return result
 
     def load_images(self) -> None:
@@ -173,11 +170,7 @@ class LibraryPage(QtWidgets.QWidget):
         if not person_ids or self.vector_store is None:
             with self.session_factory() as session:
                 total = session.scalar(select(func.count(Image.id))) or 0
-                stmt = (
-                    select(Image)
-                    .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
-                    .limit(MAX_THUMBS)
-                )
+                stmt = select(Image).limit(MAX_THUMBS)
                 images = session.execute(stmt).unique().scalars().all()
                 self.grid.set_images_with_total(self._build_images_data(images), total)
             return
@@ -211,11 +204,7 @@ class LibraryPage(QtWidgets.QWidget):
         ordered_ids = [img_id for img_id, _ in sorted_pairs]
 
         with self.session_factory() as session:
-            stmt = (
-                select(Image)
-                .where(Image.id.in_(ordered_ids))
-                .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
-            )
+            stmt = select(Image).where(Image.id.in_(ordered_ids))
             images = session.execute(stmt).unique().scalars().all()
             image_map = {img.id: img for img in images}
             ordered_images = [image_map[i] for i in ordered_ids if i in image_map]

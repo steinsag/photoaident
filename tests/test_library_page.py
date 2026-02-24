@@ -275,14 +275,15 @@ def test_image_without_hash_uses_unknown_thumb(qtbot, session_factory, test_path
     assert page.grid.thumbnails[0].thumb_path.name == "unknown.jpg"
 
 
-def test_image_with_metadata_provides_orig_size(qtbot, session_factory, test_paths):
+def test_image_with_metadata_appears_in_grid(qtbot, session_factory, test_paths):
+    """An image with metadata is loaded into the grid with the correct thumb_path."""
     _add_image_with_metadata(session_factory, "/meta.jpg")
 
     page = LibraryPage(session_factory, test_paths)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 1
-    assert page.grid.thumbnails[0].orig_size == (800, 600)
+    assert page.grid.thumbnails[0].thumb_path.name == "hashwithmeta.jpg"
 
 
 # --- load_images: person filter ---

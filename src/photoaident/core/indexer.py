@@ -1,17 +1,33 @@
 import hashlib
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
 
+import exifread
+from PIL import Image as PILImage
 from PySide6 import QtCore
 from sqlalchemy import select, func
 from sqlalchemy.orm import sessionmaker
 
 from photoaident.core.embeddings import FaceEmbedder
-from photoaident.db.database import Image, Face, FaceState
+from photoaident.db.database import Image, Face, FaceState, ImageMetadata, TakenAtSource
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
-from photoaident.utils.image_utils import generate_thumbnail
+
+
+def _dms_to_decimal(values, ref: str) -> float | None:
+    """Convert DMS (degrees/minutes/seconds) GPS tag values to decimal degrees."""
+    try:
+        d = float(values[0].num) / float(values[0].den)
+        m = float(values[1].num) / float(values[1].den)
+        s = float(values[2].num) / float(values[2].den)
+        result = d + m / 60 + s / 3600
+        if ref in ("S", "W"):
+            result = -result
+        return result
+    except Exception:
+        return None
 
 
 class InventoryTask(QtCore.QObject):
@@ -151,6 +167,87 @@ class IndexingTask(QtCore.QObject):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
+    def _extract_exif_metadata(self, path: Path, image_id: int, session) -> None:
+        """Extract EXIF metadata from an image file and persist it to image_metadata."""
+        try:
+            with PILImage.open(path) as pil_img:
+                width, height = pil_img.size
+
+            with open(path, "rb") as f:
+                tags = exifread.process_file(f, details=False)
+
+            taken_at: Optional[datetime] = None
+            taken_at_source = TakenAtSource.FILESYSTEM
+            for tag_key in (
+                "EXIF DateTimeOriginal",
+                "EXIF DateTimeDigitized",
+                "Image DateTime",
+            ):
+                if tag_key in tags:
+                    try:
+                        taken_at = datetime.strptime(
+                            str(tags[tag_key]), "%Y:%m:%d %H:%M:%S"
+                        )
+                        taken_at_source = TakenAtSource.EXIF
+                        break
+                    except ValueError:
+                        continue
+
+            if taken_at is None:
+                taken_at = datetime.fromtimestamp(path.stat().st_mtime)
+
+            gps_lat: Optional[float] = None
+            gps_lon: Optional[float] = None
+            gps_altitude: Optional[float] = None
+
+            lat_tag = tags.get("GPS GPSLatitude")
+            lat_ref = str(tags.get("GPS GPSLatitudeRef", "N"))
+            lon_tag = tags.get("GPS GPSLongitude")
+            lon_ref = str(tags.get("GPS GPSLongitudeRef", "E"))
+            if lat_tag and lon_tag:
+                gps_lat = _dms_to_decimal(lat_tag.values, lat_ref)
+                gps_lon = _dms_to_decimal(lon_tag.values, lon_ref)
+
+            alt_tag = tags.get("GPS GPSAltitude")
+            alt_ref_tag = tags.get("GPS GPSAltitudeRef")
+            if alt_tag:
+                try:
+                    alt_val = float(alt_tag.values[0].num) / float(
+                        alt_tag.values[0].den
+                    )
+                    if alt_ref_tag and str(alt_ref_tag) == "1":
+                        alt_val = -alt_val
+                    gps_altitude = alt_val
+                except Exception:
+                    pass
+
+            camera_make = str(tags["Image Make"]) if "Image Make" in tags else None
+            camera_model = str(tags["Image Model"]) if "Image Model" in tags else None
+
+            orientation = 1
+            if "Image Orientation" in tags:
+                try:
+                    orientation = int(tags["Image Orientation"].values[0])
+                except (ValueError, TypeError, AttributeError):
+                    pass
+
+            metadata = ImageMetadata(
+                image_id=image_id,
+                taken_at=taken_at,
+                taken_at_source=taken_at_source,
+                camera_make=camera_make,
+                camera_model=camera_model,
+                gps_lat=gps_lat,
+                gps_lon=gps_lon,
+                gps_altitude=gps_altitude,
+                width=width,
+                height=height,
+                orientation=orientation,
+            )
+            session.add(metadata)
+        except Exception as e:
+            print(f"EXIF extraction failed for {path}: {e}")
+
     def _save_face_crops(
         self,
         new_faces: list,
@@ -198,15 +295,13 @@ class IndexingTask(QtCore.QObject):
             session.add(face)
             new_faces.append((face, bbox))
 
+        self._extract_exif_metadata(path, img.id, session)
+
         # Persist FAISS first to minimise DB→FAISS mismatch risk
         self.vector_store.save(self.paths.faiss_path)
         session.commit()
 
         self._save_face_crops(new_faces, embedder, path)
-
-        thumb_path = self.paths.thumbs_dir / f"{img.file_hash}.jpg"
-        if not thumb_path.exists():
-            generate_thumbnail(path, thumb_path)
 
         return len(faces_info)
 

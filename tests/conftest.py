@@ -44,3 +44,15 @@ def vector_store():
     from photoaident.db.vector_store import VectorStore
 
     return VectorStore()
+
+
+@pytest.fixture(scope="session")
+def face_embedder():
+    """A single FaceEmbedder instance shared across the whole test session.
+
+    FaceEmbedder initialisation loads the ONNX model from disk (~3-4 s).
+    Sharing the instance avoids paying that cost once per test.
+    """
+    from photoaident.core.embeddings import FaceEmbedder
+
+    return FaceEmbedder(ctx_id=-1)

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from photoaident.core.indexer import InventoryTask, IndexingTask
-from photoaident.db.database import Image
+from photoaident.db.database import Image, ImageMetadata, TakenAtSource
 
 _rng = np.random.default_rng(seed=42)
 
@@ -32,9 +32,11 @@ def clean_db(db_engine):
     """Ensure database is empty before each test."""
     from sqlalchemy import delete
     from sqlalchemy.orm import Session
-    from photoaident.db.database import Image
+    from photoaident.db.database import Image, ImageMetadata
 
     with Session(db_engine) as session:
+        # Delete child tables first (FK constraints, even without enforcement)
+        session.execute(delete(ImageMetadata))
         session.execute(delete(Image))
         session.commit()
 
@@ -175,9 +177,20 @@ def test_indexing_task_success(
     crop_path = tmp_paths.face_crops_dir / f"{face.id}.jpg"
     assert crop_path.exists()
 
-    # Verify full-photo thumbnail was saved
-    thumb_path = tmp_paths.thumbs_dir / f"{img.file_hash}.jpg"
-    assert thumb_path.exists()
+    # Verify no full-photo thumbnail was created during indexing (lazy generation only)
+    assert not any(tmp_paths.thumbs_dir.iterdir())
+
+    # Verify image_metadata was populated
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+        assert meta is not None
+        assert meta.width == 100
+        assert meta.height == 100
+        assert meta.taken_at is not None
+        # PIL-created fixture images have no EXIF datetime → falls back to filesystem
+        assert meta.taken_at_source == TakenAtSource.FILESYSTEM
 
 
 # ---------------------------------------------------------------------------
@@ -350,6 +363,7 @@ def test_indexing_task_marks_missing_file(
         img_id = img.id
 
     task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task._embedder = MagicMock()  # file is missing; don't load the real model
     task.run()
 
     with Session(db_engine) as session:
@@ -372,6 +386,7 @@ def test_indexing_task_marks_error_on_exception(
         img_id = img.id
 
     task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task._embedder = MagicMock()  # error is in _calculate_hash; don't load real model
 
     with patch.object(task, "_calculate_hash", side_effect=RuntimeError("boom")):
         task.run()
@@ -380,3 +395,87 @@ def test_indexing_task_marks_error_on_exception(
         img = session.get(Image, img_id)
     assert img is not None
     assert img.file_hash == "ERROR"
+
+
+def test_indexing_task_metadata_populated(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """ImageMetadata is created for each successfully indexed image."""
+    img_file = tmp_path / "meta_test.jpg"
+    PILImage.new("RGB", (320, 240), "green").save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+
+    task.run()
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.width == 320
+    assert meta.height == 240
+    assert meta.taken_at is not None
+    assert meta.taken_at_source == TakenAtSource.FILESYSTEM
+
+
+def test_indexing_task_no_thumbnail_during_indexing(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """No thumbnail files are written to thumbs_dir during indexing."""
+    img_file = tmp_path / "no_thumb.jpg"
+    PILImage.new("RGB", (50, 50), "blue").save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+
+    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+
+    task.run()
+
+    assert not any(tmp_paths.thumbs_dir.iterdir())
+
+
+def test_indexing_task_exif_failure_does_not_abort(
+    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+):
+    """EXIF extraction failure must not abort indexing — image is still marked done."""
+    img_file = tmp_path / "exif_fail.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+
+    with patch(
+        "photoaident.core.indexer.exifread.process_file",
+        side_effect=OSError("corrupt"),
+    ):
+        task.run()
+
+    with Session(db_engine) as session:
+        img = session.get(Image, img_id)
+    assert img is not None
+    # Image should be fully indexed (hash set, not ERROR) despite EXIF failure
+    assert img.file_hash not in (None, "ERROR", "MISSING")

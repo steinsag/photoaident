@@ -26,7 +26,7 @@ def _make_window(tmp_path, qtbot, collection_path: str = "") -> MainWindow:
     )
     paths.ensure_dirs()
     apply_migrations(f"sqlite:///{paths.db_path}")
-    window = MainWindow(paths, check_gpu=False)
+    window = MainWindow(paths, check_gpu=False, enable_onboarding=False)
     window.settings.collection_path = collection_path
     qtbot.addWidget(window)
     return window

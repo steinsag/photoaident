@@ -20,6 +20,7 @@ dependencies = [
     "opencv-python-headless>=4.9.0",
     "tqdm>=4.66.0",
     "alembic>=1.18.4",
+    "exifread>=3.5.1",
 ]
 
 [project.scripts]

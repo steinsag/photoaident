@@ -79,14 +79,13 @@ def test_extract_face_crop(tmp_path):
         assert pixel > 200
 
 
-def test_process_image_returns_empty_when_unreadable(tmp_path):
+def test_process_image_returns_empty_when_unreadable(tmp_path, face_embedder):
     """process_image returns [] when cv2.imread cannot read the file."""
-    embedder = FaceEmbedder(ctx_id=-1)
     bad_file = tmp_path / "bad.jpg"
     bad_file.write_bytes(b"not an image")
 
     with patch("photoaident.core.embeddings.cv2.imread", return_value=None):
-        result = embedder.process_image(bad_file)
+        result = face_embedder.process_image(bad_file)
 
     assert result == []
 
@@ -104,16 +103,15 @@ def _make_mock_face() -> MagicMock:
     return face
 
 
-def test_process_image_returns_face_data(tmp_path):
+def test_process_image_returns_face_data(tmp_path, face_embedder):
     """process_image returns the expected dict for each detected face."""
-    embedder = FaceEmbedder(ctx_id=-1)
     img_path = tmp_path / "test.jpg"
     Image.new("RGB", (100, 100)).save(img_path)
 
     mock_face = _make_mock_face()
 
-    with patch.object(embedder.app, "get", return_value=[mock_face]):
-        result = embedder.process_image(img_path)
+    with patch.object(face_embedder.app, "get", return_value=[mock_face]):
+        result = face_embedder.process_image(img_path)
 
     assert len(result) == 1
     r = result[0]
@@ -124,14 +122,13 @@ def test_process_image_returns_face_data(tmp_path):
     assert r["embedding"] is mock_face.normed_embedding
 
 
-def test_process_image_returns_empty_when_no_faces(tmp_path):
+def test_process_image_returns_empty_when_no_faces(tmp_path, face_embedder):
     """process_image returns [] when the model detects no faces."""
-    embedder = FaceEmbedder(ctx_id=-1)
     img_path = tmp_path / "test.jpg"
     Image.new("RGB", (100, 100)).save(img_path)
 
-    with patch.object(embedder.app, "get", return_value=[]):
-        result = embedder.process_image(img_path)
+    with patch.object(face_embedder.app, "get", return_value=[]):
+        result = face_embedder.process_image(img_path)
 
     assert result == []
 

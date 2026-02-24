@@ -2,7 +2,6 @@ import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtWidgets
 
-from photoaident.db.database import Face
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailWidget, ThumbnailGrid
 
 
@@ -16,21 +15,16 @@ def sample_image(tmp_path):
 
 def test_thumbnail_widget_init(qtbot, sample_image, tmp_path):
     thumb_path = tmp_path / "thumb.jpg"
-    faces = []
     widget = ThumbnailWidget(
         image_id=1,
         file_path=str(sample_image),
-        faces=faces,
         thumb_path=thumb_path,
-        orig_size=(800, 600),
     )
     qtbot.addWidget(widget)
 
     assert widget.image_id == 1
     assert widget.file_path == str(sample_image)
-    assert widget.faces == faces
     assert widget.thumb_path == thumb_path
-    assert widget.orig_size == (800, 600)
 
     # Check if thumbnail was generated because it didn't exist
     assert thumb_path.exists()
@@ -44,7 +38,7 @@ def test_thumbnail_widget_with_existing_thumb(qtbot, sample_image, tmp_path):
     PILImage.new("RGB", (150, 150), "red").save(thumb_path, "JPEG")
 
     widget = ThumbnailWidget(
-        image_id=1, file_path=str(sample_image), faces=[], thumb_path=thumb_path
+        image_id=1, file_path=str(sample_image), thumb_path=thumb_path
     )
     qtbot.addWidget(widget)
 
@@ -56,7 +50,7 @@ def test_thumbnail_widget_with_existing_thumb(qtbot, sample_image, tmp_path):
 
 def test_thumbnail_widget_click(qtbot, sample_image, tmp_path):
     thumb_path = tmp_path / "thumb_click.jpg"
-    widget = ThumbnailWidget(1, str(sample_image), [], thumb_path)
+    widget = ThumbnailWidget(1, str(sample_image), thumb_path)
     qtbot.addWidget(widget)
 
     with qtbot.waitSignal(widget.clicked) as blocker:
@@ -65,27 +59,10 @@ def test_thumbnail_widget_click(qtbot, sample_image, tmp_path):
     assert blocker.args == [1]
 
 
-def test_thumbnail_widget_with_faces(qtbot, sample_image, tmp_path):
-    thumb_path = tmp_path / "thumb_faces.jpg"
-    face = Face(bbox_x=100, bbox_y=100, bbox_w=200, bbox_h=200)
-    widget = ThumbnailWidget(
-        image_id=1,
-        file_path=str(sample_image),
-        faces=[face],
-        thumb_path=thumb_path,
-        orig_size=(800, 600),
-    )
-    qtbot.addWidget(widget)
-
-    # Face drawing logic is inside _load_thumbnail.
-    # Hard to verify pixels without heavy lifting, but we can ensure it ran.
-    assert widget.image_label.pixmap() is not None
-
-
 def test_thumbnail_widget_error_loading(qtbot, tmp_path):
     # Pass a non-existent file path and non-existent thumb path
     thumb_path = tmp_path / "non_existent_thumb.jpg"
-    widget = ThumbnailWidget(1, "non_existent_file.jpg", [], thumb_path)
+    widget = ThumbnailWidget(1, "non_existent_file.jpg", thumb_path)
     qtbot.addWidget(widget)
 
     # Should show error text
@@ -103,7 +80,7 @@ def test_thumbnail_grid_add_thumbnail(qtbot, sample_image, tmp_path):
     qtbot.addWidget(grid)
 
     thumb_path = tmp_path / "thumb_grid.jpg"
-    grid.add_thumbnail(1, str(sample_image), [], thumb_path, (800, 600))
+    grid.add_thumbnail(1, str(sample_image), thumb_path)
 
     assert len(grid.thumbnails) == 1
     # Check if widget was added to layout
@@ -114,8 +91,8 @@ def test_thumbnail_grid_clear(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    grid.add_thumbnail(1, str(sample_image), [], tmp_path / "t1.jpg")
-    grid.add_thumbnail(2, str(sample_image), [], tmp_path / "t2.jpg")
+    grid.add_thumbnail(1, str(sample_image), tmp_path / "t1.jpg")
+    grid.add_thumbnail(2, str(sample_image), tmp_path / "t2.jpg")
 
     assert len(grid.thumbnails) == 2
     assert grid.grid_layout.count() == 2
@@ -131,8 +108,8 @@ def test_thumbnail_grid_set_images(qtbot, sample_image, tmp_path):
     qtbot.addWidget(grid)
 
     images_data = [
-        (1, str(sample_image), [], tmp_path / "t1.jpg", (800, 600)),
-        (2, str(sample_image), [], tmp_path / "t2.jpg", (800, 600)),
+        (1, str(sample_image), tmp_path / "t1.jpg"),
+        (2, str(sample_image), tmp_path / "t2.jpg"),
     ]
 
     grid.set_images_with_total(images_data, 10)
@@ -171,9 +148,9 @@ def test_thumbnail_grid_resize(qtbot, sample_image, tmp_path):
     grid.resize(400, 600)
     assert grid.cols == 2
 
-    grid.add_thumbnail(1, str(sample_image), [], tmp_path / "t1.jpg")
-    grid.add_thumbnail(2, str(sample_image), [], tmp_path / "t2.jpg")
-    grid.add_thumbnail(3, str(sample_image), [], tmp_path / "t3.jpg")
+    grid.add_thumbnail(1, str(sample_image), tmp_path / "t1.jpg")
+    grid.add_thumbnail(2, str(sample_image), tmp_path / "t2.jpg")
+    grid.add_thumbnail(3, str(sample_image), tmp_path / "t3.jpg")
 
     # Check positions
     pos0 = grid.grid_layout.getItemPosition(
@@ -216,7 +193,7 @@ def test_thumbnail_grid_resize(qtbot, sample_image, tmp_path):
 def test_thumbnail_grid_set_images_simple(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
-    images_data = [(1, str(sample_image), [], tmp_path / "t1.jpg", (800, 600))]
+    images_data = [(1, str(sample_image), tmp_path / "t1.jpg")]
     grid.set_images(images_data)
     assert len(grid.thumbnails) == 1
     assert grid.main_layout.count() == 1
@@ -227,7 +204,7 @@ def test_thumbnail_grid_set_images_no_total(qtbot, sample_image, tmp_path):
     qtbot.addWidget(grid)
 
     images_data = [
-        (1, str(sample_image), [], tmp_path / "t1.jpg", (800, 600)),
+        (1, str(sample_image), tmp_path / "t1.jpg"),
     ]
 
     # Case where total == len(images_data), should not show "Showing X of Y" label

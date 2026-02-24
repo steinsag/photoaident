@@ -238,7 +238,7 @@ photo-aident/
 
 | Component                  | Status     | Notes                                        |
 |----------------------------|------------|----------------------------------------------|
-| DB schema + migrations     | ✓ Complete | 4 migrations applied                         |
+| DB schema + migrations     | ✓ Complete | 5 migrations applied                         |
 | FAISS vector store         | ✓ Complete | IndexFlatIP, save/load                       |
 | Face embedding (ArcFace)   | ✓ Complete | GPU with CPU fallback                        |
 | Indexer (inventory + embed)| ✓ Complete | Qt-threaded, auto-runs at startup            |
