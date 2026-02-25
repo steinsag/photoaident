@@ -1,0 +1,99 @@
+from PySide6 import QtCore, QtWidgets
+
+
+class AboutDialog(QtWidgets.QDialog):
+    """About dialog showing author, license, and library attributions."""
+
+    _LIBRARIES: list[tuple[str, str]] = [
+        ("InsightFace", "https://www.insightface.ai/"),
+        ("FAISS", "https://faiss.ai/"),
+        ("PySide6", "https://doc.qt.io/qtforpython-6/"),
+        ("ONNX Runtime", "https://onnxruntime.ai/"),
+        ("SQLAlchemy", "https://www.sqlalchemy.org/"),
+        ("Alembic", "https://alembic.sqlalchemy.org/"),
+        ("ExifRead", "https://github.com/ianare/exif-py"),
+        ("Pillow", "https://python-pillow.github.io/"),
+        ("OpenCV", "https://opencv.org/"),
+        ("NumPy", "https://numpy.org/"),
+    ]
+
+    def __init__(self, parent: QtWidgets.QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle(self.tr("About PhotoAIdent"))
+        self.setMinimumWidth(480)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        # App title
+        title_label = QtWidgets.QLabel("<h2>PhotoAIdent</h2>")
+        title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+
+        # Description
+        desc_label = QtWidgets.QLabel(
+            self.tr(
+                "Local, privacy-first desktop app for AI-powered"
+                " face recognition and photo search."
+            )
+        )
+        desc_label.setWordWrap(True)
+        desc_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(desc_label)
+
+        layout.addSpacing(4)
+
+        # Author / info block
+        info_html = (
+            "<b>"
+            + self.tr("Author:")
+            + '</b> <a href="mailto:seb.kde@hpfsc.de">Sebastian Stein</a><br>'
+            + "<b>"
+            + self.tr("Homepage:")
+            + '</b> <a href="https://github.com/steinsag/photoaident">'
+            + "github.com/steinsag/photoaident</a><br>"
+            + "<b>"
+            + self.tr("License:")
+            + '</b> <a href="https://www.apache.org/licenses/LICENSE-2.0">'
+            + "Apache 2.0</a>"
+            + " \u2014 "
+            + self.tr("Open Source")
+        )
+        info_label = QtWidgets.QLabel(info_html)
+        info_label.setOpenExternalLinks(True)
+        info_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(info_label)
+
+        layout.addSpacing(4)
+
+        # Separator
+        separator = QtWidgets.QFrame()
+        separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        layout.addWidget(separator)
+
+        # Libraries header
+        libs_header_label = QtWidgets.QLabel(
+            "<b>" + self.tr("Open Source Libraries Used") + "</b>"
+        )
+        libs_header_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(libs_header_label)
+
+        # Libraries list — clickable links separated by middle dots
+        lib_links = " &nbsp;&middot;&nbsp; ".join(
+            f'<a href="{url}">{name}</a>' for name, url in self._LIBRARIES
+        )
+        libs_label = QtWidgets.QLabel(lib_links)
+        libs_label.setOpenExternalLinks(True)
+        libs_label.setWordWrap(True)
+        libs_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(libs_label)
+
+        layout.addSpacing(4)
+
+        # Close button
+        button_box = QtWidgets.QDialogButtonBox(
+            QtWidgets.QDialogButtonBox.StandardButton.Close, self
+        )
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)

@@ -2,6 +2,37 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US">
 <context>
+    <name>AboutDialog</name>
+    <message>
+        <source>About PhotoAIdent</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Local, privacy-first desktop app for AI-powered face recognition and photo search.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Author:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Homepage:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>License:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Open Source</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Open Source Libraries Used</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>AssignPersonDialog</name>
     <message>
         <source>Assign to Person</source>
@@ -254,6 +285,14 @@ To get started, please select your photo collection folder.</source>
     </message>
     <message>
         <source>&amp;Exit</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Help</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;About</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

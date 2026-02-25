@@ -16,6 +16,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
+from photoaident.ui.about_dialog import AboutDialog
 from photoaident.ui.pages.labelling import LabellingPage
 from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.pages.persons import PersonsPage
@@ -334,6 +335,18 @@ class MainWindow(QtWidgets.QMainWindow):
         exit_action.setShortcut(QtGui.QKeySequence.StandardKey.Quit)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
+
+        # Help menu
+        help_menu = menubar.addMenu(self.tr("&Help"))
+
+        about_action = QtGui.QAction(self.tr("&About"), self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
+
+    def _show_about(self):
+        """Show the About dialog."""
+        dialog = AboutDialog(self)
+        dialog.exec()
 
     def _show_preferences(self):
         """Show the preferences dialog and save changes if accepted."""

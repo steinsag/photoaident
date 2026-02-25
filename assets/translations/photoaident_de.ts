@@ -2,6 +2,37 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="de_DE">
 <context>
+    <name>AboutDialog</name>
+    <message>
+        <source>About PhotoAIdent</source>
+        <translation>Über PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Local, privacy-first desktop app for AI-powered face recognition and photo search.</source>
+        <translation>Lokale Desktop-App mit Datenschutzfokus für KI-gestützte Gesichtserkennung und Fotosuche.</translation>
+    </message>
+    <message>
+        <source>Author:</source>
+        <translation>Autor:</translation>
+    </message>
+    <message>
+        <source>Homepage:</source>
+        <translation>Homepage:</translation>
+    </message>
+    <message>
+        <source>License:</source>
+        <translation>Lizenz:</translation>
+    </message>
+    <message>
+        <source>Open Source</source>
+        <translation>Open Source</translation>
+    </message>
+    <message>
+        <source>Open Source Libraries Used</source>
+        <translation>Verwendete Open-Source-Bibliotheken</translation>
+    </message>
+</context>
+<context>
     <name>AssignPersonDialog</name>
     <message>
         <source>Assign to Person</source>
@@ -278,6 +309,14 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
     <message>
         <source>&amp;Exit</source>
         <translation>&amp;Beenden</translation>
+    </message>
+    <message>
+        <source>&amp;Help</source>
+        <translation>&amp;Hilfe</translation>
+    </message>
+    <message>
+        <source>&amp;About</source>
+        <translation>&amp;Über</translation>
     </message>
     <message>
         <source>Changing the photo collection path will cause all existing detected faces to be lost.
