@@ -141,20 +141,12 @@ For pure metadata queries (no person filter): skip FAISS, query SQLite directly.
 
 ## Testing
 
-Tests use in-memory SQLite with per-test transaction rollback (`tests/conftest.py`).
-No server, no docker — just `uv sync`.
-
-| Module               | Coverage target | Notes                                                 |
-|----------------------|-----------------|-------------------------------------------------------|
-| `db/database.py`     | 95%+            | Models, relations, state transitions                  |
-| `db/vector_store.py` | 95%+            | Add, search, persist, reload                          |
-| `core/indexer.py`    | 90%+            | Use fixture images; mock GPU calls                    |
-| `core/search.py`     | 90%+            | End-to-end with fixture data                          |
-| `core/labeller.py`   | 90%+            | Suggestion generation logic                           |
-| `paths.py`           | 100%            | Trivial but critical                                  |
-| `ui/`                | Best-effort     | pytest-qt for smoke tests; avoid testing Qt internals |
-
-GPU tests: `@pytest.mark.gpu` — skipped when CUDA unavailable. All others must pass on CPU-only CI.
+- Tests use in-memory SQLite with per-test transaction rollback (`tests/conftest.py`).
+- Test coverage should be 90%+ when possible.
+- `core/indexer.py` - Use fixture images; mock GPU calls
+- `ui/` - pytest-qt for smoke tests; avoid testing Qt internals
+- GPU tests: `@pytest.mark.gpu` — skipped when CUDA unavailable.
+- All others must pass on CPU-only CI.
 
 ---
 
