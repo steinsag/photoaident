@@ -10,13 +10,14 @@ def apply_migrations(db_url: str) -> None:
     Args:
         db_url: The SQLAlchemy database URL.
     """
-    # Path to alembic.ini relative to this file's location or project root
-    # Since we are in src/photoaident/db/migrate.py,
-    # alembic.ini is at ../../../alembic.ini
-    ini_path = Path(__file__).parent.parent.parent.parent / "alembic.ini"
+    # Resolve the migrations directory relative to this file.  This works both
+    # in development (src/photoaident/db/migrate.py → .../migrations/) and in a
+    # PyInstaller bundle where __file__ points inside sys._MEIPASS and the
+    # migrations directory is extracted alongside it as a data tree.
+    migrations_dir = Path(__file__).parent / "migrations"
 
-    cfg = Config(str(ini_path))
+    cfg = Config()
+    cfg.set_main_option("script_location", str(migrations_dir))
     cfg.set_main_option("sqlalchemy.url", db_url)
 
-    # Run the migration
     command.upgrade(cfg, "head")

@@ -16,6 +16,13 @@ a = Analysis(
     datas=[
         *insightface_datas,
         ("assets/", "assets/"),          # icons etc.
+        # Alembic migration scripts must be present at runtime so the migration
+        # engine can load and execute them.  They are not auto-discovered by
+        # PyInstaller because the migrations/ directory has no __init__.py.
+        (
+            "src/photoaident/db/migrations",
+            "photoaident/db/migrations",
+        ),
     ],
     hiddenimports=[
         "insightface",

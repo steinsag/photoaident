@@ -1,5 +1,3 @@
-from logging.config import fileConfig
-
 from alembic import context
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
@@ -12,8 +10,11 @@ from photoaident.paths import AppPaths
 config = context.config
 
 # Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Import is deferred so PyInstaller bundles do not need logging.config when
+# no ini file is present (i.e. when migrate.py calls Config() directly).
 if config.config_file_name is not None:
+    from logging.config import fileConfig
+
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
