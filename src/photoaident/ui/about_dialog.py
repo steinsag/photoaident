@@ -17,6 +17,11 @@ class AboutDialog(QtWidgets.QDialog):
         ("NumPy", "https://numpy.org/"),
     ]
 
+    _ICONS: list[tuple[str, str]] = [
+        ("Wikimedia", "https://commons.wikimedia.org/"),
+        ("SVG Repo", "https://www.svgrepo.com/"),
+    ]
+
     def __init__(self, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle(self.tr("About PhotoAIdent"))
@@ -67,10 +72,10 @@ class AboutDialog(QtWidgets.QDialog):
         layout.addSpacing(4)
 
         # Separator
-        separator = QtWidgets.QFrame()
-        separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        layout.addWidget(separator)
+        separator_top = QtWidgets.QFrame()
+        separator_top.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        separator_top.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        layout.addWidget(separator_top)
 
         # Libraries header
         libs_header_label = QtWidgets.QLabel(
@@ -88,6 +93,31 @@ class AboutDialog(QtWidgets.QDialog):
         libs_label.setWordWrap(True)
         libs_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(libs_label)
+
+        layout.addSpacing(4)
+
+        # Separator
+        separator_bottom = QtWidgets.QFrame()
+        separator_bottom.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        separator_bottom.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        layout.addWidget(separator_bottom)
+
+        # Icons header
+        icons_header_label = QtWidgets.QLabel(
+            "<b>" + self.tr("Icon Sources Used") + "</b>"
+        )
+        icons_header_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icons_header_label)
+
+        # Icons source list - clickable links separated by middle dots
+        icon_links = " &nbsp;&middot;&nbsp; ".join(
+            f'<a href="{url}">{name}</a>' for name, url in self._ICONS
+        )
+        icons_label = QtWidgets.QLabel(icon_links)
+        icons_label.setOpenExternalLinks(True)
+        icons_label.setWordWrap(True)
+        icons_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(icons_label)
 
         layout.addSpacing(4)
 

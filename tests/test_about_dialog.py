@@ -38,6 +38,14 @@ def test_about_dialog_contains_all_libraries(dialog):
         assert url in combined_text, f"URL '{url}' missing from about dialog"
 
 
+def test_about_dialog_contains_all_icons(dialog):
+    labels = dialog.findChildren(QtWidgets.QLabel)
+    combined_text = " ".join(lbl.text() for lbl in labels)
+    for name, url in AboutDialog._ICONS:
+        assert name in combined_text, f"Icon source '{name}' missing from about dialog"
+        assert url in combined_text, f"URL '{url}' missing from about dialog"
+
+
 def test_about_dialog_links_open_externally(dialog):
     """All QLabels with links must have openExternalLinks enabled."""
     labels = dialog.findChildren(QtWidgets.QLabel)

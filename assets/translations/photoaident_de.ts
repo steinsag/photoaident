@@ -31,6 +31,10 @@
         <source>Open Source Libraries Used</source>
         <translation>Verwendete Open-Source-Bibliotheken</translation>
     </message>
+    <message>
+        <source>Icon Sources Used</source>
+        <translation>Verwendete Icon-Quellen</translation>
+    </message>
 </context>
 <context>
     <name>AssignPersonDialog</name>
@@ -79,32 +83,12 @@
         <translation>Senior (75+)</translation>
     </message>
     <message>
-        <source>Cluster</source>
-        <translation type="vanished">Cluster</translation>
-    </message>
-    <message>
-        <source>New cluster…</source>
-        <translation type="vanished">Neuen Cluster…</translation>
-    </message>
-    <message>
-        <source>(unlabelled)</source>
-        <translation type="vanished">(ohne Bezeichnung)</translation>
-    </message>
-    <message>
         <source>New Person</source>
         <translation>Neue Person</translation>
     </message>
     <message>
         <source>Name:</source>
         <translation>Name:</translation>
-    </message>
-    <message>
-        <source>New Cluster</source>
-        <translation type="vanished">Neuer Cluster</translation>
-    </message>
-    <message>
-        <source>Label (optional):</source>
-        <translation type="vanished">Bezeichnung (optional):</translation>
     </message>
 </context>
 <context>
@@ -356,12 +340,12 @@ Möchten Sie wirklich fortfahren?</translation>
         <translation>Pfadänderung bestätigen</translation>
     </message>
     <message>
-        <source>Indexing</source>
-        <translation>Indexierung</translation>
-    </message>
-    <message>
         <source>Searching for photos...</source>
         <translation>Suche nach Fotos...</translation>
+    </message>
+    <message>
+        <source>Indexing</source>
+        <translation>Indexierung</translation>
     </message>
     <message>
         <source>✅ GPU ready — {providers}</source>
@@ -493,29 +477,6 @@ Möchten Sie wirklich fortfahren?</translation>
     <message>
         <source>Error loading image</source>
         <translation>Fehler beim Laden des Bildes</translation>
-    </message>
-</context>
-<context>
-    <name>widget</name>
-    <message>
-        <source>Infant (0–3)</source>
-        <translation type="obsolete">Kleinkind (0–3)</translation>
-    </message>
-    <message>
-        <source>Youngster (4–12)</source>
-        <translation type="obsolete">Kind (4–12)</translation>
-    </message>
-    <message>
-        <source>Teenager (13–19)</source>
-        <translation type="obsolete">Teenager (13–19)</translation>
-    </message>
-    <message>
-        <source>Adult (20–75)</source>
-        <translation type="obsolete">Erwachsener (20–75)</translation>
-    </message>
-    <message>
-        <source>Senior (75+)</source>
-        <translation type="obsolete">Senior (75+)</translation>
     </message>
 </context>
 </TS>
