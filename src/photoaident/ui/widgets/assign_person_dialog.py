@@ -69,7 +69,7 @@ class AssignPersonDialog(QtWidgets.QDialog):
         self.person_list.currentItemChanged.connect(self._on_person_selected)
         person_layout.addWidget(self.person_list)
 
-        self.new_person_btn = QtWidgets.QPushButton(self.tr("New person\u2026"))
+        self.new_person_btn = QtWidgets.QPushButton(self.tr("New Person\u2026"))
         self.new_person_btn.clicked.connect(self._create_new_person)
         person_layout.addWidget(self.new_person_btn)
 

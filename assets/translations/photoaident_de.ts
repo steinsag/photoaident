@@ -47,7 +47,7 @@
         <translation>Suchen…</translation>
     </message>
     <message>
-        <source>New person…</source>
+        <source>New Person…</source>
         <translation>Neue Person…</translation>
     </message>
     <message>
@@ -155,12 +155,12 @@ Konfidenz: {confidence}%</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Close</source>
-        <translation type="unfinished"></translation>
+        <source>Label Faces</source>
+        <translation>Gesichter beschriften</translation>
     </message>
     <message>
-        <source>Label faces</source>
-        <translation>Gesichter beschriften</translation>
+        <source>Close</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Image file not found: {path}</source>
@@ -203,6 +203,10 @@ Please close it before starting a new one.</source>
     <message>
         <source>Skip</source>
         <translation>Überspringen</translation>
+    </message>
+    <message>
+        <source>Skip Image</source>
+        <translation>Bild überspringen</translation>
     </message>
     <message>
         <source>Unknown</source>

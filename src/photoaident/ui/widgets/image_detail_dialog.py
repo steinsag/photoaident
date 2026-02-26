@@ -80,7 +80,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             f.state == FaceState.UNIDENTIFIED and f.deleted_at is None
             for f in self.image_data.faces
         )
-        label_btn = QtWidgets.QPushButton(self.tr("Label faces"))
+        label_btn = QtWidgets.QPushButton(self.tr("Label Faces"))
         label_btn.setEnabled(has_unidentified)
         label_btn.clicked.connect(self._on_label_faces_clicked)
         metadata_layout.addWidget(label_btn)

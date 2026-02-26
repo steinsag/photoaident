@@ -47,7 +47,7 @@
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>New person…</source>
+        <source>New Person…</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -134,11 +134,11 @@ Confidence: {confidence}%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Close</source>
+        <source>Label Faces</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Label faces</source>
+        <source>Close</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -182,6 +182,10 @@ Please close it before starting a new one.</source>
     <message>
         <source>Skip</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Skip Image</source>
+        <translation>Skip Image</translation>
     </message>
     <message>
         <source>Unknown</source>

@@ -412,3 +412,133 @@ def test_refresh_without_priority_clears_priority(
     with patch.object(page.face_crop, "load"):
         page.refresh()
     assert page._priority_image_id is None
+
+
+def test_skip_image_skips_all_faces_of_current_image(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """_skip_image records the current image in _skipped_images so all its faces
+    are excluded from subsequent face queries."""
+    img1_id = _insert_image(session_factory, "/si1.jpg", "sihash1")
+    img2_id = _insert_image(session_factory, "/si2.jpg", "sihash2")
+    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=50)
+    face2_id = _insert_face_for_image(session_factory, img1_id, faiss_id=51)
+    face3_id = _insert_face_for_image(session_factory, img2_id, faiss_id=52)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh()
+
+    assert page._current_face_id in (face1_id, face2_id, face3_id)
+    first_image_id = (
+        img1_id if page._current_face_id in (face1_id, face2_id) else img2_id
+    )
+    other_image_id = img2_id if first_image_id == img1_id else img1_id
+
+    with patch.object(page.face_crop, "load"):
+        page._skip_image()
+
+    # The skipped image ID must be recorded
+    assert first_image_id in page._skipped_images
+    assert other_image_id not in page._skipped_images
+
+    # After one click the current face must be from the OTHER image
+    assert page._current_face_id in (face1_id, face2_id, face3_id)
+    assert page._current_face_id not in (
+        [face1_id, face2_id] if first_image_id == img1_id else [face3_id]
+    )
+
+
+def test_skip_image_does_not_change_face_state(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """_skip_image must not alter face state in the DB."""
+    img_id = _insert_image(session_factory, "/sino.jpg", "sinohash")
+    face1_id = _insert_face_for_image(session_factory, img_id, faiss_id=60)
+    face2_id = _insert_face_for_image(session_factory, img_id, faiss_id=61)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh()
+
+    page._skip_image()
+
+    with session_factory() as session:
+        for fid in (face1_id, face2_id):
+            face = session.get(Face, fid)
+            assert face is not None
+            assert face.state == FaceState.UNIDENTIFIED
+            assert face.labelled_at is None
+
+
+def test_skip_image_noop_when_no_current_face(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """_skip_image does nothing when _current_face_id is None."""
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    assert page._current_face_id is None
+    page._skip_image()  # should not raise
+    assert page._current_face_id is None
+    assert len(page._skipped_images) == 0
+
+
+def test_skip_image_button_exists_and_enabled_with_face(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """The Skip Image button is present and enabled when a face is loaded."""
+    _insert_face(session_factory)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh()
+
+    assert hasattr(page, "skip_image_btn")
+    assert page.skip_image_btn.isEnabled()
+
+
+def test_skip_image_button_disabled_when_no_faces(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """The Skip Image button is disabled when there are no faces to label."""
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    assert hasattr(page, "skip_image_btn")
+    assert not page.skip_image_btn.isEnabled()
+
+
+def test_skip_image_clears_priority_when_all_image_faces_skipped(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """Skipping the priority image via _skip_image clears priority in one click."""
+    img1_id = _insert_image(session_factory, "/pri1.jpg", "prihash1")
+    img2_id = _insert_image(session_factory, "/pri2.jpg", "prihash2")
+    _insert_face_for_image(session_factory, img1_id, faiss_id=70)
+    _insert_face_for_image(session_factory, img1_id, faiss_id=72)
+    _insert_face_for_image(session_factory, img2_id, faiss_id=71)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh(priority_image_id=img1_id)
+
+    assert page._priority_image_id == img1_id
+
+    with patch.object(page.face_crop, "load"):
+        page._skip_image()
+
+    # One click must skip the entire priority image and clear priority
+    assert img1_id in page._skipped_images
+    assert page._priority_image_id is None
+    # The next face shown should be from img2
+    assert page._current_face_id is not None

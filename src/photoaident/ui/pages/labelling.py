@@ -11,7 +11,7 @@ from photoaident.ui.widgets.assign_person_dialog import AssignPersonDialog
 from photoaident.ui.widgets.face_crop import FaceCropWidget
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.orm import Session, sessionmaker
 
     from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
@@ -33,6 +33,7 @@ class LabellingPage(QtWidgets.QWidget):
         self.vector_store = vector_store
         self._current_face_id: Optional[int] = None
         self._skipped: set[int] = set()
+        self._skipped_images: set[int] = set()
         self._priority_image_id: Optional[int] = None
         self._setup_ui()
 
@@ -61,6 +62,10 @@ class LabellingPage(QtWidgets.QWidget):
         self.skip_btn.clicked.connect(self._skip_face)
         action_layout.addWidget(self.skip_btn)
 
+        self.skip_image_btn = QtWidgets.QPushButton(self.tr("Skip Image"))
+        self.skip_image_btn.clicked.connect(self._skip_image)
+        action_layout.addWidget(self.skip_image_btn)
+
         action_layout.addStretch()
         layout.addLayout(action_layout)
 
@@ -69,111 +74,21 @@ class LabellingPage(QtWidgets.QWidget):
     def refresh(self, priority_image_id: Optional[int] = None) -> None:
         """Reload count + first face. Called when page becomes visible."""
         self._skipped.clear()
+        self._skipped_images.clear()
         self._priority_image_id = priority_image_id
         self._load_next_face()
 
+    # ------------------------------------------------------------------
+    # Private: face loading pipeline
+    # ------------------------------------------------------------------
+
     def _load_next_face(self) -> None:
-        with self.session_factory() as session:
-            # Auto-clear priority when all faces in the priority image are done
-            if self._priority_image_id is not None:
-                base_where = [
-                    Face.state == FaceState.UNIDENTIFIED,
-                    Face.deleted_at.is_(None),
-                    Face.image_id == self._priority_image_id,
-                ]
-                if self._skipped:
-                    remaining_in_image: int = (
-                        session.scalar(
-                            select(func.count(Face.id))
-                            .where(*base_where)
-                            .where(Face.id.not_in(list(self._skipped)))
-                        )
-                        or 0
-                    )
-                else:
-                    remaining_in_image = (
-                        session.scalar(select(func.count(Face.id)).where(*base_where))
-                        or 0
-                    )
-                if remaining_in_image == 0:
-                    self._priority_image_id = None
-
-            # Count faces for the status label
-            if self._priority_image_id is not None:
-                count_where = [
-                    Face.state == FaceState.UNIDENTIFIED,
-                    Face.deleted_at.is_(None),
-                    Face.image_id == self._priority_image_id,
-                ]
-            else:
-                count_where = [
-                    Face.state == FaceState.UNIDENTIFIED,
-                    Face.deleted_at.is_(None),
-                ]
-            if self._skipped:
-                status_count: int = (
-                    session.scalar(
-                        select(func.count(Face.id))
-                        .where(*count_where)
-                        .where(Face.id.not_in(list(self._skipped)))
-                    )
-                    or 0
-                )
-            else:
-                status_count = (
-                    session.scalar(select(func.count(Face.id)).where(*count_where)) or 0
-                )
-
-            # Also need total_unidentified for the empty-state message
-            total_unidentified: int = (
-                session.scalar(
-                    select(func.count(Face.id)).where(
-                        Face.state == FaceState.UNIDENTIFIED,
-                        Face.deleted_at.is_(None),
-                    )
-                )
-                or 0
-            )
-
-        # Build the query for the next non-skipped unidentified face
-        stmt = (
-            select(Face)
-            .join(Face.image)
-            .outerjoin(Image.metadata_rel)
-            .options(contains_eager(Face.image).contains_eager(Image.metadata_rel))
-            .where(
-                Face.state == FaceState.UNIDENTIFIED,
-                Face.deleted_at.is_(None),
-            )
-            .order_by(
-                ImageMetadata.taken_at.asc().nulls_last(),
-                Image.indexed_at.asc(),
-            )
-            .limit(1)
-        )
-        if self._priority_image_id is not None:
-            stmt = stmt.where(Face.image_id == self._priority_image_id)
-        if self._skipped:
-            stmt = stmt.where(Face.id.not_in(list(self._skipped)))
-
         face_data: Optional[tuple[int, Path, Optional[Path], str, float]] = None
         with self.session_factory() as session:
-            face = session.execute(stmt).unique().scalar_one_or_none()
-            if face is not None:
-                face_id = face.id
-                crop_path = self.paths.face_crops_dir / f"{face_id}.jpg"
-                thumb_path = (
-                    self.paths.thumbs_dir / f"{face.image.file_hash}.jpg"
-                    if face.image.file_hash
-                    else None
-                )
-                meta = face.image.metadata_rel
-                if meta is not None and meta.taken_at is not None:
-                    taken_at = meta.taken_at.strftime("%Y-%m-%d")
-                else:
-                    taken_at = self.tr("Unknown")
-                confidence = face.detection_confidence
-                face_data = (face_id, crop_path, thumb_path, taken_at, confidence)
+            self._maybe_clear_priority(session)
+            status_count = self._count_remaining(session)
+            total_unidentified = self._count_total_unidentified(session)
+            face_data = self._extract_next_face_data(session)
 
         if face_data is None:
             self._current_face_id = None
@@ -200,6 +115,102 @@ class LabellingPage(QtWidgets.QWidget):
         )
         self._set_buttons_enabled(True)
 
+    def _maybe_clear_priority(self, session: "Session") -> None:
+        if self._priority_image_id is None:
+            return
+        if self._priority_image_id in self._skipped_images:
+            self._priority_image_id = None
+            return
+        q = select(func.count(Face.id)).where(
+            Face.state == FaceState.UNIDENTIFIED,
+            Face.deleted_at.is_(None),
+            Face.image_id == self._priority_image_id,
+        )
+        if self._skipped:
+            q = q.where(Face.id.not_in(list(self._skipped)))
+        if (session.scalar(q) or 0) == 0:
+            self._priority_image_id = None
+
+    def _count_remaining(self, session: "Session") -> int:
+        if self._priority_image_id is not None:
+            q = select(func.count(Face.id)).where(
+                Face.state == FaceState.UNIDENTIFIED,
+                Face.deleted_at.is_(None),
+                Face.image_id == self._priority_image_id,
+            )
+        else:
+            q = select(func.count(Face.id)).where(
+                Face.state == FaceState.UNIDENTIFIED,
+                Face.deleted_at.is_(None),
+            )
+            if self._skipped_images:
+                q = q.where(Face.image_id.not_in(list(self._skipped_images)))
+        if self._skipped:
+            q = q.where(Face.id.not_in(list(self._skipped)))
+        return session.scalar(q) or 0
+
+    def _count_total_unidentified(self, session: "Session") -> int:
+        return (
+            session.scalar(
+                select(func.count(Face.id)).where(
+                    Face.state == FaceState.UNIDENTIFIED,
+                    Face.deleted_at.is_(None),
+                )
+            )
+            or 0
+        )
+
+    def _build_next_face_stmt(self):
+        stmt = (
+            select(Face)
+            .join(Face.image)
+            .outerjoin(Image.metadata_rel)
+            .options(contains_eager(Face.image).contains_eager(Image.metadata_rel))
+            .where(
+                Face.state == FaceState.UNIDENTIFIED,
+                Face.deleted_at.is_(None),
+            )
+            .order_by(
+                ImageMetadata.taken_at.asc().nulls_last(),
+                Image.indexed_at.asc(),
+            )
+            .limit(1)
+        )
+        if self._priority_image_id is not None:
+            stmt = stmt.where(Face.image_id == self._priority_image_id)
+        elif self._skipped_images:
+            stmt = stmt.where(Face.image_id.not_in(list(self._skipped_images)))
+        if self._skipped:
+            stmt = stmt.where(Face.id.not_in(list(self._skipped)))
+        return stmt
+
+    def _extract_next_face_data(
+        self, session: "Session"
+    ) -> Optional[tuple[int, Path, Optional[Path], str, float]]:
+        face = (
+            session.execute(self._build_next_face_stmt()).unique().scalar_one_or_none()
+        )
+        if face is None:
+            return None
+        face_id = face.id
+        crop_path = self.paths.face_crops_dir / f"{face_id}.jpg"
+        thumb_path = (
+            self.paths.thumbs_dir / f"{face.image.file_hash}.jpg"
+            if face.image.file_hash
+            else None
+        )
+        meta = face.image.metadata_rel
+        taken_at = (
+            meta.taken_at.strftime("%Y-%m-%d")
+            if meta is not None and meta.taken_at is not None
+            else self.tr("Unknown")
+        )
+        return (face_id, crop_path, thumb_path, taken_at, face.detection_confidence)
+
+    # ------------------------------------------------------------------
+    # Private: UI helpers
+    # ------------------------------------------------------------------
+
     def _show_empty_state(self, total_unidentified: int) -> None:
         if total_unidentified == 0:
             msg = self.tr("All done! No unidentified faces remain.")
@@ -216,6 +227,11 @@ class LabellingPage(QtWidgets.QWidget):
         self.assign_btn.setEnabled(enabled)
         self.anonymous_btn.setEnabled(enabled)
         self.skip_btn.setEnabled(enabled)
+        self.skip_image_btn.setEnabled(enabled)
+
+    # ------------------------------------------------------------------
+    # Private: actions
+    # ------------------------------------------------------------------
 
     def _assign_face(self) -> None:
         if self._current_face_id is None:
@@ -265,4 +281,25 @@ class LabellingPage(QtWidgets.QWidget):
         if self._current_face_id is None:
             return
         self._skipped.add(self._current_face_id)
+        self._load_next_face()
+
+    def _skip_image(self) -> None:
+        if self._current_face_id is None:
+            return
+        with self.session_factory() as session:
+            face = session.get(Face, self._current_face_id)
+            if face is None:
+                return
+            image_id = face.image_id
+            self._skipped_images.add(image_id)
+            face_ids = list(
+                session.scalars(
+                    select(Face.id).where(
+                        Face.image_id == image_id,
+                        Face.state == FaceState.UNIDENTIFIED,
+                        Face.deleted_at.is_(None),
+                    )
+                )
+            )
+            self._skipped.update(face_ids)
         self._load_next_face()
