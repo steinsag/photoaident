@@ -1,7 +1,19 @@
-from photoaident.app import MainWindow
-from photoaident.paths import AppPaths
+import builtins
+import os
+import sys
+import threading
+from unittest.mock import MagicMock
+
+import onnxruntime as ort
+import pytest
+from PySide6 import QtCore, QtGui, QtWidgets
+
+import photoaident.app as app_module
+from photoaident.app import MainWindow, get_resource_path, load_translations
+from photoaident.db.database import Face, Image
 from photoaident.db.migrate import apply_migrations
-from photoaident.db.database import Image, Face
+from photoaident.db.vector_store import VectorStore
+from photoaident.paths import AppPaths
 from photoaident.settings import Settings
 
 
@@ -262,3 +274,412 @@ def test_onboarding_accepted_saves_settings_and_starts_scan(
     # Settings must be persisted to disk
     loaded = Settings.load(window.paths.config_file)
     assert loaded.collection_path == str(collection_dir)
+
+
+# ---------------------------------------------------------------------------
+# get_resource_path — PyInstaller bundle branch (line 34)
+# ---------------------------------------------------------------------------
+
+
+def test_get_resource_path_pyinstaller_bundle(monkeypatch):
+    """Uses _MEIPASS as base when running from a PyInstaller bundle."""
+    monkeypatch.setattr(sys, "_MEIPASS", "/bundle_root", raising=False)
+    result = get_resource_path("assets/icon.png")
+    assert result == os.path.join("/bundle_root", "assets/icon.png")
+
+
+# ---------------------------------------------------------------------------
+# load_translations (lines 46-65)
+# ---------------------------------------------------------------------------
+
+
+def test_load_translations_no_match_is_silent(monkeypatch):
+    """load_translations is a no-op when no .qm file matches the locale."""
+    monkeypatch.setattr(app_module, "get_resource_path", lambda p: "/no/such/file.qm")
+    qt_app = QtWidgets.QApplication.instance()
+    assert isinstance(qt_app, QtWidgets.QApplication)
+    load_translations(qt_app)  # must not raise
+
+
+def test_load_translations_installs_translator(monkeypatch):
+    """load_translations installs a QTranslator when a valid .qm file is found."""
+    import pathlib
+
+    project_root = pathlib.Path(__file__).parent.parent
+    qm_path = project_root / "assets" / "translations" / "photoaident_de.qm"
+    if not qm_path.exists():
+        pytest.skip("photoaident_de.qm not built yet")
+
+    # Always return the German .qm so the locale-based loop hits the file
+    monkeypatch.setattr(app_module, "get_resource_path", lambda p: str(qm_path))
+    qt_app = QtWidgets.QApplication.instance()
+    assert isinstance(qt_app, QtWidgets.QApplication)
+    qt_app.__dict__.pop("_translator", None)
+    load_translations(qt_app)
+    try:
+        assert hasattr(qt_app, "_translator")
+    finally:
+        # Remove the translator so it does not affect other tests in the session
+        translator = qt_app.__dict__.pop("_translator", None)
+        if translator is not None:
+            qt_app.removeTranslator(translator)
+
+
+# ---------------------------------------------------------------------------
+# vector_store.load at startup (line 91)
+# ---------------------------------------------------------------------------
+
+
+def test_vector_store_loaded_when_faiss_file_exists(tmp_path, qtbot):
+    """MainWindow loads an existing FAISS index if one is present at startup."""
+    paths = AppPaths(
+        base_data=tmp_path / "data",
+        base_cache=tmp_path / "cache",
+        base_config=tmp_path / "config",
+    )
+    paths.ensure_dirs()
+    apply_migrations(f"sqlite:///{paths.db_path}")
+
+    # Pre-create a FAISS index on disk
+    vs = VectorStore()
+    vs.save(paths.faiss_path)
+    assert paths.faiss_path.exists()
+
+    window = MainWindow(paths, check_gpu=False, enable_onboarding=False)
+    qtbot.addWidget(window)
+
+    assert window.vector_store is not None
+
+
+# ---------------------------------------------------------------------------
+# GPU check thread (line 163)
+# ---------------------------------------------------------------------------
+
+
+def test_gpu_check_thread_started_when_enabled(tmp_path, qtbot, monkeypatch):
+    """check_gpu=True starts a background thread that calls _check_gpu."""
+    event = threading.Event()
+
+    monkeypatch.setattr(MainWindow, "_check_gpu", lambda self: event.set())
+
+    paths = AppPaths(
+        base_data=tmp_path / "data",
+        base_cache=tmp_path / "cache",
+        base_config=tmp_path / "config",
+    )
+    paths.ensure_dirs()
+    apply_migrations(f"sqlite:///{paths.db_path}")
+
+    window = MainWindow(paths, check_gpu=True, enable_onboarding=False)
+    qtbot.addWidget(window)
+
+    assert event.wait(timeout=2.0), "_check_gpu was not called within 2 s"
+
+
+# ---------------------------------------------------------------------------
+# _show_onboarding dialog (lines 175-225)
+# ---------------------------------------------------------------------------
+
+
+def test_show_onboarding_cancelled_does_nothing(tmp_path, qtbot, monkeypatch):
+    """_show_onboarding returns early without saving anything if cancelled."""
+    window = _make_window(tmp_path, qtbot)
+
+    monkeypatch.setattr(
+        QtWidgets.QDialog,
+        "exec",
+        lambda _self: QtWidgets.QDialog.DialogCode.Rejected,
+    )
+    called: list[str] = []
+    monkeypatch.setattr(window, "_on_onboarding_accepted", lambda p: called.append(p))
+
+    window._show_onboarding()
+
+    assert called == []
+
+
+def test_show_onboarding_accepted_calls_handler(tmp_path, qtbot, monkeypatch):
+    """_show_onboarding calls _on_onboarding_accepted with the chosen folder."""
+    collection_dir = tmp_path / "photos"
+    collection_dir.mkdir()
+    window = _make_window(tmp_path, qtbot)
+
+    def fake_exec(dialog_self: QtWidgets.QDialog) -> int:
+        line_edit = dialog_self.findChild(QtWidgets.QLineEdit)
+        if line_edit:
+            line_edit.setText(str(collection_dir))
+        return QtWidgets.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(QtWidgets.QDialog, "exec", fake_exec)
+    called: list[str] = []
+    monkeypatch.setattr(window, "_on_onboarding_accepted", lambda p: called.append(p))
+
+    window._show_onboarding()
+
+    assert called == [str(collection_dir)]
+
+
+# ---------------------------------------------------------------------------
+# _start_indexing_task guard clause (line 265)
+# ---------------------------------------------------------------------------
+
+
+def test_start_indexing_task_idempotent(tmp_path, qtbot):
+    """_start_indexing_task is a no-op when a task is already running."""
+    window = _make_window(tmp_path, qtbot)
+
+    mock_task = MagicMock()
+    window._indexing_task = mock_task
+
+    window._start_indexing_task()
+
+    # Task object must not have been replaced
+    assert window._indexing_task is mock_task
+
+
+# ---------------------------------------------------------------------------
+# _update_indexing_status (lines 280-287)
+# ---------------------------------------------------------------------------
+
+
+def test_update_indexing_status_formats_label_and_reloads(tmp_path, qtbot, monkeypatch):
+    """_update_indexing_status updates the label and reloads every 50 images."""
+    window = _make_window(tmp_path, qtbot)
+    reloads: list[bool] = []
+    monkeypatch.setattr(
+        window.library_page, "load_images", lambda: reloads.append(True)
+    )
+
+    window._update_indexing_status(50, 100, 7)
+    assert "50" in window.indexing_label.text()
+    assert "100" in window.indexing_label.text()
+    assert "7" in window.indexing_label.text()
+    assert len(reloads) == 1  # 50 % 50 == 0 → reload
+
+    window._update_indexing_status(51, 100, 7)
+    assert len(reloads) == 1  # 51 % 50 != 0 and 51 != 100 → no reload
+
+    window._update_indexing_status(100, 100, 7)
+    assert len(reloads) == 2  # indexed == total → reload
+
+
+# ---------------------------------------------------------------------------
+# _switch_page labelling branch (line 317)
+# ---------------------------------------------------------------------------
+
+
+def test_switch_page_to_label_refreshes_labelling_page(tmp_path, qtbot, monkeypatch):
+    """_switch_page(1) calls labelling_page.refresh()."""
+    window = _make_window(tmp_path, qtbot)
+    refreshed: list[bool] = []
+    monkeypatch.setattr(
+        window.labelling_page, "refresh", lambda: refreshed.append(True)
+    )
+
+    window._switch_page(1)
+
+    assert window.stacked.currentIndex() == 1
+    assert len(refreshed) == 1
+
+
+# ---------------------------------------------------------------------------
+# go_to_labelling (lines 323-329)
+# ---------------------------------------------------------------------------
+
+
+def test_go_to_labelling_navigates_and_passes_priority(tmp_path, qtbot, monkeypatch):
+    """go_to_labelling switches to page 1 and forwards the image id."""
+    window = _make_window(tmp_path, qtbot)
+    refreshed_with: list[int | None] = []
+    monkeypatch.setattr(
+        window.labelling_page,
+        "refresh",
+        lambda priority_image_id=None: refreshed_with.append(priority_image_id),
+    )
+
+    window.go_to_labelling(42)
+
+    assert window.stacked.currentIndex() == 1
+    assert window.btn_label.font().bold()
+    assert refreshed_with == [42]
+
+
+# ---------------------------------------------------------------------------
+# _show_about (lines 358-359)
+# ---------------------------------------------------------------------------
+
+
+def test_show_about_opens_dialog(tmp_path, qtbot, monkeypatch):
+    """_show_about creates and executes an AboutDialog without raising."""
+    monkeypatch.setattr(app_module, "AboutDialog", lambda _parent: MagicMock())
+    window = _make_window(tmp_path, qtbot)
+    window._show_about()  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# _show_preferences — path unchanged branch (line 409)
+# ---------------------------------------------------------------------------
+
+
+def test_show_preferences_saves_settings_when_path_unchanged(
+    tmp_path, qtbot, monkeypatch
+):
+    """_show_preferences saves settings even when the collection path is unchanged."""
+    collection_dir = tmp_path / "photos"
+    collection_dir.mkdir()
+    window = _make_window(tmp_path, qtbot, collection_path=str(collection_dir))
+
+    class FakePreferencesDialog:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def exec(self) -> int:
+            return QtWidgets.QDialog.DialogCode.Accepted
+
+        def get_collection_path(self) -> str:
+            return str(collection_dir)  # same as old path
+
+    monkeypatch.setattr(app_module, "PreferencesDialog", FakePreferencesDialog)
+
+    window._show_preferences()
+
+    loaded = Settings.load(window.paths.config_file)
+    assert loaded.collection_path == str(collection_dir)
+
+
+# ---------------------------------------------------------------------------
+# _check_gpu (lines 443-464)
+# ---------------------------------------------------------------------------
+
+
+def test_check_gpu_cuda_available(tmp_path, qtbot, monkeypatch):
+    """_check_gpu emits a GPU-ready message when CUDAExecutionProvider is present."""
+    window = _make_window(tmp_path, qtbot)
+
+    monkeypatch.setattr(
+        ort,
+        "get_available_providers",
+        lambda: ["CUDAExecutionProvider", "CPUExecutionProvider"],
+    )
+    # Ensure insightface is importable (use cached module or a stub)
+    if "insightface" not in sys.modules:
+        monkeypatch.setitem(sys.modules, "insightface", MagicMock())
+
+    captured: list[str] = []
+    window._gpu_status_signal.status_ready.connect(lambda msg: captured.append(msg))
+    window._check_gpu()
+
+    assert captured
+    assert "GPU" in captured[0] or "✅" in captured[0]
+
+
+def test_check_gpu_cpu_only(tmp_path, qtbot, monkeypatch):
+    """_check_gpu emits a CPU-only warning when CUDA is not available."""
+    window = _make_window(tmp_path, qtbot)
+
+    monkeypatch.setattr(
+        ort, "get_available_providers", lambda: ["CPUExecutionProvider"]
+    )
+    if "insightface" not in sys.modules:
+        monkeypatch.setitem(sys.modules, "insightface", MagicMock())
+
+    captured: list[str] = []
+    window._gpu_status_signal.status_ready.connect(lambda msg: captured.append(msg))
+    window._check_gpu()
+
+    assert captured
+    assert "CPU" in captured[0] or "⚠️" in captured[0]
+
+
+def test_check_gpu_import_error(tmp_path, qtbot, monkeypatch):
+    """_check_gpu emits an error message when insightface cannot be imported."""
+    window = _make_window(tmp_path, qtbot)
+
+    real_import = builtins.__import__
+
+    def mock_import(name: str, *args, **kwargs):
+        if name == "insightface":
+            raise ImportError("mocked: insightface not available")
+        return real_import(name, *args, **kwargs)
+
+    # Remove cached module so our __import__ hook is reached
+    monkeypatch.delitem(sys.modules, "insightface", raising=False)
+    monkeypatch.setattr(builtins, "__import__", mock_import)
+
+    captured: list[str] = []
+    window._gpu_status_signal.status_ready.connect(lambda msg: captured.append(msg))
+    window._check_gpu()
+
+    assert captured
+    assert "❌" in captured[0]
+
+
+# ---------------------------------------------------------------------------
+# _on_gpu_status_ready (line 467)
+# ---------------------------------------------------------------------------
+
+
+def test_on_gpu_status_ready_shows_message(tmp_path, qtbot):
+    """_on_gpu_status_ready forwards the message to the status bar."""
+    window = _make_window(tmp_path, qtbot)
+    window._on_gpu_status_ready("Test GPU message")
+    # showMessage is timed; just verify no exception is raised
+
+
+# ---------------------------------------------------------------------------
+# closeEvent cleanup (lines 472-477, 484-485, 490-491)
+# ---------------------------------------------------------------------------
+
+
+def test_close_event_cancels_inventory_task(tmp_path, qtbot):
+    """closeEvent cancels a running inventory task and accepts the event."""
+    window = _make_window(tmp_path, qtbot)
+
+    mock_task = MagicMock()
+    mock_thread = MagicMock()
+    window._inventory_task = mock_task
+    window._inventory_thread = mock_thread
+
+    event = MagicMock(spec=QtGui.QCloseEvent)
+    window.closeEvent(event)
+
+    mock_task.cancel.assert_called_once()
+    mock_thread.quit.assert_called_once()
+    event.accept.assert_called_once()
+
+
+def test_close_event_cancels_indexing_task_and_saves_vector_store(tmp_path, qtbot):
+    """closeEvent cancels a running indexing task and persists the FAISS index."""
+    window = _make_window(tmp_path, qtbot)
+
+    mock_task = MagicMock()
+    mock_thread = MagicMock()
+    window._indexing_task = mock_task
+    window._indexing_thread = mock_thread
+
+    event = MagicMock(spec=QtGui.QCloseEvent)
+    window.closeEvent(event)
+
+    mock_task.cancel.assert_called_once()
+    mock_thread.quit.assert_called_once()
+    assert window.paths.faiss_path.exists()
+    event.accept.assert_called_once()
+
+
+def test_close_event_handles_exceptions_gracefully(tmp_path, qtbot, monkeypatch):
+    """closeEvent swallows exceptions from task.cancel() and vector_store.save()."""
+    window = _make_window(tmp_path, qtbot)
+
+    mock_task = MagicMock()
+    mock_task.cancel.side_effect = RuntimeError("already done")
+    mock_thread = MagicMock()
+    window._indexing_task = mock_task
+    window._indexing_thread = mock_thread
+    monkeypatch.setattr(
+        window.vector_store, "save", MagicMock(side_effect=OSError("disk full"))
+    )
+
+    event = MagicMock(spec=QtGui.QCloseEvent)
+    window.closeEvent(event)  # must not raise
+
+    event.accept.assert_called_once()
