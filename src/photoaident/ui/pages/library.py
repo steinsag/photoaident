@@ -223,4 +223,12 @@ class LibraryPage(QtWidgets.QWidget):
 
             if image:
                 dialog = ImageDetailDialog(image, self)
+                dialog.navigate_to_labelling.connect(self._on_navigate_to_labelling)
                 dialog.exec()
+
+    def _on_navigate_to_labelling(self, image_id: int) -> None:
+        from photoaident.app import MainWindow  # local import breaks circular dep
+
+        main = self.window()
+        if isinstance(main, MainWindow):
+            main.go_to_labelling(image_id)

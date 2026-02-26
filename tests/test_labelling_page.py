@@ -305,3 +305,110 @@ def test_assign_face_passes_vector_store_to_dialog(
         # Verify vector_store was passed as keyword argument
         call_kwargs = MockDlg.call_args.kwargs
         assert call_kwargs.get("vector_store") is vector_store
+
+
+def _insert_face_for_image(session_factory, image_id: int, faiss_id: int) -> int:
+    """Insert an unidentified face for an existing image; return the face id."""
+    with session_factory() as session:
+        face = Face(
+            image_id=image_id,
+            faiss_id=faiss_id,
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=40,
+            bbox_h=40,
+            detection_confidence=0.8,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        session.add(face)
+        session.commit()
+        return face.id
+
+
+def _insert_image(session_factory, file_path: str, file_hash: str) -> int:
+    """Insert a bare Image row and return its id."""
+    with session_factory() as session:
+        img = Image(file_path=file_path, file_size=1000, file_hash=file_hash)
+        session.add(img)
+        session.commit()
+        return img.id
+
+
+def test_priority_image_shows_image_faces_first(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """refresh(priority_image_id=X) causes the first face to come from image X."""
+    img1_id = _insert_image(session_factory, "/img1.jpg", "hash1")
+    img2_id = _insert_image(session_factory, "/img2.jpg", "hash2")
+    _insert_face_for_image(session_factory, img2_id, faiss_id=10)
+    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=11)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh(priority_image_id=img1_id)
+
+    assert page._current_face_id == face1_id
+    assert page._priority_image_id == img1_id
+
+
+def test_priority_clears_after_all_image_faces_done(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """After all priority-image faces are labelled, priority is cleared."""
+    img1_id = _insert_image(session_factory, "/p1.jpg", "phash1")
+    img2_id = _insert_image(session_factory, "/p2.jpg", "phash2")
+    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=20)
+    _insert_face_for_image(session_factory, img2_id, faiss_id=21)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh(priority_image_id=img1_id)
+
+    assert page._current_face_id == face1_id
+
+    # Mark the priority face anonymous — priority should clear, other face appears
+    page._mark_anonymous()
+
+    assert page._priority_image_id is None
+    assert page._current_face_id is not None
+    assert page._current_face_id != face1_id
+
+
+def test_priority_status_message_shows_image_count(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """Status label says 'remaining in this image' when priority is set."""
+    img_id = _insert_image(session_factory, "/sm.jpg", "smhash")
+    _insert_face_for_image(session_factory, img_id, faiss_id=30)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh(priority_image_id=img_id)
+
+    assert "remaining in this image" in page.status_label.text()
+
+
+def test_refresh_without_priority_clears_priority(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """Calling refresh() without arguments clears any previously set priority."""
+    img_id = _insert_image(session_factory, "/clr.jpg", "clrhash")
+    _insert_face_for_image(session_factory, img_id, faiss_id=40)
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh(priority_image_id=img_id)
+    assert page._priority_image_id == img_id
+
+    with patch.object(page.face_crop, "load"):
+        page.refresh()
+    assert page._priority_image_id is None

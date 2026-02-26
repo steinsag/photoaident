@@ -165,3 +165,82 @@ def test_resize_event_schedules_redisplay(qtbot, sample_image_with_metadata):
 
     event = QtGui.QResizeEvent(QtCore.QSize(900, 700), QtCore.QSize(800, 600))
     dialog.resizeEvent(event)  # must not raise
+
+
+def test_label_faces_button_enabled_when_unidentified_faces(
+    qtbot, sample_image_with_metadata
+):
+    """Label button is enabled when the image has at least one unidentified face."""
+    dialog = ImageDetailDialog(sample_image_with_metadata)
+    qtbot.add_widget(dialog)
+
+    buttons = dialog.findChildren(QtWidgets.QPushButton)
+    label_btn = next((b for b in buttons if "Label" in b.text()), None)
+    assert label_btn is not None
+    assert label_btn.isEnabled()
+
+
+def test_label_faces_button_disabled_when_no_unidentified_faces(qtbot, tmp_path):
+    """Label button is disabled when the image has no unidentified faces."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "identified.jpg"
+    PILImage.new("RGB", (100, 100), "blue").save(img_path)
+
+    db_image = Image(id=600, file_path=str(img_path), file_size=500)
+    db_image.faces = [
+        Face(
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.9,
+            model_version="v1",
+            faiss_id=1,
+            state=FaceState.IDENTIFIED,
+        )
+    ]
+
+    dialog = ImageDetailDialog(db_image)
+    qtbot.add_widget(dialog)
+
+    buttons = dialog.findChildren(QtWidgets.QPushButton)
+    label_btn = next((b for b in buttons if "Label" in b.text()), None)
+    assert label_btn is not None
+    assert not label_btn.isEnabled()
+
+
+def test_label_faces_button_emits_signal(qtbot, tmp_path):
+    """Clicking the label button emits navigate_to_labelling with the image id."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "signal_test.jpg"
+    PILImage.new("RGB", (100, 100), "green").save(img_path)
+
+    db_image = Image(id=700, file_path=str(img_path), file_size=500)
+    db_image.faces = [
+        Face(
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.9,
+            model_version="v1",
+            faiss_id=2,
+            state=FaceState.UNIDENTIFIED,
+        )
+    ]
+
+    dialog = ImageDetailDialog(db_image)
+    qtbot.add_widget(dialog)
+
+    emitted_ids: list[int] = []
+    dialog.navigate_to_labelling.connect(emitted_ids.append)
+
+    buttons = dialog.findChildren(QtWidgets.QPushButton)
+    label_btn = next((b for b in buttons if "Label" in b.text()), None)
+    assert label_btn is not None
+
+    qtbot.mouseClick(label_btn, QtCore.Qt.MouseButton.LeftButton)
+
+    assert emitted_ids == [700]

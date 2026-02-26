@@ -318,6 +318,16 @@ class MainWindow(QtWidgets.QMainWindow):
         elif index == 2:
             self.persons_page.refresh()
 
+    def go_to_labelling(self, priority_image_id: int) -> None:
+        """Navigate to the Labelling page, prioritising faces from the given image."""
+        buttons = [self.btn_library, self.btn_label, self.btn_persons]
+        for i, btn in enumerate(buttons):
+            font = btn.font()
+            font.setBold(i == 1)
+            btn.setFont(font)
+        self.stacked.setCurrentIndex(1)
+        self.labelling_page.refresh(priority_image_id=priority_image_id)
+
     def _create_menus(self):
         menubar = self.menuBar()
 

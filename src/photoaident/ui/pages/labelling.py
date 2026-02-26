@@ -33,6 +33,7 @@ class LabellingPage(QtWidgets.QWidget):
         self.vector_store = vector_store
         self._current_face_id: Optional[int] = None
         self._skipped: set[int] = set()
+        self._priority_image_id: Optional[int] = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -65,14 +66,65 @@ class LabellingPage(QtWidgets.QWidget):
 
         self._set_buttons_enabled(False)
 
-    def refresh(self) -> None:
+    def refresh(self, priority_image_id: Optional[int] = None) -> None:
         """Reload count + first face. Called when page becomes visible."""
         self._skipped.clear()
+        self._priority_image_id = priority_image_id
         self._load_next_face()
 
     def _load_next_face(self) -> None:
-        # Count total unidentified faces for status / empty-state messages
         with self.session_factory() as session:
+            # Auto-clear priority when all faces in the priority image are done
+            if self._priority_image_id is not None:
+                base_where = [
+                    Face.state == FaceState.UNIDENTIFIED,
+                    Face.deleted_at.is_(None),
+                    Face.image_id == self._priority_image_id,
+                ]
+                if self._skipped:
+                    remaining_in_image: int = (
+                        session.scalar(
+                            select(func.count(Face.id))
+                            .where(*base_where)
+                            .where(Face.id.not_in(list(self._skipped)))
+                        )
+                        or 0
+                    )
+                else:
+                    remaining_in_image = (
+                        session.scalar(select(func.count(Face.id)).where(*base_where))
+                        or 0
+                    )
+                if remaining_in_image == 0:
+                    self._priority_image_id = None
+
+            # Count faces for the status label
+            if self._priority_image_id is not None:
+                count_where = [
+                    Face.state == FaceState.UNIDENTIFIED,
+                    Face.deleted_at.is_(None),
+                    Face.image_id == self._priority_image_id,
+                ]
+            else:
+                count_where = [
+                    Face.state == FaceState.UNIDENTIFIED,
+                    Face.deleted_at.is_(None),
+                ]
+            if self._skipped:
+                status_count: int = (
+                    session.scalar(
+                        select(func.count(Face.id))
+                        .where(*count_where)
+                        .where(Face.id.not_in(list(self._skipped)))
+                    )
+                    or 0
+                )
+            else:
+                status_count = (
+                    session.scalar(select(func.count(Face.id)).where(*count_where)) or 0
+                )
+
+            # Also need total_unidentified for the empty-state message
             total_unidentified: int = (
                 session.scalar(
                     select(func.count(Face.id)).where(
@@ -99,6 +151,8 @@ class LabellingPage(QtWidgets.QWidget):
             )
             .limit(1)
         )
+        if self._priority_image_id is not None:
+            stmt = stmt.where(Face.image_id == self._priority_image_id)
         if self._skipped:
             stmt = stmt.where(Face.id.not_in(list(self._skipped)))
 
@@ -128,9 +182,16 @@ class LabellingPage(QtWidgets.QWidget):
 
         face_id, crop_path, thumb_path, taken_at, confidence = face_data
         self._current_face_id = face_id
-        self.status_label.setText(
-            self.tr("{count} face(s) remaining").format(count=total_unidentified)
-        )
+        if self._priority_image_id is not None:
+            self.status_label.setText(
+                self.tr("{count} face(s) remaining in this image").format(
+                    count=status_count
+                )
+            )
+        else:
+            self.status_label.setText(
+                self.tr("{count} face(s) remaining").format(count=status_count)
+            )
         self.face_crop.load(
             crop_path=crop_path,
             thumb_path=thumb_path,

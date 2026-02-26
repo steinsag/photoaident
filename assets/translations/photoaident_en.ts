@@ -138,6 +138,10 @@ Confidence: {confidence}%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Label faces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Image file not found: {path}</source>
         <translation type="unfinished"></translation>
     </message>
@@ -185,6 +189,10 @@ Please close it before starting a new one.</source>
     </message>
     <message>
         <source>{count} face(s) remaining</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>{count} face(s) remaining in this image</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

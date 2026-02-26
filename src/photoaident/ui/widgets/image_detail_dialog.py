@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from photoaident.db.database import Image as DBImage
+from photoaident.db.database import FaceState, Image as DBImage
 
 
 class ImageDetailDialog(QtWidgets.QDialog):
@@ -10,6 +10,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
     A modal dialog that displays a full-size image with its metadata and
     face bounding boxes.
     """
+
+    navigate_to_labelling = QtCore.Signal(int)  # image_id
 
     def __init__(self, image: DBImage, parent=None):
         super().__init__(parent)
@@ -73,6 +75,15 @@ class ImageDetailDialog(QtWidgets.QDialog):
                 add_meta(self.tr("Camera"), camera)
 
         metadata_layout.addStretch()
+
+        has_unidentified = any(
+            f.state == FaceState.UNIDENTIFIED and f.deleted_at is None
+            for f in self.image_data.faces
+        )
+        label_btn = QtWidgets.QPushButton(self.tr("Label faces"))
+        label_btn.setEnabled(has_unidentified)
+        label_btn.clicked.connect(self._on_label_faces_clicked)
+        metadata_layout.addWidget(label_btn)
 
         close_button = QtWidgets.QPushButton(self.tr("Close"))
         close_button.clicked.connect(self.accept)
@@ -146,6 +157,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
             QtCore.Qt.TransformationMode.SmoothTransformation,
         )
         self.image_label.setPixmap(scaled_pixmap)
+
+    def _on_label_faces_clicked(self) -> None:
+        self.accept()
+        self.navigate_to_labelling.emit(self.image_data.id)
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
