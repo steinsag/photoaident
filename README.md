@@ -115,6 +115,28 @@ To bypass the hook: `git commit --no-verify`
 
 ## Database Schema
 
+## Standing on shoulders
+
+### Open Source Libraries
+
+- [InsightFace](https://www.insightface.ai/)
+- [FAISS](https://faiss.ai/)
+- [PySide6](https://doc.qt.io/qtforpython-6/)
+- [ONNX Runtime](https://onnxruntime.ai/)
+- [SQLAlchemy](https://www.sqlalchemy.org/)
+- [Alembic](https://alembic.sqlalchemy.org/)
+- [ExifRead](https://github.com/ianare/exif-py)
+- [Pillow](https://python-pillow.github.io/)
+- [OpenCV](https://opencv.org/)
+- [NumPy](https://numpy.org/)
+
+### Icon Sources
+
+- [Wikimedia](https://commons.wikimedia.org/)
+- [SVG Repo](https://www.svgrepo.com/)
+
+## Database Schema
+
 ```mermaid
 erDiagram
     images ||--o| image_metadata: "1:1"
