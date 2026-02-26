@@ -128,6 +128,7 @@ class AssignPersonDialog(QtWidgets.QDialog):
             )
             self.cluster_table.setItem(row, _COL_SCORE, score_item)
 
+        self.cluster_table.setMinimumHeight(180)
         self.cluster_table.itemSelectionChanged.connect(self._on_cluster_row_selected)
         cluster_layout.addWidget(self.cluster_table)
 
@@ -230,6 +231,7 @@ class AssignPersonDialog(QtWidgets.QDialog):
         # _on_cluster_row_selected will fire and update _selected_cluster
 
         self.cluster_group.setVisible(True)
+        self.adjustSize()
         self._update_ok_button()
 
     def _compute_cluster_scores(
