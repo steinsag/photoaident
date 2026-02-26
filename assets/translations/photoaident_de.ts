@@ -128,31 +128,35 @@ Konfidenz: {confidence}%</translation>
     <name>ImageDetailDialog</name>
     <message>
         <source>Image Details</source>
-        <translation type="unfinished"></translation>
+        <translation>Bilddetails</translation>
+    </message>
+    <message>
+        <source>Metadata</source>
+        <translation>Metadaten</translation>
     </message>
     <message>
         <source>ID</source>
-        <translation type="unfinished"></translation>
+        <translation>ID</translation>
     </message>
     <message>
         <source>File Path</source>
-        <translation type="unfinished"></translation>
+        <translation>Dateipfad</translation>
     </message>
     <message>
         <source>File Size</source>
-        <translation type="unfinished"></translation>
+        <translation>Dateigröße</translation>
     </message>
     <message>
         <source>Dimensions</source>
-        <translation type="unfinished"></translation>
+        <translation>Abmessungen</translation>
     </message>
     <message>
         <source>Taken At</source>
-        <translation type="unfinished"></translation>
+        <translation>Aufgenommen am</translation>
     </message>
     <message>
         <source>Camera</source>
-        <translation type="unfinished"></translation>
+        <translation>Kamera</translation>
     </message>
     <message>
         <source>Label Faces</source>
@@ -160,15 +164,15 @@ Konfidenz: {confidence}%</translation>
     </message>
     <message>
         <source>Close</source>
-        <translation type="unfinished"></translation>
+        <translation>Schließen</translation>
     </message>
     <message>
         <source>Image file not found: {path}</source>
-        <translation type="unfinished"></translation>
+        <translation>Bilddatei nicht gefunden: {path}</translation>
     </message>
     <message>
         <source>Failed to load image: {error}</source>
-        <translation type="unfinished"></translation>
+        <translation>Bild konnte nicht geladen werden: {error}</translation>
     </message>
 </context>
 <context>
@@ -176,7 +180,8 @@ Konfidenz: {confidence}%</translation>
     <message>
         <source>Another instance of PhotoAIdent is already running.
 Please close it before starting a new one.</source>
-        <translation type="unfinished"></translation>
+        <translation>Eine weitere Instanz von PhotoAIdent läuft bereits.
+Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
 </context>
 <context>
@@ -300,7 +305,7 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
     </message>
     <message>
         <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
-        <translation type="unfinished"></translation>
+        <translation>Indiziert: {indexed}/{total} | Gesichter: {faces}</translation>
     </message>
     <message>
         <source>Images: {images} | Faces: {faces}</source>
@@ -308,7 +313,7 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
     </message>
     <message>
         <source>Indexing complete</source>
-        <translation type="unfinished"></translation>
+        <translation>Indexierung abgeschlossen</translation>
     </message>
     <message>
         <source>&amp;File</source>
@@ -338,7 +343,13 @@ Currently indexed:
 - {faces} faces
 
 Do you really want to proceed?</source>
-        <translation type="unfinished"></translation>
+        <translation>Das Ändern des Fotosammlungspfads löscht alle bisher erkannten Gesichter.
+
+Aktuell indiziert:
+- {images} Bilder
+- {faces} Gesichter
+
+Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
         <source>Confirm Collection Change</source>
@@ -470,7 +481,7 @@ Do you really want to proceed?</source>
     <name>ThumbnailGrid</name>
     <message>
         <source>No images found.</source>
-        <translation type="unfinished"></translation>
+        <translation>Keine Bilder gefunden.</translation>
     </message>
     <message>
         <source>Showing first {limit} of {total} images.</source>

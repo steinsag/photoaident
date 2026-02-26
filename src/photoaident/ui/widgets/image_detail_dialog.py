@@ -32,7 +32,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         metadata_layout = QtWidgets.QVBoxLayout(metadata_panel)
         metadata_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-        title_label = QtWidgets.QLabel(f"<b>{self.tr('Metadata')}</b>")
+        title_label = QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>")
         metadata_layout.addWidget(title_label)
 
         # Helper to add metadata rows

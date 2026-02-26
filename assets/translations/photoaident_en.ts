@@ -110,6 +110,10 @@ Confidence: {confidence}%</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Metadata</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>ID</source>
         <translation type="unfinished"></translation>
     </message>
