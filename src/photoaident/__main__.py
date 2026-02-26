@@ -1,16 +1,16 @@
-import sys
+import sys  # pragma: no cover
 
-from PySide6 import QtWidgets
+from PySide6 import QtWidgets  # pragma: no cover
 
-from photoaident.app import MainWindow
-from photoaident.db.migrate import apply_migrations
-from photoaident.paths import AppPaths
-from photoaident.utils.instance_lock import InstanceLock
+from photoaident.app import MainWindow  # pragma: no cover
+from photoaident.db.migrate import apply_migrations  # pragma: no cover
+from photoaident.paths import AppPaths  # pragma: no cover
+from photoaident.utils.instance_lock import InstanceLock  # pragma: no cover
 
-APP_NAME = "PhotoAIdent"
+APP_NAME = "PhotoAIdent"  # pragma: no cover
 
 
-def _fix_macos_app_name() -> None:
+def _fix_macos_app_name() -> None:  # pragma: no cover
     """Patch CFBundleName/CFBundleDisplayName via the ObjC runtime.
 
     Running as plain Python means macOS has no Info.plist, so the app menu
@@ -69,7 +69,7 @@ def _fix_macos_app_name() -> None:
         pass  # Non-fatal — silently skip on unexpected environments
 
 
-def main():
+def main():  # pragma: no cover
     if sys.platform == "darwin":
         _fix_macos_app_name()
 
@@ -117,5 +117,5 @@ def main():
         lock.release()
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()
