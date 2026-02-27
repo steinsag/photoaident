@@ -510,4 +510,19 @@ Möchten Sie wirklich fortfahren?</translation>
         <translation>Fehler beim Laden des Bildes</translation>
     </message>
 </context>
+<context>
+    <name>_HoverOverlay</name>
+    <message>
+        <source>View details</source>
+        <translation>Details anzeigen</translation>
+    </message>
+    <message>
+        <source>Show in file manager</source>
+        <translation>Im Dateimanager anzeigen</translation>
+    </message>
+    <message>
+        <source>Label faces</source>
+        <translation>Gesichter beschriften</translation>
+    </message>
+</context>
 </TS>

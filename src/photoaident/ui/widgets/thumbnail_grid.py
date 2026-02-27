@@ -1,12 +1,14 @@
+import subprocess
+import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import shiboken6
 from PySide6 import QtCore, QtGui, QtWidgets
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
-from photoaident.db.database import Image
+from photoaident.db.database import Face, FaceState, Image
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.utils.image_utils import generate_thumbnail
 
@@ -15,6 +17,41 @@ if TYPE_CHECKING:
 
 PAGE_SIZE = 30
 _SCROLL_LOAD_MARGIN = 200  # px from bottom triggers load
+
+
+def _icon_path(name: str) -> str:
+    """Return the path to an icon, works for dev and PyInstaller bundles."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass is not None:
+        return str(Path(meipass) / "assets" / "icons" / name)
+    # thumbnail_grid.py lives at src/photoaident/ui/widgets/ — go up 5 levels
+    return str(
+        Path(__file__).parent.parent.parent.parent.parent / "assets" / "icons" / name
+    )
+
+
+def _reveal_in_file_manager(file_path: str) -> None:
+    """Open the parent folder of file_path in the system file manager."""
+    p = Path(file_path)
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", str(p)])
+    elif sys.platform == "win32":
+        subprocess.Popen(["explorer", "/select,", str(p)])
+    else:  # Linux / BSD
+        subprocess.Popen(["xdg-open", str(p.parent)])
+
+
+def _has_unidentified_faces(session_factory, image_id: int) -> bool:
+    """Return True if the image has at least one unidentified, non-deleted face."""
+    with session_factory() as session:
+        n = session.scalar(
+            select(func.count(Face.id)).where(
+                Face.image_id == image_id,
+                Face.state == FaceState.UNIDENTIFIED,
+                Face.deleted_at.is_(None),
+            )
+        )
+        return (n or 0) > 0
 
 
 def _get_scaled_size(path: Path) -> QtCore.QSize:
@@ -43,16 +80,123 @@ def _read_pixmap(target_path: Path, scaled_size: QtCore.QSize) -> QtGui.QPixmap:
     return QtGui.QPixmap.fromImage(image)
 
 
+class _HoverOverlay(QtWidgets.QWidget):
+    """Semi-transparent hover overlay with View, Browse, and Label buttons."""
+
+    view_requested = QtCore.Signal()
+    label_requested = QtCore.Signal()
+
+    def __init__(
+        self,
+        image_id: int,
+        file_path: str,
+        session_factory,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self._image_id = image_id
+        self._file_path = file_path
+        self._session_factory = session_factory
+
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(160, 160)
+
+        # WA_TranslucentBackground breaks palette-based button rendering, so we
+        # use explicit rgba values.  autoRaise=False is required so the button
+        # frame is drawn unconditionally (not only on native hover).
+        self.setStyleSheet("""
+            QToolButton {
+                background-color: rgba(240, 240, 240, 255);
+                border: 1px solid rgba(100, 100, 100, 255);
+                border-radius: 6px;
+            }
+            QToolButton:hover {
+                background-color: rgba(255, 255, 255, 255);
+                border-color: rgba(60, 120, 220, 220);
+            }
+            QToolButton:pressed {
+                background-color: rgba(200, 215, 245, 255);
+                border-color: rgba(60, 120, 220, 255);
+            }
+            QToolButton:disabled {
+                background-color: rgba(200, 200, 200, 196);
+                border-color: rgba(100, 100, 100, 196);
+            }
+        """)
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(4)
+
+        # View button — left, fills available height
+        self.view_btn = QtWidgets.QToolButton()
+        self.view_btn.setAutoRaise(False)
+        self.view_btn.setIcon(QtGui.QIcon(_icon_path("view.svg")))
+        self.view_btn.setIconSize(QtCore.QSize(48, 48))
+        self.view_btn.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
+        self.view_btn.setToolTip(self.tr("View details"))
+        layout.addWidget(self.view_btn)
+
+        # Right column: Browse (top) + Label (bottom), each fixed
+        right_layout = QtWidgets.QVBoxLayout()
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(4)
+
+        self.browse_btn = QtWidgets.QToolButton()
+        self.browse_btn.setAutoRaise(False)
+        self.browse_btn.setIcon(QtGui.QIcon(_icon_path("browse.svg")))
+        self.browse_btn.setIconSize(QtCore.QSize(24, 24))
+        self.browse_btn.setFixedSize(70, 70)
+        self.browse_btn.setToolTip(self.tr("Show in file manager"))
+        right_layout.addWidget(self.browse_btn)
+
+        self.label_btn = QtWidgets.QToolButton()
+        self.label_btn.setAutoRaise(False)
+        self.label_btn.setIcon(QtGui.QIcon(_icon_path("label.svg")))
+        self.label_btn.setIconSize(QtCore.QSize(24, 24))
+        self.label_btn.setFixedSize(70, 70)
+        self.label_btn.setToolTip(self.tr("Label faces"))
+        right_layout.addWidget(self.label_btn)
+
+        layout.addLayout(right_layout)
+
+        self.view_btn.clicked.connect(self.view_requested.emit)
+        self.browse_btn.clicked.connect(
+            lambda: _reveal_in_file_manager(self._file_path)
+        )
+        self.label_btn.clicked.connect(self.label_requested.emit)
+
+        self.hide()
+
+    def paintEvent(self, _event: QtGui.QPaintEvent) -> None:
+        painter = QtGui.QPainter(self)
+        painter.fillRect(self.rect(), QtGui.QColor(0, 0, 0, 150))
+        painter.end()
+
+    def showEvent(self, event: QtGui.QShowEvent) -> None:
+        super().showEvent(event)
+        if self._session_factory is not None:
+            has_faces = _has_unidentified_faces(self._session_factory, self._image_id)
+            self.label_btn.setEnabled(has_faces)
+        else:
+            self.label_btn.setEnabled(False)
+
+
 class ThumbnailWidget(QtWidgets.QWidget):
     """Displays a single image thumbnail."""
 
     clicked = QtCore.Signal(int)  # image_id
+    label_clicked = QtCore.Signal(int)  # image_id
 
     def __init__(
         self,
         image_id: int,
         file_path: str,
         thumb_path: Path,
+        session_factory=None,
         parent=None,
     ):
         super().__init__(parent)
@@ -62,6 +206,7 @@ class ThumbnailWidget(QtWidgets.QWidget):
 
         self.setFixedSize(160, 160)
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover)
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(5, 5, 5, 5)
@@ -71,6 +216,12 @@ class ThumbnailWidget(QtWidgets.QWidget):
         layout.addWidget(self.image_label)
 
         self._load_thumbnail()
+
+        self._overlay = _HoverOverlay(image_id, file_path, session_factory, self)
+        self._overlay.view_requested.connect(lambda: self.clicked.emit(self.image_id))
+        self._overlay.label_requested.connect(
+            lambda: self.label_clicked.emit(self.image_id)
+        )
 
     def _load_thumbnail(self):
         if not self.thumb_path.exists():
@@ -91,10 +242,12 @@ class ThumbnailWidget(QtWidgets.QWidget):
 
         self.image_label.setPixmap(pixmap)
 
-    def mousePressEvent(self, event: QtGui.QMouseEvent):
-        if event.button() == QtCore.Qt.MouseButton.LeftButton:
-            self.clicked.emit(self.image_id)
-        super().mousePressEvent(event)
+    def event(self, ev: QtCore.QEvent) -> bool:
+        if ev.type() == QtCore.QEvent.Type.HoverEnter:
+            self._overlay.show()
+        elif ev.type() == QtCore.QEvent.Type.HoverLeave:
+            self._overlay.hide()
+        return super().event(ev)
 
 
 class ThumbnailGrid(QtWidgets.QWidget):
@@ -179,8 +332,9 @@ class ThumbnailGrid(QtWidgets.QWidget):
         file_path: str,
         thumb_path: Path,
     ):
-        thumb = ThumbnailWidget(image_id, file_path, thumb_path)
+        thumb = ThumbnailWidget(image_id, file_path, thumb_path, self._session_factory)
         thumb.clicked.connect(self.image_selected.emit)
+        thumb.label_clicked.connect(self.navigate_to_labelling.emit)
 
         idx = len(self.thumbnails)
         row = idx // self.cols

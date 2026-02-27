@@ -2,9 +2,15 @@ from unittest.mock import patch
 
 import pytest
 from PIL import Image as PILImage
-from PySide6 import QtCore
+from PySide6 import QtCore, QtWidgets
 
-from photoaident.db.database import Image as DBImage, get_engine, get_session_factory
+from photoaident.db.database import (
+    Face,
+    FaceState,
+    Image as DBImage,
+    get_engine,
+    get_session_factory,
+)
 from photoaident.db.migrate import apply_migrations
 from photoaident.paths import AppPaths
 from photoaident.ui.widgets.thumbnail_grid import (
@@ -58,12 +64,15 @@ def test_thumbnail_widget_with_existing_thumb(qtbot, sample_image, tmp_path):
 
 
 def test_thumbnail_widget_click(qtbot, sample_image, tmp_path):
+    """Clicking the view button on the overlay emits the clicked signal."""
     thumb_path = tmp_path / "thumb_click.jpg"
     widget = ThumbnailWidget(1, str(sample_image), thumb_path)
     qtbot.addWidget(widget)
 
+    widget._overlay.show()
+
     with qtbot.waitSignal(widget.clicked) as blocker:
-        qtbot.mouseClick(widget, QtCore.Qt.MouseButton.LeftButton)
+        qtbot.mouseClick(widget._overlay.view_btn, QtCore.Qt.MouseButton.LeftButton)
 
     assert blocker.args == [1]
 
@@ -76,6 +85,130 @@ def test_thumbnail_widget_error_loading(qtbot, tmp_path):
 
     # Should show error text
     assert widget.image_label.text() == "Error loading image"
+
+
+# --- hover overlay tests ---
+
+
+def test_hover_overlay_hidden_initially(qtbot, sample_image, tmp_path):
+    """The overlay is hidden before any hover event."""
+    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    qtbot.addWidget(widget)
+
+    assert widget._overlay.isHidden()
+
+
+def test_hover_overlay_shows_on_hoverenter(qtbot, sample_image, tmp_path):
+    """Sending a HoverEnter event shows the overlay."""
+    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    qtbot.addWidget(widget)
+    widget.show()
+
+    ev = QtCore.QEvent(QtCore.QEvent.Type.HoverEnter)
+    QtWidgets.QApplication.sendEvent(widget, ev)
+
+    assert not widget._overlay.isHidden()
+
+
+def test_hover_overlay_hides_on_hoverleave(qtbot, sample_image, tmp_path):
+    """Sending a HoverLeave event hides the overlay."""
+    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    qtbot.addWidget(widget)
+    widget.show()
+
+    # Show first
+    ev_enter = QtCore.QEvent(QtCore.QEvent.Type.HoverEnter)
+    QtWidgets.QApplication.sendEvent(widget, ev_enter)
+    assert not widget._overlay.isHidden()
+
+    # Then leave
+    ev_leave = QtCore.QEvent(QtCore.QEvent.Type.HoverLeave)
+    QtWidgets.QApplication.sendEvent(widget, ev_leave)
+    assert widget._overlay.isHidden()
+
+
+def test_label_button_disabled_without_faces(qtbot, sample_image, tmp_path):
+    """label_btn is disabled when there is no session_factory."""
+    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    qtbot.addWidget(widget)
+    widget.show()  # parent must be visible for showEvent to fire on child
+
+    widget._overlay.show()
+    QtWidgets.QApplication.processEvents()
+
+    assert not widget._overlay.label_btn.isEnabled()
+
+
+def test_label_button_enabled_with_unidentified_face(qtbot, sample_image, tmp_path):
+    """label_btn is enabled when the image has an unidentified face."""
+    session_factory = _make_session_factory(tmp_path)
+
+    with session_factory() as session:
+        img = DBImage(file_path=str(sample_image), file_size=100)
+        session.add(img)
+        session.flush()
+        face = Face(
+            image_id=img.id,
+            faiss_id=0,
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.99,
+            model_version="test",
+            state=FaceState.UNIDENTIFIED,
+        )
+        session.add(face)
+        session.commit()
+        img_id = img.id
+
+    widget = ThumbnailWidget(
+        img_id, str(sample_image), tmp_path / "t.jpg", session_factory
+    )
+    qtbot.addWidget(widget)
+
+    widget._overlay.show()
+
+    assert widget._overlay.label_btn.isEnabled()
+
+
+def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_path):
+    """Clicking label_btn causes the grid to emit navigate_to_labelling."""
+    session_factory = _make_session_factory(tmp_path)
+
+    with session_factory() as session:
+        img = DBImage(file_path=str(sample_image), file_size=100)
+        session.add(img)
+        session.flush()
+        face = Face(
+            image_id=img.id,
+            faiss_id=0,
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.99,
+            model_version="test",
+            state=FaceState.UNIDENTIFIED,
+        )
+        session.add(face)
+        session.commit()
+        img_id = img.id
+
+    grid = ThumbnailGrid(session_factory)
+    qtbot.addWidget(grid)
+
+    grid.add_thumbnail(img_id, str(sample_image), tmp_path / "t.jpg")
+    thumb = grid.thumbnails[0]
+    thumb._overlay.show()
+
+    received: list[int] = []
+    grid.navigate_to_labelling.connect(received.append)
+
+    with qtbot.waitSignal(grid.navigate_to_labelling):
+        qtbot.mouseClick(thumb._overlay.label_btn, QtCore.Qt.MouseButton.LeftButton)
+
+    assert received == [img_id]
 
 
 def test_thumbnail_grid_init(qtbot):

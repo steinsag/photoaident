@@ -510,4 +510,19 @@ Do you really want to proceed?</translation>
         <translation>Error loading image</translation>
     </message>
 </context>
+<context>
+    <name>_HoverOverlay</name>
+    <message>
+        <source>View details</source>
+        <translation>View details</translation>
+    </message>
+    <message>
+        <source>Show in file manager</source>
+        <translation>Show in file manager</translation>
+    </message>
+    <message>
+        <source>Label faces</source>
+        <translation>Label faces</translation>
+    </message>
+</context>
 </TS>
