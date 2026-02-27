@@ -465,11 +465,15 @@ Möchten Sie wirklich fortfahren?</translation>
     <name>ThumbnailGrid</name>
     <message>
         <source>No images found.</source>
-        <translation>Keine Bilder gefunden.</translation>
+        <translation type="vanished">Keine Bilder gefunden.</translation>
     </message>
     <message>
         <source>Showing first {limit} of {total} images.</source>
-        <translation>Zeige die ersten {limit} von {total} Bildern.</translation>
+        <translation type="vanished">Zeige die ersten {limit} von {total} Bildern.</translation>
+    </message>
+    <message>
+        <source>Scroll to load more… ({n} remaining)</source>
+        <translation>Scrollen zum Nachladen… ({n} verbleibend)</translation>
     </message>
 </context>
 <context>

@@ -465,11 +465,15 @@ Do you really want to proceed?</translation>
     <name>ThumbnailGrid</name>
     <message>
         <source>No images found.</source>
-        <translation>No images found.</translation>
+        <translation type="vanished">No images found.</translation>
     </message>
     <message>
         <source>Showing first {limit} of {total} images.</source>
-        <translation>Showing first {limit} of {total} images.</translation>
+        <translation type="vanished">Showing first {limit} of {total} images.</translation>
+    </message>
+    <message>
+        <source>Scroll to load more… ({n} remaining)</source>
+        <translation>Scroll to load more… ({n} remaining)</translation>
     </message>
 </context>
 <context>

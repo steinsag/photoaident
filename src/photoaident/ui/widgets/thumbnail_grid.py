@@ -1,9 +1,12 @@
 from pathlib import Path
-from typing import List, Tuple
 
+import shiboken6
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.utils.image_utils import generate_thumbnail
+
+PAGE_SIZE = 30
+_SCROLL_LOAD_MARGIN = 200  # px from bottom triggers load
 
 
 def _get_scaled_size(path: Path) -> QtCore.QSize:
@@ -87,9 +90,11 @@ class ThumbnailWidget(QtWidgets.QWidget):
 
 
 class ThumbnailGrid(QtWidgets.QWidget):
-    """A scrollable grid of thumbnails."""
+    """A scrollable grid of thumbnails with infinite scroll."""
 
     image_selected = QtCore.Signal(int)
+    results_changed = QtCore.Signal(int)  # total result count, emitted on set_results()
+    page_loaded = QtCore.Signal(int, int)  # (loaded_so_far, total)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -110,25 +115,25 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
         self.scroll_area.setWidget(self.container)
 
-        self.thumbnails = []
+        self._hint_label = QtWidgets.QLabel()
+        self._hint_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._hint_label.hide()
+        self.main_layout.addWidget(self._hint_label)
+
+        self.thumbnails: list = []
         self.cols = 4
 
+        self._all_results: list[tuple[int, str, Path]] = []
+        self._loaded_count: int = 0
+
+        self.scroll_area.verticalScrollBar().valueChanged.connect(
+            self._on_scroll_changed
+        )
+
     def clear(self):
-        # Remove the "Showing X of Y" label if it exists
-        while self.main_layout.count() > 1:
-            item = self.main_layout.itemAt(1)
-            if (
-                item
-                and item.widget()
-                and not isinstance(item.widget(), QtWidgets.QScrollArea)
-            ):
-                widget = item.widget()
-                if widget:
-                    self.main_layout.removeWidget(widget)
-                    widget.deleteLater()
-            else:
-                # Should not happen as scroll area is at 0, but safety first
-                break
+        self._hint_label.hide()
+        self._all_results = []
+        self._loaded_count = 0
 
         # Clear thumbnails list before deleting widgets to avoid stale references
         self.thumbnails = []
@@ -157,37 +162,47 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.grid_layout.addWidget(thumb, row, col)
         self.thumbnails.append(thumb)
 
-    def set_images_with_total(
-        self,
-        images_data: List[Tuple[int, str, Path]],
-        total_count: int,
-    ):
+    def set_results(self, results):
         self.clear()
-        if not images_data:
-            # If no images, still show total if it's > 0 (though this shouldn't happen)
-            if total_count > 0:
-                label = QtWidgets.QLabel(self.tr("No images found."))
-                label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-                self.main_layout.insertWidget(1, label)
+        self._all_results = list(results)
+        self._load_next_page()
+        self.results_changed.emit(len(self._all_results))
+
+    def _load_next_page(self):
+        batch = self._all_results[self._loaded_count : self._loaded_count + PAGE_SIZE]
+        for image_id, file_path, thumb_path in batch:
+            self.add_thumbnail(image_id, file_path, thumb_path)
+        self._loaded_count += len(batch)
+        self._update_scroll_hint()
+        self.page_loaded.emit(self._loaded_count, len(self._all_results))
+        QtCore.QTimer.singleShot(0, self._check_fill_viewport)
+
+    def _check_fill_viewport(self):
+        if not shiboken6.isValid(self):
             return
+        if (
+            self.scroll_area.verticalScrollBar().maximum() == 0
+            and self._loaded_count < len(self._all_results)
+        ):
+            self._load_next_page()
 
-        for img_id, path, thumb_path in images_data:
-            self.add_thumbnail(img_id, path, thumb_path)
-
-        if total_count > len(images_data):
-            label = QtWidgets.QLabel(
-                self.tr("Showing first {limit} of {total} images.").format(
-                    limit=len(images_data), total=total_count
-                )
+    def _update_scroll_hint(self):
+        remaining = len(self._all_results) - self._loaded_count
+        if remaining > 0:
+            self._hint_label.setText(
+                self.tr("Scroll to load more\u2026 ({n} remaining)").format(n=remaining)
             )
-            label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            self.main_layout.insertWidget(1, label)
+            self._hint_label.show()
+        else:
+            self._hint_label.hide()
 
-    def set_images(
-        self,
-        images_data: List[Tuple[int, str, Path]],
-    ):
-        self.set_images_with_total(images_data, len(images_data))
+    def _on_scroll_changed(self, value: int):
+        scrollbar = self.scroll_area.verticalScrollBar()
+        if (
+            value >= scrollbar.maximum() - _SCROLL_LOAD_MARGIN
+            and self._loaded_count < len(self._all_results)
+        ):
+            self._load_next_page()
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)

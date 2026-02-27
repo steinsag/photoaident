@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from photoaident.core.search import find_images_by_person
@@ -14,8 +14,6 @@ if TYPE_CHECKING:
 
     from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
-
-MAX_THUMBS = 1000
 
 
 class LibraryPage(QtWidgets.QWidget):
@@ -169,10 +167,9 @@ class LibraryPage(QtWidgets.QWidget):
 
         if not person_ids or self.vector_store is None:
             with self.session_factory() as session:
-                total = session.scalar(select(func.count(Image.id))) or 0
-                stmt = select(Image).limit(MAX_THUMBS)
+                stmt = select(Image)
                 images = session.execute(stmt).unique().scalars().all()
-                self.grid.set_images_with_total(self._build_images_data(images), total)
+                self.grid.set_results(self._build_images_data(images))
             return
 
         # Intersect FAISS results: only images where ALL selected persons appear
@@ -195,12 +192,10 @@ class LibraryPage(QtWidgets.QWidget):
         }
 
         if not image_scores:
-            self.grid.set_images_with_total([], 0)
+            self.grid.set_results([])
             return
 
-        sorted_pairs = sorted(image_scores.items(), key=lambda kv: kv[1], reverse=True)[
-            :MAX_THUMBS
-        ]
+        sorted_pairs = sorted(image_scores.items(), key=lambda kv: kv[1], reverse=True)
         ordered_ids = [img_id for img_id, _ in sorted_pairs]
 
         with self.session_factory() as session:
@@ -208,9 +203,7 @@ class LibraryPage(QtWidgets.QWidget):
             images = session.execute(stmt).unique().scalars().all()
             image_map = {img.id: img for img in images}
             ordered_images = [image_map[i] for i in ordered_ids if i in image_map]
-            self.grid.set_images_with_total(
-                self._build_images_data(ordered_images), len(ordered_images)
-            )
+            self.grid.set_results(self._build_images_data(ordered_images))
 
     def _on_image_selected(self, image_id: int) -> None:
         with self.session_factory() as session:

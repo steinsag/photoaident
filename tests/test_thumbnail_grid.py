@@ -1,8 +1,12 @@
 import pytest
 from PIL import Image as PILImage
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore
 
-from photoaident.ui.widgets.thumbnail_grid import ThumbnailWidget, ThumbnailGrid
+from photoaident.ui.widgets.thumbnail_grid import (
+    PAGE_SIZE,
+    ThumbnailGrid,
+    ThumbnailWidget,
+)
 
 
 @pytest.fixture
@@ -103,41 +107,6 @@ def test_thumbnail_grid_clear(qtbot, sample_image, tmp_path):
     assert grid.grid_layout.count() == 0
 
 
-def test_thumbnail_grid_set_images(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
-    qtbot.addWidget(grid)
-
-    images_data = [
-        (1, str(sample_image), tmp_path / "t1.jpg"),
-        (2, str(sample_image), tmp_path / "t2.jpg"),
-    ]
-
-    grid.set_images_with_total(images_data, 10)
-
-    assert len(grid.thumbnails) == 2
-    assert grid.grid_layout.count() == 2
-    # Should have a label "Showing 2 of 10" in main_layout
-    assert grid.main_layout.count() == 2  # scroll area + label
-
-    item = grid.main_layout.itemAt(1)
-    assert item is not None
-    label = item.widget()
-    assert isinstance(label, QtWidgets.QLabel)
-    assert "Showing first 2 of 10 images." in label.text()
-
-
-def test_thumbnail_grid_set_images_empty_with_total(qtbot):
-    grid = ThumbnailGrid()
-    qtbot.addWidget(grid)
-    grid.set_images_with_total([], 5)
-    assert grid.main_layout.count() == 2
-    item = grid.main_layout.itemAt(1)
-    assert item is not None
-    label = item.widget()
-    assert isinstance(label, QtWidgets.QLabel)
-    assert label.text() == "No images found."
-
-
 def test_thumbnail_grid_resize(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     grid.show()  # Need to show to have a valid width
@@ -190,24 +159,118 @@ def test_thumbnail_grid_resize(qtbot, sample_image, tmp_path):
     assert pos2[:2] == (0, 2)
 
 
-def test_thumbnail_grid_set_images_simple(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
-    qtbot.addWidget(grid)
-    images_data = [(1, str(sample_image), tmp_path / "t1.jpg")]
-    grid.set_images(images_data)
-    assert len(grid.thumbnails) == 1
-    assert grid.main_layout.count() == 1
+# --- set_results / infinite scroll tests ---
 
 
-def test_thumbnail_grid_set_images_no_total(qtbot, sample_image, tmp_path):
+def test_set_results_loads_first_page_only(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    images_data = [
-        (1, str(sample_image), tmp_path / "t1.jpg"),
-    ]
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    grid.set_results(results)
 
-    # Case where total == len(images_data), should not show "Showing X of Y" label
-    grid.set_images_with_total(images_data, 1)
+    # Only the first page is loaded synchronously; deferred fill not yet triggered
+    assert len(grid.thumbnails) == PAGE_SIZE
+    assert grid._loaded_count == PAGE_SIZE
 
-    assert grid.main_layout.count() == 1  # only scroll area
+
+def test_set_results_fewer_than_page_size(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(10)]
+    grid.set_results(results)
+
+    assert len(grid.thumbnails) == 10
+    assert grid._hint_label.isHidden()
+
+
+def test_set_results_empty(qtbot):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    grid.set_results([])
+
+    assert len(grid.thumbnails) == 0
+    assert grid._hint_label.isHidden()
+
+
+def test_set_results_emits_results_changed(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(50)]
+
+    received = []
+    grid.results_changed.connect(lambda n: received.append(n))
+    grid.set_results(results)
+
+    assert received == [50]
+
+
+def test_page_loaded_signal(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+
+    signals: list[tuple[int, int]] = []
+    grid.page_loaded.connect(lambda loaded, total: signals.append((loaded, total)))
+    grid.set_results(results)
+
+    assert len(signals) >= 1
+    assert signals[0] == (PAGE_SIZE, 100)
+
+
+def test_set_results_resets_previous(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results1 = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    grid.set_results(results1)
+    assert len(grid.thumbnails) == PAGE_SIZE
+
+    results2 = [(i, str(sample_image), tmp_path / f"s{i}.jpg") for i in range(100)]
+    grid.set_results(results2)
+
+    assert len(grid.thumbnails) == PAGE_SIZE
+    assert grid._loaded_count == PAGE_SIZE
+
+
+def test_hint_label_shown_when_more_remain(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    grid.set_results(results)
+
+    assert not grid._hint_label.isHidden()
+    # 100 - PAGE_SIZE (30) = 70 remaining
+    assert str(100 - PAGE_SIZE) in grid._hint_label.text()
+    assert "remaining" in grid._hint_label.text()
+
+
+def test_hint_label_hidden_when_all_loaded(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(10)]
+    grid.set_results(results)
+
+    assert grid._hint_label.isHidden()
+
+
+def test_scroll_triggers_load_more(qtbot, sample_image, tmp_path):
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    grid.set_results(results)
+
+    initial_count = grid._loaded_count
+    assert initial_count == PAGE_SIZE
+
+    # Directly invoke scroll handler with a value that satisfies the condition
+    grid._on_scroll_changed(grid.scroll_area.verticalScrollBar().maximum())
+
+    assert grid._loaded_count == initial_count + PAGE_SIZE
