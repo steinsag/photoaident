@@ -9,8 +9,10 @@ export LINUXDEPLOY_OUTPUT_VERSION="$(uv run python -c 'from importlib.metadata i
 rm -rf AppDir
 mkdir -p AppDir/usr/bin
 mkdir -p AppDir/usr/share/metainfo
+mkdir -p AppDir/usr/share/doc/photoaident
 cp -r dist/photoaident/* AppDir/usr/bin/
 cp assets/packaging/linux/io.github.steinsag.photoaident.appdata.xml AppDir/usr/share/metainfo/
+cp LICENSE AppDir/usr/share/doc/photoaident/copyright
 
 ./linuxdeploy-x86_64.AppImage --appdir AppDir -e AppDir/usr/bin/photoaident -i assets/icons/app-512.png -d assets/packaging/linux/io.github.steinsag.photoaident.desktop --output appimage
 
