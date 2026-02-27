@@ -1,15 +1,14 @@
-name: CI
+name: CI + Package (main)
 
 on:
   push:
-    branches:
-      - main
-      - feature/**
-      - bugfix/**
-  pull_request:
     branches:
       - main
 
 jobs:
   build-and-test:
     uses: ./.github/workflows/job_ci.yml
+
+  package:
+    needs: build-and-test
+    uses: ./.github/workflows/job_package.yml
