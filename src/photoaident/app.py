@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 import onnxruntime as ort
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from photoaident.core.indexer import InventoryTask, IndexingTask
+from photoaident.core.indexing import IndexingTask
+from photoaident.core.inventory import InventoryTask
 from photoaident.db.database import (
     get_counts,
     clear_database,
