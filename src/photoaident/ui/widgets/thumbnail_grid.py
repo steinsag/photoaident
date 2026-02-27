@@ -52,18 +52,19 @@ def _reveal_in_file_manager(file_path: str) -> None:
             "org.freedesktop.FileManager1",
         )
         if iface.isValid():
-            iface.call("ShowItems", [file_uri], "")
+            reply = iface.call("ShowItems", [file_uri], "")
+            if reply.type() != QtDBus.QDBusMessage.MessageType.ErrorMessage:
+                return
+        # Fallback: no D-Bus file manager service, or the call was rejected.
+        # Strip the AppImage library path so xdg-open's target process
+        # won't pick up the bundled Qt libs.
+        env = os.environ.copy()
+        orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
+        if orig is not None:
+            env["LD_LIBRARY_PATH"] = orig
         else:
-            # Fallback for minimal WMs without a D-Bus file manager service.
-            # Strip the AppImage library path so xdg-open's target process
-            # won't pick up the bundled Qt libs.
-            env = os.environ.copy()
-            orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
-            if orig is not None:
-                env["LD_LIBRARY_PATH"] = orig
-            else:
-                env.pop("LD_LIBRARY_PATH", None)
-            subprocess.Popen(["xdg-open", str(p.parent)], env=env)
+            env.pop("LD_LIBRARY_PATH", None)
+        subprocess.Popen(["xdg-open", str(p.parent)], env=env)
 
 
 def _has_unidentified_faces(session_factory, image_id: int) -> bool:
