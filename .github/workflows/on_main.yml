@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency:
+  group: main-build
+  cancel-in-progress: false
+
 jobs:
   build-and-test:
     uses: ./.github/workflows/job_ci.yml
