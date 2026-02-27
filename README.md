@@ -13,6 +13,8 @@ suggestions automatically.
 
 No cloud, no external API calls, no data leaves the machine.
 
+![Screenshot](assets/screenshot.png)
+
 ## Initial setup
 
 This project uses package manager [uv](https://github.com/astral-sh/uv) to manage dependencies.
@@ -39,8 +41,9 @@ To update translation source files (`.ts`) after adding or removing strings:
     uv run pyside6-lupdate -locations none -extensions py src/ -ts assets/translations/photoaident_de.ts assets/translations/photoaident_en.ts
 
 Flags explained:
+
 - `-locations none` — omits `<location>` line-number tags so `.ts` files only
-  change when strings actually change, not on every code reformat.  This makes
+  change when strings actually change, not on every code reformat. This makes
   `git diff` reliable as a staleness check.
 - `-extensions py` — required when passing a directory; lupdate's default
   extension list does not include Python files.
