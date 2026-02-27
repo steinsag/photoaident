@@ -1,4 +1,12 @@
+from importlib.metadata import PackageNotFoundError, version
+
 from PySide6 import QtCore, QtWidgets
+
+_APP_VERSION = "unknown"
+try:
+    _APP_VERSION = version("photoaident")
+except PackageNotFoundError:
+    pass
 
 
 class AboutDialog(QtWidgets.QDialog):
@@ -31,7 +39,7 @@ class AboutDialog(QtWidgets.QDialog):
         layout.setSpacing(12)
 
         # App title
-        title_label = QtWidgets.QLabel("<h2>PhotoAIdent</h2>")
+        title_label = QtWidgets.QLabel(f"<h2>PhotoAIdent {_APP_VERSION}</h2>")
         title_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_label)
 
