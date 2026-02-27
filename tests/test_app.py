@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import onnxruntime as ort
 import pytest
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtGui, QtWidgets
 
 import photoaident.app as app_module
 from photoaident.app import MainWindow, get_resource_path, load_translations
@@ -531,6 +531,7 @@ def test_show_preferences_saves_settings_when_path_unchanged(
 
     class FakePreferencesDialog:
         def __init__(self, *_args, **_kwargs):
+            # Minimal mock initialization for PreferencesDialog used in tests
             pass
 
         def exec(self) -> int:
