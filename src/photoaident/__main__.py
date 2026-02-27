@@ -56,11 +56,11 @@ def _fix_macos_app_name() -> None:  # pragma: no cover
             return lib.objc_msgSend(obj, selector, arg1, arg2)
 
         def ns_str(s: str):
-            NSString = lib.objc_getClass(b"NSString")
-            return msg1_cstr(NSString, sel("stringWithUTF8String:"), s.encode())
+            ns_string = lib.objc_getClass(b"NSString")
+            return msg1_cstr(ns_string, sel("stringWithUTF8String:"), s.encode())
 
-        NSBundle = lib.objc_getClass(b"NSBundle")
-        bundle = msg0(NSBundle, sel("mainBundle"))
+        ns_bundle = lib.objc_getClass(b"NSBundle")
+        bundle = msg0(ns_bundle, sel("mainBundle"))
         info = msg0(bundle, sel("infoDictionary"))
         app_ns = ns_str(APP_NAME)
         for key in ("CFBundleName", "CFBundleDisplayName"):
