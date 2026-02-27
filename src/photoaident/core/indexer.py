@@ -167,6 +167,70 @@ class IndexingTask(QtCore.QObject):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
+    def _get_taken_at(self, tags: dict, path: Path) -> tuple[datetime, TakenAtSource]:
+        """Determine when the image was taken, falling back to filesystem mtime."""
+        for tag_key in (
+            "EXIF DateTimeOriginal",
+            "EXIF DateTimeDigitized",
+            "Image DateTime",
+        ):
+            if tag_key in tags:
+                try:
+                    taken_at = datetime.strptime(
+                        str(tags[tag_key]), "%Y:%m:%d %H:%M:%S"
+                    )
+                    return taken_at, TakenAtSource.EXIF
+                except ValueError:
+                    continue
+
+        taken_at = datetime.fromtimestamp(path.stat().st_mtime)
+        return taken_at, TakenAtSource.FILESYSTEM
+
+    def _get_gps_info(
+        self, tags: dict
+    ) -> tuple[Optional[float], Optional[float], Optional[float]]:
+        """Extract GPS latitude, longitude, and altitude from EXIF tags."""
+        gps_lat = None
+        gps_lon = None
+        gps_altitude = None
+
+        lat_tag = tags.get("GPS GPSLatitude")
+        lat_ref = str(tags.get("GPS GPSLatitudeRef", "N"))
+        lon_tag = tags.get("GPS GPSLongitude")
+        lon_ref = str(tags.get("GPS GPSLongitudeRef", "E"))
+
+        if lat_tag and lon_tag:
+            gps_lat = _dms_to_decimal(lat_tag.values, lat_ref)
+            gps_lon = _dms_to_decimal(lon_tag.values, lon_ref)
+
+        alt_tag = tags.get("GPS GPSAltitude")
+        alt_ref_tag = tags.get("GPS GPSAltitudeRef")
+        if alt_tag:
+            try:
+                alt_val = float(alt_tag.values[0].num) / float(alt_tag.values[0].den)
+                if alt_ref_tag and str(alt_ref_tag) == "1":
+                    alt_val = -alt_val
+                gps_altitude = alt_val
+            except Exception:
+                pass
+
+        return gps_lat, gps_lon, gps_altitude
+
+    def _get_camera_and_image_info(
+        self, tags: dict
+    ) -> tuple[str | None, str | None, int]:
+        """Extract camera make, model, and image orientation."""
+        camera_make = str(tags["Image Make"]) if "Image Make" in tags else None
+        camera_model = str(tags["Image Model"]) if "Image Model" in tags else None
+
+        orientation = 1
+        if "Image Orientation" in tags:
+            try:
+                orientation = int(tags["Image Orientation"].values[0])
+            except (ValueError, TypeError, AttributeError):
+                pass
+        return camera_make, camera_model, orientation
+
     def _extract_exif_metadata(self, path: Path, image_id: int, session) -> None:
         """Extract EXIF metadata from an image file and persist it to image_metadata."""
         try:
@@ -176,60 +240,11 @@ class IndexingTask(QtCore.QObject):
             with open(path, "rb") as f:
                 tags = exifread.process_file(f, details=False)
 
-            taken_at: Optional[datetime] = None
-            taken_at_source = TakenAtSource.FILESYSTEM
-            for tag_key in (
-                "EXIF DateTimeOriginal",
-                "EXIF DateTimeDigitized",
-                "Image DateTime",
-            ):
-                if tag_key in tags:
-                    try:
-                        taken_at = datetime.strptime(
-                            str(tags[tag_key]), "%Y:%m:%d %H:%M:%S"
-                        )
-                        taken_at_source = TakenAtSource.EXIF
-                        break
-                    except ValueError:
-                        continue
-
-            if taken_at is None:
-                taken_at = datetime.fromtimestamp(path.stat().st_mtime)
-
-            gps_lat: Optional[float] = None
-            gps_lon: Optional[float] = None
-            gps_altitude: Optional[float] = None
-
-            lat_tag = tags.get("GPS GPSLatitude")
-            lat_ref = str(tags.get("GPS GPSLatitudeRef", "N"))
-            lon_tag = tags.get("GPS GPSLongitude")
-            lon_ref = str(tags.get("GPS GPSLongitudeRef", "E"))
-            if lat_tag and lon_tag:
-                gps_lat = _dms_to_decimal(lat_tag.values, lat_ref)
-                gps_lon = _dms_to_decimal(lon_tag.values, lon_ref)
-
-            alt_tag = tags.get("GPS GPSAltitude")
-            alt_ref_tag = tags.get("GPS GPSAltitudeRef")
-            if alt_tag:
-                try:
-                    alt_val = float(alt_tag.values[0].num) / float(
-                        alt_tag.values[0].den
-                    )
-                    if alt_ref_tag and str(alt_ref_tag) == "1":
-                        alt_val = -alt_val
-                    gps_altitude = alt_val
-                except Exception:
-                    pass
-
-            camera_make = str(tags["Image Make"]) if "Image Make" in tags else None
-            camera_model = str(tags["Image Model"]) if "Image Model" in tags else None
-
-            orientation = 1
-            if "Image Orientation" in tags:
-                try:
-                    orientation = int(tags["Image Orientation"].values[0])
-                except (ValueError, TypeError, AttributeError):
-                    pass
+            taken_at, taken_at_source = self._get_taken_at(tags, path)
+            gps_lat, gps_lon, gps_altitude = self._get_gps_info(tags)
+            camera_make, camera_model, orientation = self._get_camera_and_image_info(
+                tags
+            )
 
             metadata = ImageMetadata(
                 image_id=image_id,
