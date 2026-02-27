@@ -469,16 +469,16 @@ def test_update_indexing_status_formats_label_and_reloads(tmp_path, qtbot, monke
 
 
 def test_switch_page_to_label_refreshes_labelling_page(tmp_path, qtbot, monkeypatch):
-    """_switch_page(1) calls labelling_page.refresh()."""
+    """_switch_page(3) calls labelling_page.refresh()."""
     window = _make_window(tmp_path, qtbot)
     refreshed: list[bool] = []
     monkeypatch.setattr(
         window.labelling_page, "refresh", lambda: refreshed.append(True)
     )
 
-    window._switch_page(1)
+    window._switch_page(3)
 
-    assert window.stacked.currentIndex() == 1
+    assert window.stacked.currentIndex() == 3
     assert len(refreshed) == 1
 
 
@@ -488,7 +488,7 @@ def test_switch_page_to_label_refreshes_labelling_page(tmp_path, qtbot, monkeypa
 
 
 def test_go_to_labelling_navigates_and_passes_priority(tmp_path, qtbot, monkeypatch):
-    """go_to_labelling switches to page 1 and forwards the image id."""
+    """go_to_labelling switches to page 3 and forwards the image id."""
     window = _make_window(tmp_path, qtbot)
     refreshed_with: list[int | None] = []
     monkeypatch.setattr(
@@ -499,8 +499,8 @@ def test_go_to_labelling_navigates_and_passes_priority(tmp_path, qtbot, monkeypa
 
     window.go_to_labelling(42)
 
-    assert window.stacked.currentIndex() == 1
-    assert window.btn_label.font().bold()
+    assert window.stacked.currentIndex() == 3
+    assert window.btn_label.isChecked()
     assert refreshed_with == [42]
 
 

@@ -112,42 +112,67 @@ class MainWindow(QtWidgets.QMainWindow):
         self.persons_page = PersonsPage(self.session_factory, self.paths)
         self.browse_page = BrowsePage(self.session_factory, self.paths, self.settings)
 
-        # Stacked widget holding the pages
+        # Stacked widget holding the pages (Search=0, Browse=1, Persons=2, Labelling=3)
         self.stacked = QtWidgets.QStackedWidget()
-        self.stacked.addWidget(self.library_page)  # index 0
-        self.stacked.addWidget(self.labelling_page)  # index 1
+        self.stacked.addWidget(self.library_page)  # index 0 (Search)
+        self.stacked.addWidget(self.browse_page)  # index 1
         self.stacked.addWidget(self.persons_page)  # index 2
-        self.stacked.addWidget(self.browse_page)  # index 3
+        self.stacked.addWidget(self.labelling_page)  # index 3
 
         # Sidebar navigation buttons
-        self.btn_library = QtWidgets.QPushButton(self.tr("Library"))
-        self.btn_library.setFlat(True)
-        self.btn_library.clicked.connect(lambda: self._switch_page(0))
+        self.btn_search = self._make_nav_button(self.tr("Search"), "search.svg")
+        self.btn_search.clicked.connect(lambda: self._switch_page(0))
 
-        self.btn_label = QtWidgets.QPushButton(self.tr("Label"))
-        self.btn_label.setFlat(True)
-        self.btn_label.clicked.connect(lambda: self._switch_page(1))
+        self.btn_browse = self._make_nav_button(self.tr("Browse"), "browse.svg")
+        self.btn_browse.clicked.connect(lambda: self._switch_page(1))
 
-        self.btn_persons = QtWidgets.QPushButton(self.tr("Persons"))
-        self.btn_persons.setFlat(True)
+        self.btn_persons = self._make_nav_button(self.tr("Persons"), "person.svg")
         self.btn_persons.clicked.connect(lambda: self._switch_page(2))
 
-        self.btn_browse = QtWidgets.QPushButton(self.tr("Browse"))
-        self.btn_browse.setFlat(True)
-        self.btn_browse.clicked.connect(lambda: self._switch_page(3))
+        self.btn_label = self._make_nav_button(self.tr("Labelling"), "label.svg")
+        self.btn_label.clicked.connect(lambda: self._switch_page(3))
+
+        nav_group = QtWidgets.QButtonGroup(self)
+        nav_group.setExclusive(True)
+        for _btn in [
+            self.btn_search,
+            self.btn_browse,
+            self.btn_persons,
+            self.btn_label,
+        ]:
+            nav_group.addButton(_btn)
 
         sidebar_layout = QtWidgets.QVBoxLayout()
         sidebar_layout.setContentsMargins(4, 8, 4, 8)
         sidebar_layout.setSpacing(4)
-        sidebar_layout.addWidget(self.btn_library)
-        sidebar_layout.addWidget(self.btn_label)
-        sidebar_layout.addWidget(self.btn_persons)
+        sidebar_layout.addWidget(self.btn_search)
         sidebar_layout.addWidget(self.btn_browse)
+        sidebar_layout.addWidget(self.btn_persons)
+        sidebar_layout.addWidget(self.btn_label)
         sidebar_layout.addStretch()
 
         sidebar = QtWidgets.QWidget()
         sidebar.setFixedWidth(110)
+        sidebar.setStyleSheet("""
+            QToolButton {
+                border: none;
+                border-radius: 4px;
+                padding: 8px 4px;
+            }
+            QToolButton:checked {
+                background-color: palette(highlight);
+                color: palette(highlighted-text);
+            }
+            QToolButton:hover:!checked {
+                background-color: palette(mid);
+            }
+            """)
         sidebar.setLayout(sidebar_layout)
+
+        # Vertical separator between sidebar and content
+        separator = QtWidgets.QFrame()
+        separator.setFrameShape(QtWidgets.QFrame.Shape.VLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
 
         # Assemble central widget
         central = QtWidgets.QWidget()
@@ -155,10 +180,11 @@ class MainWindow(QtWidgets.QMainWindow):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
         central_layout.addWidget(sidebar)
+        central_layout.addWidget(separator)
         central_layout.addWidget(self.stacked)
         self.setCentralWidget(central)
 
-        # Start on Library page
+        # Start on Search page
         self._switch_page(0)
 
         # Create menu bar
@@ -313,29 +339,41 @@ class MainWindow(QtWidgets.QMainWindow):
         self._update_db_counts()
         self.library_page.load_images()
 
+    def _make_nav_button(self, label: str, icon_name: str) -> QtWidgets.QToolButton:
+        """Create a checkable sidebar navigation button with an icon and label."""
+        btn = QtWidgets.QToolButton()
+        btn.setText(label)
+        btn.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon)
+        btn.setIconSize(QtCore.QSize(28, 28))
+        btn.setCheckable(True)
+        btn.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        icon_path = get_resource_path(f"assets/icons/{icon_name}")
+        if os.path.exists(icon_path):
+            btn.setIcon(QtGui.QIcon(icon_path))
+        return btn
+
     def _switch_page(self, index: int) -> None:
         """Switch to the given page index and highlight the active sidebar button."""
-        buttons = [self.btn_library, self.btn_label, self.btn_persons, self.btn_browse]
+        buttons = [self.btn_search, self.btn_browse, self.btn_persons, self.btn_label]
         for i, btn in enumerate(buttons):
-            font = btn.font()
-            font.setBold(i == index)
-            btn.setFont(font)
+            btn.setChecked(i == index)
         self.stacked.setCurrentIndex(index)
         if index == 1:
-            self.labelling_page.refresh()
+            self.browse_page.refresh()
         elif index == 2:
             self.persons_page.refresh()
         elif index == 3:
-            self.browse_page.refresh()
+            self.labelling_page.refresh()
 
     def go_to_labelling(self, priority_image_id: int) -> None:
         """Navigate to the Labelling page, prioritising faces from the given image."""
-        buttons = [self.btn_library, self.btn_label, self.btn_persons, self.btn_browse]
+        buttons = [self.btn_search, self.btn_browse, self.btn_persons, self.btn_label]
         for i, btn in enumerate(buttons):
-            font = btn.font()
-            font.setBold(i == 1)
-            btn.setFont(font)
-        self.stacked.setCurrentIndex(1)
+            btn.setChecked(i == 3)
+        self.stacked.setCurrentIndex(3)
         self.labelling_page.refresh(priority_image_id=priority_image_id)
 
     def _create_menus(self):

@@ -251,11 +251,11 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
         <translation>PhotoAIdent</translation>
     </message>
     <message>
-        <source>Library</source>
-        <translation>Bibliothek</translation>
+        <source>Search</source>
+        <translation>Suchen</translation>
     </message>
     <message>
-        <source>Label</source>
+        <source>Labelling</source>
         <translation>Beschriften</translation>
     </message>
     <message>

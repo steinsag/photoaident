@@ -251,12 +251,12 @@ Please close it before starting a new one.</translation>
         <translation>PhotoAIdent</translation>
     </message>
     <message>
-        <source>Library</source>
-        <translation>Library</translation>
+        <source>Search</source>
+        <translation>Search</translation>
     </message>
     <message>
-        <source>Label</source>
-        <translation>Label</translation>
+        <source>Labelling</source>
+        <translation>Labelling</translation>
     </message>
     <message>
         <source>Persons</source>
