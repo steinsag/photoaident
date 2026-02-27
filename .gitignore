@@ -93,7 +93,8 @@ logs/
 
 # AppImage building
 AppDir/
-PhotoAIdent-*-x86_64.AppImage
+linuxdeploy-*
+PhotoAIdent*.AppImage
 
 # Compiled translations
 assets/translations/*.qm

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=PhotoAIdent
+Exec=photoaident
+Icon=app-512
+Categories=Graphics;
+Comment=A local, privacy-first application for AI-powered face recognition and photo search.
+Terminal=false

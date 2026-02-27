@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+    <id>io.github.steinsag.photoaident</id>
+    <metadata_license>CC0-1.0</metadata_license>
+    <project_license>Apache-2.0</project_license>
+    <name>PhotoAIdent</name>
+    <summary>Local, privacy-first application for AI-powered face recognition and photo search</summary>
+    <description>
+        <p>PhotoAIdent is a local, privacy-first desktop application for AI-powered face recognition and photo search.
+        </p>
+    </description>
+    <developer id="io.github.steinsag">
+        <name>Sebastian Stein</name>
+        <email>seb.kde@hpfsc.de</email>
+    </developer>
+    <launchable type="desktop-id">io.github.steinsag.photoaident.desktop</launchable>
+    <url type="homepage">https://github.com/steinsag/photoaident</url>
+    <screenshots>
+        <screenshot type="default">
+            <image>https://raw.githubusercontent.com/steinsag/photoaident/refs/heads/main/assets/screenshot.png</image>
+        </screenshot>
+    </screenshots>
+    <content_rating type="oars-1.1"/>
+    <provides>
+        <id>io.github.steinsag.photoaident.desktop</id>
+    </provides>
+</component>
