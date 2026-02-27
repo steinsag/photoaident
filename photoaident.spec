@@ -32,6 +32,7 @@ a = Analysis(
         "onnxruntime.capi._pybind_state",
         "faiss",
         "sqlalchemy.dialects.sqlite",
+        "PySide6.QtDBus",  # used by _reveal_in_file_manager on Linux
     ],
     hookspath=[],
     hooksconfig={},
