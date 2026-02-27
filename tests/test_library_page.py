@@ -1,11 +1,8 @@
 """Tests for LibraryPage: collapsible person filter panel, image selection."""
 
-from unittest.mock import patch
-
 import numpy as np
 import pytest
-from PySide6 import QtCore, QtWidgets
-from sqlalchemy import create_engine
+from PySide6 import QtCore
 
 from photoaident.db.database import (
     EmbeddingCluster,
@@ -72,24 +69,6 @@ def _add_image_with_metadata(session_factory, file_path="/meta.jpg"):
         session.add(meta)
         session.commit()
         return img.id
-
-
-def _add_face(session_factory, image_id, faiss_id=0, state=FaceState.UNIDENTIFIED):
-    with session_factory() as session:
-        face = Face(
-            image_id=image_id,
-            faiss_id=faiss_id,
-            bbox_x=0,
-            bbox_y=0,
-            bbox_w=50,
-            bbox_h=50,
-            detection_confidence=0.9,
-            state=state,
-            model_version="test",
-        )
-        session.add(face)
-        session.commit()
-        return face.id
 
 
 def _add_person_with_face(session_factory, vs, name, file_path):
@@ -559,30 +538,3 @@ def test_button_text_resets_after_deselect_all(qtbot, session_factory, test_path
 
     page._deselect_all()
     assert page.person_filter_btn.text() == page.tr("Filter by Person")
-
-
-# --- _on_image_selected ---
-
-
-def test_on_image_selected_opens_dialog(qtbot, session_factory, test_paths):
-    img_id = _add_image(session_factory, "/sel.jpg")
-
-    page = LibraryPage(session_factory, test_paths)
-    qtbot.addWidget(page)
-
-    with patch("photoaident.ui.pages.library.ImageDetailDialog") as MockDlg:
-        MockDlg.return_value.exec.return_value = None
-        page._on_image_selected(img_id)
-        MockDlg.assert_called_once()
-        MockDlg.return_value.exec.assert_called_once()
-
-
-def test_on_image_selected_nonexistent_id_skips_dialog(
-    qtbot, session_factory, test_paths
-):
-    page = LibraryPage(session_factory, test_paths)
-    qtbot.addWidget(page)
-
-    with patch("photoaident.ui.pages.library.ImageDetailDialog") as MockDlg:
-        page._on_image_selected(99999)
-        MockDlg.assert_not_called()

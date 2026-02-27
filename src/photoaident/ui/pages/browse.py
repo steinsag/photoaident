@@ -62,7 +62,8 @@ class BrowsePage(QtWidgets.QWidget):
         splitter.addWidget(self._scroll_area)
 
         # Bottom: thumbnail grid
-        self.grid = ThumbnailGrid()
+        self.grid = ThumbnailGrid(self.session_factory)
+        self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
         splitter.addWidget(self.grid)
 
         splitter.setStretchFactor(0, 0)
@@ -214,6 +215,13 @@ class BrowsePage(QtWidgets.QWidget):
             images = session.scalars(stmt).all()
             direct = [img for img in images if Path(img.file_path).parent == folder]
             self.grid.set_results(self._build_images_data(direct))
+
+    def _on_navigate_to_labelling(self, image_id: int) -> None:
+        from photoaident.app import MainWindow  # local import breaks circular dep
+
+        main = self.window()
+        if isinstance(main, MainWindow):
+            main.go_to_labelling(image_id)
 
     def _build_images_data(self, images: list) -> list:
         """Build (image_id, file_path, thumb_path) tuples for ThumbnailGrid."""

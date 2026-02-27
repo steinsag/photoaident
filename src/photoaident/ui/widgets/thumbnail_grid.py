@@ -1,9 +1,17 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import shiboken6
 from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
+from photoaident.db.database import Image
+from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.utils.image_utils import generate_thumbnail
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import sessionmaker
 
 PAGE_SIZE = 30
 _SCROLL_LOAD_MARGIN = 200  # px from bottom triggers load
@@ -93,11 +101,13 @@ class ThumbnailGrid(QtWidgets.QWidget):
     """A scrollable grid of thumbnails with infinite scroll."""
 
     image_selected = QtCore.Signal(int)
+    navigate_to_labelling = QtCore.Signal(int)
     results_changed = QtCore.Signal(int)  # total result count, emitted on set_results()
     page_loaded = QtCore.Signal(int, int)  # (loaded_so_far, total)
 
-    def __init__(self, parent=None):
+    def __init__(self, session_factory: "sessionmaker | None" = None, parent=None):
         super().__init__(parent)
+        self._session_factory = session_factory
 
         self.main_layout = QtWidgets.QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -129,6 +139,23 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.scroll_area.verticalScrollBar().valueChanged.connect(
             self._on_scroll_changed
         )
+
+        self.image_selected.connect(self._on_image_selected)
+
+    def _on_image_selected(self, image_id: int) -> None:
+        if self._session_factory is None:
+            return
+        with self._session_factory() as session:
+            stmt = (
+                select(Image)
+                .where(Image.id == image_id)
+                .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
+            )
+            image = session.execute(stmt).unique().scalar_one_or_none()
+            if image:
+                dialog = ImageDetailDialog(image, self)
+                dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
+                dialog.exec()
 
     def clear(self):
         self._hint_label.hide()

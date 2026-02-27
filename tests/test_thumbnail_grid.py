@@ -1,7 +1,12 @@
+from unittest.mock import patch
+
 import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore
 
+from photoaident.db.database import Image as DBImage, get_engine, get_session_factory
+from photoaident.db.migrate import apply_migrations
+from photoaident.paths import AppPaths
 from photoaident.ui.widgets.thumbnail_grid import (
     PAGE_SIZE,
     ThumbnailGrid,
@@ -274,3 +279,93 @@ def test_scroll_triggers_load_more(qtbot, sample_image, tmp_path):
     grid._on_scroll_changed(grid.scroll_area.verticalScrollBar().maximum())
 
     assert grid._loaded_count == initial_count + PAGE_SIZE
+
+
+# --- image detail dialog tests ---
+
+
+def _make_session_factory(tmp_path):
+    paths = AppPaths(
+        base_data=tmp_path / "data",
+        base_cache=tmp_path / "cache",
+        base_config=tmp_path / "config",
+    )
+    paths.ensure_dirs()
+    apply_migrations(f"sqlite:///{paths.db_path}")
+    engine = get_engine(str(paths.db_path))
+    return get_session_factory(engine)
+
+
+def test_on_image_selected_opens_dialog(qtbot, tmp_path):
+    """Clicking a thumbnail opens ImageDetailDialog."""
+    session_factory = _make_session_factory(tmp_path)
+
+    with session_factory() as session:
+        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=100)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    grid = ThumbnailGrid(session_factory)
+    qtbot.addWidget(grid)
+
+    with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
+        MockDlg.return_value.exec.return_value = None
+        grid._on_image_selected(img_id)
+        MockDlg.assert_called_once()
+        MockDlg.return_value.exec.assert_called_once()
+
+
+def test_on_image_selected_nonexistent_id_skips_dialog(qtbot, tmp_path):
+    """Selecting a non-existent image id does not open the dialog."""
+    session_factory = _make_session_factory(tmp_path)
+    grid = ThumbnailGrid(session_factory)
+    qtbot.addWidget(grid)
+
+    with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
+        grid._on_image_selected(99999)
+        MockDlg.assert_not_called()
+
+
+def test_on_image_selected_without_session_factory_is_noop(qtbot):
+    """Without a session_factory, clicking a thumbnail does nothing."""
+    grid = ThumbnailGrid()
+    qtbot.addWidget(grid)
+
+    with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
+        grid._on_image_selected(1)
+        MockDlg.assert_not_called()
+
+
+def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_path):
+    """navigate_to_labelling from ImageDetailDialog is forwarded by the grid."""
+    session_factory = _make_session_factory(tmp_path)
+
+    with session_factory() as session:
+        img = DBImage(file_path=str(tmp_path / "nav.jpg"), file_size=100)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    grid = ThumbnailGrid(session_factory)
+    qtbot.addWidget(grid)
+
+    received: list[int] = []
+    grid.navigate_to_labelling.connect(received.append)
+
+    with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
+        MockDlg.return_value.exec.return_value = None
+        # Capture the slot connected to navigate_to_labelling
+        connected_slot = None
+
+        def capture_connect(slot):
+            nonlocal connected_slot
+            connected_slot = slot
+
+        MockDlg.return_value.navigate_to_labelling.connect.side_effect = capture_connect
+        grid._on_image_selected(img_id)
+
+        assert connected_slot is not None
+        connected_slot(img_id)
+
+    assert received == [img_id]

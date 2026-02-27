@@ -2,11 +2,9 @@ from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
-from sqlalchemy.orm import joinedload
 
 from photoaident.core.search import find_images_by_person
 from photoaident.db.database import Image, Person
-from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
 if TYPE_CHECKING:
@@ -68,8 +66,8 @@ class LibraryPage(QtWidgets.QWidget):
         layout.addWidget(self.filter_panel)
 
         # Image grid
-        self.grid = ThumbnailGrid()
-        self.grid.image_selected.connect(self._on_image_selected)
+        self.grid = ThumbnailGrid(self.session_factory)
+        self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
         layout.addWidget(self.grid)
 
         self._populate_person_list()
@@ -204,20 +202,6 @@ class LibraryPage(QtWidgets.QWidget):
             image_map = {img.id: img for img in images}
             ordered_images = [image_map[i] for i in ordered_ids if i in image_map]
             self.grid.set_results(self._build_images_data(ordered_images))
-
-    def _on_image_selected(self, image_id: int) -> None:
-        with self.session_factory() as session:
-            stmt = (
-                select(Image)
-                .where(Image.id == image_id)
-                .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
-            )
-            image = session.execute(stmt).unique().scalar_one_or_none()
-
-            if image:
-                dialog = ImageDetailDialog(image, self)
-                dialog.navigate_to_labelling.connect(self._on_navigate_to_labelling)
-                dialog.exec()
 
     def _on_navigate_to_labelling(self, image_id: int) -> None:
         from photoaident.app import MainWindow  # local import breaks circular dep
