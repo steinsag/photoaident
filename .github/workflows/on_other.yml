@@ -1,0 +1,12 @@
+name: CI (branches)
+
+on:
+  push:
+    branches:
+      - feature/**
+      - bugfix/**
+
+jobs:
+  build-and-test:
+    if: ${{ github.actor != 'dependabot[bot]' }}
+    uses: ./.github/workflows/job_ci.yml
