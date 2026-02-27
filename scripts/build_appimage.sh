@@ -4,7 +4,7 @@ set -e
 echo "→ Building AppImage..."
 
 export LDAI_OUTPUT="PhotoAIdent-x86_64.AppImage"
-export LINUXDEPLOY_OUTPUT_VERSION="1.0.0"
+export LINUXDEPLOY_OUTPUT_VERSION="$(uv run python -c 'from importlib.metadata import version; print(version("photoaident"))')"
 
 rm -rf AppDir
 mkdir -p AppDir/usr/bin
