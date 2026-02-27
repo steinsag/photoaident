@@ -92,6 +92,13 @@
     </message>
 </context>
 <context>
+    <name>BrowsePage</name>
+    <message>
+        <source>No photo collection configured.</source>
+        <translation>No photo collection configured.</translation>
+    </message>
+</context>
+<context>
     <name>FaceCropWidget</name>
     <message>
         <source>No image</source>
@@ -254,6 +261,10 @@ Please close it before starting a new one.</translation>
     <message>
         <source>Persons</source>
         <translation>Persons</translation>
+    </message>
+    <message>
+        <source>Browse</source>
+        <translation>Browse</translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent</source>

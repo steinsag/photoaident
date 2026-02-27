@@ -17,6 +17,7 @@ from photoaident.db.database import (
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
 from photoaident.ui.about_dialog import AboutDialog
+from photoaident.ui.pages.browse import BrowsePage
 from photoaident.ui.pages.labelling import LabellingPage
 from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.pages.persons import PersonsPage
@@ -109,12 +110,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self.session_factory, self.paths, self.vector_store
         )
         self.persons_page = PersonsPage(self.session_factory, self.paths)
+        self.browse_page = BrowsePage(self.session_factory, self.paths, self.settings)
 
         # Stacked widget holding the pages
         self.stacked = QtWidgets.QStackedWidget()
         self.stacked.addWidget(self.library_page)  # index 0
         self.stacked.addWidget(self.labelling_page)  # index 1
         self.stacked.addWidget(self.persons_page)  # index 2
+        self.stacked.addWidget(self.browse_page)  # index 3
 
         # Sidebar navigation buttons
         self.btn_library = QtWidgets.QPushButton(self.tr("Library"))
@@ -129,12 +132,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.btn_persons.setFlat(True)
         self.btn_persons.clicked.connect(lambda: self._switch_page(2))
 
+        self.btn_browse = QtWidgets.QPushButton(self.tr("Browse"))
+        self.btn_browse.setFlat(True)
+        self.btn_browse.clicked.connect(lambda: self._switch_page(3))
+
         sidebar_layout = QtWidgets.QVBoxLayout()
         sidebar_layout.setContentsMargins(4, 8, 4, 8)
         sidebar_layout.setSpacing(4)
         sidebar_layout.addWidget(self.btn_library)
         sidebar_layout.addWidget(self.btn_label)
         sidebar_layout.addWidget(self.btn_persons)
+        sidebar_layout.addWidget(self.btn_browse)
         sidebar_layout.addStretch()
 
         sidebar = QtWidgets.QWidget()
@@ -307,7 +315,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _switch_page(self, index: int) -> None:
         """Switch to the given page index and highlight the active sidebar button."""
-        buttons = [self.btn_library, self.btn_label, self.btn_persons]
+        buttons = [self.btn_library, self.btn_label, self.btn_persons, self.btn_browse]
         for i, btn in enumerate(buttons):
             font = btn.font()
             font.setBold(i == index)
@@ -317,10 +325,12 @@ class MainWindow(QtWidgets.QMainWindow):
             self.labelling_page.refresh()
         elif index == 2:
             self.persons_page.refresh()
+        elif index == 3:
+            self.browse_page.refresh()
 
     def go_to_labelling(self, priority_image_id: int) -> None:
         """Navigate to the Labelling page, prioritising faces from the given image."""
-        buttons = [self.btn_library, self.btn_label, self.btn_persons]
+        buttons = [self.btn_library, self.btn_label, self.btn_persons, self.btn_browse]
         for i, btn in enumerate(buttons):
             font = btn.font()
             font.setBold(i == 1)
