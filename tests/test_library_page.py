@@ -1,17 +1,15 @@
-"""Tests for LibraryPage: collapsible person filter panel, image selection."""
+"""Tests for LibraryPage: persistent right-column person filter, image selection."""
 
 import numpy as np
 import pytest
-from PySide6 import QtCore
+from PySide6 import QtWidgets
 
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
     FaceState,
     Image,
-    ImageMetadata,
     Person,
-    TakenAtSource,
     get_engine,
     get_session_factory,
 )
@@ -55,22 +53,6 @@ def _add_image(
         return img.id
 
 
-def _add_image_with_metadata(session_factory, file_path="/meta.jpg"):
-    with session_factory() as session:
-        img = Image(file_path=file_path, file_size=2000, file_hash="hashwithmeta")
-        session.add(img)
-        session.flush()
-        meta = ImageMetadata(
-            image_id=img.id,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=800,
-            height=600,
-        )
-        session.add(meta)
-        session.commit()
-        return img.id
-
-
 def _add_person_with_face(session_factory, vs, name, file_path):
     """Add person+cluster, image, and identified face. Return (person_id, image_id)."""
     with session_factory() as session:
@@ -109,51 +91,19 @@ def _add_person_with_face(session_factory, vs, name, file_path):
         return person_id, img.id
 
 
-# --- Filter button state ---
+# --- Filter panel always visible ---
 
 
-def test_person_filter_btn_disabled_when_no_persons(qtbot, session_factory, test_paths):
+def test_filter_panel_always_visible(qtbot, session_factory, test_paths):
     page = LibraryPage(session_factory, test_paths)
     qtbot.addWidget(page)
-    assert not page.person_filter_btn.isEnabled()
-
-
-def test_person_filter_btn_enabled_when_persons_exist(
-    qtbot, session_factory, test_paths
-):
-    with session_factory() as session:
-        session.add(Person(name="Alice"))
-        session.commit()
-
-    page = LibraryPage(session_factory, test_paths)
-    qtbot.addWidget(page)
-    assert page.person_filter_btn.isEnabled()
-
-
-# --- Filter panel visibility ---
-
-
-def test_filter_panel_hidden_initially(qtbot, session_factory, test_paths):
-    page = LibraryPage(session_factory, test_paths)
-    qtbot.addWidget(page)
-    assert page.filter_panel.isHidden()
-
-
-def test_filter_panel_shows_when_button_checked(qtbot, session_factory, test_paths):
-    with session_factory() as session:
-        session.add(Person(name="Alice"))
-        session.commit()
-
-    page = LibraryPage(session_factory, test_paths)
-    qtbot.addWidget(page)
-    page.person_filter_btn.setChecked(True)
     assert not page.filter_panel.isHidden()
 
 
 # --- Person list structure ---
 
 
-def test_person_list_items_are_checkable(qtbot, session_factory, test_paths):
+def test_person_list_items_are_selectable(qtbot, session_factory, test_paths):
     with session_factory() as session:
         session.add(Person(name="Bob"))
         session.commit()
@@ -162,22 +112,10 @@ def test_person_list_items_are_checkable(qtbot, session_factory, test_paths):
     qtbot.addWidget(page)
 
     assert page.person_list_widget.count() == 1
-    item = page.person_list_widget.item(0)
-    assert item is not None
-    assert item.flags() & QtCore.Qt.ItemFlag.ItemIsUserCheckable
-
-
-def test_person_list_unchecked_by_default(qtbot, session_factory, test_paths):
-    with session_factory() as session:
-        session.add(Person(name="Carol"))
-        session.commit()
-
-    page = LibraryPage(session_factory, test_paths)
-    qtbot.addWidget(page)
-
-    item = page.person_list_widget.item(0)
-    assert item is not None
-    assert item.checkState() == QtCore.Qt.CheckState.Unchecked
+    assert (
+        page.person_list_widget.selectionMode()
+        == QtWidgets.QAbstractItemView.SelectionMode.MultiSelection
+    )
 
 
 # --- Search filter ---
@@ -218,7 +156,17 @@ def test_search_filter_case_insensitive(qtbot, session_factory, test_paths):
     assert not item.isHidden()
 
 
-# --- load_images: no selection → show all ---
+# --- load_images: no selection → empty grid ---
+
+
+def test_no_person_selected_shows_empty_grid(qtbot, session_factory, test_paths):
+    _add_image(session_factory, "/img1.jpg", file_hash="h1")
+    _add_image(session_factory, "/img2.jpg", file_hash="h2")
+
+    page = LibraryPage(session_factory, test_paths)
+    qtbot.addWidget(page)
+
+    assert len(page.grid.thumbnails) == 0
 
 
 def test_no_person_checked_shows_all_images(qtbot, session_factory, test_paths):
@@ -228,7 +176,7 @@ def test_no_person_checked_shows_all_images(qtbot, session_factory, test_paths):
     page = LibraryPage(session_factory, test_paths)
     qtbot.addWidget(page)
 
-    assert len(page.grid.thumbnails) == 2
+    assert len(page.grid.thumbnails) == 0
 
 
 def test_no_person_checked_with_images_in_db(qtbot, session_factory, test_paths):
@@ -238,7 +186,7 @@ def test_no_person_checked_with_images_in_db(qtbot, session_factory, test_paths)
     page = LibraryPage(session_factory, test_paths)
     qtbot.addWidget(page)
 
-    assert len(page.grid.thumbnails) == 5
+    assert len(page.grid.thumbnails) == 0
 
 
 def test_image_without_hash_uses_unknown_thumb(qtbot, session_factory, test_paths):
@@ -250,19 +198,23 @@ def test_image_without_hash_uses_unknown_thumb(qtbot, session_factory, test_path
     page = LibraryPage(session_factory, test_paths)
     qtbot.addWidget(page)
 
-    assert len(page.grid.thumbnails) == 1
-    assert page.grid.thumbnails[0].thumb_path.name == "unknown.jpg"
+    # No person selected → empty grid
+    assert len(page.grid.thumbnails) == 0
 
 
-def test_image_with_metadata_appears_in_grid(qtbot, session_factory, test_paths):
-    """An image with metadata is loaded into the grid with the correct thumb_path."""
-    _add_image_with_metadata(session_factory, "/meta.jpg")
+def test_image_with_metadata_appears_in_grid(qtbot, session_factory, test_paths, vs):
+    """An image containing a selected person appears in the grid."""
+    _add_person_with_face(session_factory, vs, "Meta", "/meta.jpg")
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, test_paths, vs)
     qtbot.addWidget(page)
 
+    item = page.person_list_widget.item(0)
+    assert item is not None
+    item.setSelected(True)
+
     assert len(page.grid.thumbnails) == 1
-    assert page.grid.thumbnails[0].thumb_path.name == "hashwithmeta.jpg"
+    assert page.grid.thumbnails[0].thumb_path.name == "meta.jpg.jpg"
 
 
 # --- load_images: person filter ---
@@ -276,8 +228,7 @@ def test_select_one_person_shows_matched_images(qtbot, session_factory, test_pat
 
     item = page.person_list_widget.item(0)
     assert item is not None
-    page.person_list_widget.blockSignals(False)
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
+    item.setSelected(True)
 
     assert len(page.grid.thumbnails) >= 1
 
@@ -297,8 +248,7 @@ def test_select_person_with_no_faces_shows_empty(
 
     item = page.person_list_widget.item(0)
     assert item is not None
-    page.person_list_widget.blockSignals(False)
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
+    item.setSelected(True)
 
     assert len(page.grid.thumbnails) == 0
 
@@ -371,7 +321,7 @@ def test_select_multiple_persons_intersects_results(
     for i in range(page.person_list_widget.count()):
         item = page.person_list_widget.item(i)
         assert item is not None
-        item.setCheckState(QtCore.Qt.CheckState.Checked)
+        item.setSelected(True)
     page.person_list_widget.blockSignals(False)
     page.load_images()
 
@@ -447,7 +397,7 @@ def test_select_multiple_persons_shows_shared_image(
     for i in range(page.person_list_widget.count()):
         item = page.person_list_widget.item(i)
         assert item is not None
-        item.setCheckState(QtCore.Qt.CheckState.Checked)
+        item.setSelected(True)
     page.person_list_widget.blockSignals(False)
     page.load_images()
 
@@ -471,70 +421,6 @@ def test_person_filter_without_vector_store_falls_back_to_all(
 
     item = page.person_list_widget.item(0)
     assert item is not None
-    page.person_list_widget.blockSignals(False)
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
+    item.setSelected(True)
 
     assert len(page.grid.thumbnails) == 2
-
-
-# --- Deselect All ---
-
-
-def test_deselect_all_clears_selection_and_shows_all(
-    qtbot, session_factory, test_paths, vs
-):
-    _add_person_with_face(session_factory, vs, "Alice", "/alice.jpg")
-    _add_image(session_factory, "/extra.jpg", file_hash="extra")
-
-    page = LibraryPage(session_factory, test_paths, vs)
-    qtbot.addWidget(page)
-
-    # Select Alice
-    page.person_list_widget.blockSignals(True)
-    item = page.person_list_widget.item(0)
-    assert item is not None
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
-    page.person_list_widget.blockSignals(False)
-    page.load_images()
-
-    # Deselect all → should show all images
-    page._deselect_all()
-    assert len(page.grid.thumbnails) == 2
-
-
-# --- Button text ---
-
-
-def test_button_text_updates_when_person_selected(
-    qtbot, session_factory, test_paths, vs
-):
-    _add_person_with_face(session_factory, vs, "Alice", "/alice.jpg")
-
-    page = LibraryPage(session_factory, test_paths, vs)
-    qtbot.addWidget(page)
-
-    page.person_list_widget.blockSignals(True)
-    item = page.person_list_widget.item(0)
-    assert item is not None
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
-    page.person_list_widget.blockSignals(False)
-    page._update_button_text()
-
-    assert "1" in page.person_filter_btn.text()
-
-
-def test_button_text_resets_after_deselect_all(qtbot, session_factory, test_paths, vs):
-    _add_person_with_face(session_factory, vs, "Alice", "/alice.jpg")
-
-    page = LibraryPage(session_factory, test_paths, vs)
-    qtbot.addWidget(page)
-
-    page.person_list_widget.blockSignals(True)
-    item = page.person_list_widget.item(0)
-    assert item is not None
-    item.setCheckState(QtCore.Qt.CheckState.Checked)
-    page.person_list_widget.blockSignals(False)
-    page._update_button_text()
-
-    page._deselect_all()
-    assert page.person_filter_btn.text() == page.tr("Filter by Person")

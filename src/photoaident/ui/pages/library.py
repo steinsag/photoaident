@@ -29,46 +29,62 @@ class LibraryPage(QtWidgets.QWidget):
         self.paths = paths
         self.vector_store = vector_store
 
-        layout = QtWidgets.QVBoxLayout(self)
+        # Top-level horizontal layout: center area + right filter panel
+        layout = QtWidgets.QHBoxLayout(self)
 
-        # Filter bar: toggle button
-        filter_bar = QtWidgets.QHBoxLayout()
-        self.person_filter_btn = QtWidgets.QPushButton(self.tr("Filter by Person"))
-        self.person_filter_btn.setCheckable(True)
-        self.person_filter_btn.setEnabled(False)
-        self.person_filter_btn.toggled.connect(self._on_filter_btn_toggled)
-        filter_bar.addWidget(self.person_filter_btn)
-        filter_bar.addStretch()
-        layout.addLayout(filter_bar)
+        # --- Center area ---
+        center_area = QtWidgets.QWidget()
+        center_layout = QtWidgets.QVBoxLayout(center_area)
+        center_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Collapsible filter panel
-        self.filter_panel = QtWidgets.QFrame()
-        self.filter_panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        self.filter_panel.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        self.filter_panel.setVisible(False)
-        panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
-
-        search_row = QtWidgets.QHBoxLayout()
-        self.search_edit = QtWidgets.QLineEdit()
-        self.search_edit.setPlaceholderText(self.tr("Search persons…"))
-        self.search_edit.textChanged.connect(self._on_search_changed)
-        search_row.addWidget(self.search_edit)
-        self.deselect_btn = QtWidgets.QPushButton(self.tr("Deselect All"))
-        self.deselect_btn.clicked.connect(self._deselect_all)
-        search_row.addWidget(self.deselect_btn)
-        panel_layout.addLayout(search_row)
-
-        self.person_list_widget = QtWidgets.QListWidget()
-        self.person_list_widget.setMaximumHeight(200)
-        self.person_list_widget.itemChanged.connect(self._on_person_filter_changed)
-        panel_layout.addWidget(self.person_list_widget)
-
-        layout.addWidget(self.filter_panel)
+        # Non-functional keyword search bar
+        self.keyword_search_edit = QtWidgets.QLineEdit()
+        self.keyword_search_edit.setPlaceholderText(
+            self.tr("Type to search by keyword. Use @\u2026 to search for person.")
+        )
+        center_layout.addWidget(self.keyword_search_edit)
 
         # Image grid
         self.grid = ThumbnailGrid(self.session_factory)
         self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
-        layout.addWidget(self.grid)
+        center_layout.addWidget(self.grid, stretch=1)
+
+        # Placeholder shown when no person is selected
+        self.empty_label = QtWidgets.QLabel(
+            self.tr("Select a person to start searching.")
+        )
+        self.empty_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.empty_label.setVisible(False)
+        center_layout.addWidget(self.empty_label, stretch=1)
+
+        layout.addWidget(center_area, stretch=1)
+
+        # --- Right filter panel (permanent, always visible) ---
+        self.filter_panel = QtWidgets.QFrame()
+        self.filter_panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        self.filter_panel.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        self.filter_panel.setFixedWidth(220)
+        panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
+
+        person_header = QtWidgets.QLabel(self.tr("Person"))
+        font = person_header.font()
+        font.setBold(True)
+        person_header.setFont(font)
+        panel_layout.addWidget(person_header)
+
+        self.search_edit = QtWidgets.QLineEdit()
+        self.search_edit.setPlaceholderText(self.tr("Type to filter"))
+        self.search_edit.textChanged.connect(self._on_search_changed)
+        panel_layout.addWidget(self.search_edit)
+
+        self.person_list_widget = QtWidgets.QListWidget()
+        self.person_list_widget.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.MultiSelection
+        )
+        self.person_list_widget.itemSelectionChanged.connect(self.load_images)
+        panel_layout.addWidget(self.person_list_widget)
+
+        layout.addWidget(self.filter_panel)
 
         self._populate_person_list()
         self.load_images()
@@ -77,34 +93,20 @@ class LibraryPage(QtWidgets.QWidget):
         super().showEvent(event)
         self._populate_person_list()
 
-    def _on_filter_btn_toggled(self, checked: bool) -> None:
-        self.filter_panel.setVisible(checked)
-        if checked:
-            self._populate_person_list()
-            self.search_edit.setFocus()
-            self.search_edit.selectAll()
-
     def _populate_person_list(self) -> None:
-        checked = set(self._selected_person_ids())
+        selected_ids = set(self._selected_person_ids())
         self.person_list_widget.blockSignals(True)
         self.person_list_widget.clear()
         with self.session_factory() as session:
             persons = session.scalars(select(Person).order_by(Person.name)).all()
             for person in persons:
                 item = QtWidgets.QListWidgetItem(person.name)
-                item.setFlags(item.flags() | QtCore.Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(
-                    QtCore.Qt.CheckState.Checked
-                    if person.id in checked
-                    else QtCore.Qt.CheckState.Unchecked
-                )
                 item.setData(QtCore.Qt.ItemDataRole.UserRole, person.id)
                 self.person_list_widget.addItem(item)
-        enabled = self.person_list_widget.count() > 0
+                if person.id in selected_ids:
+                    item.setSelected(True)
         self.person_list_widget.blockSignals(False)
-        self.person_filter_btn.setEnabled(enabled)
         self._apply_search_filter(self.search_edit.text())
-        self._update_button_text()
 
     def _apply_search_filter(self, text: str) -> None:
         lower = text.lower()
@@ -118,36 +120,11 @@ class LibraryPage(QtWidgets.QWidget):
     def _on_search_changed(self, text: str) -> None:
         self._apply_search_filter(text)
 
-    def _deselect_all(self) -> None:
-        self.person_list_widget.blockSignals(True)
-        for i in range(self.person_list_widget.count()):
-            item = self.person_list_widget.item(i)
-            if item is not None:
-                item.setCheckState(QtCore.Qt.CheckState.Unchecked)
-        self.person_list_widget.blockSignals(False)
-        self._update_button_text()
-        self.load_images()
-
-    def _on_person_filter_changed(self, item: QtWidgets.QListWidgetItem) -> None:
-        self._update_button_text()
-        self.load_images()
-
-    def _update_button_text(self) -> None:
-        n = len(self._selected_person_ids())
-        if n == 0:
-            self.person_filter_btn.setText(self.tr("Filter by Person"))
-        else:
-            self.person_filter_btn.setText(
-                self.tr("{n} person(s) selected").format(n=n)
-            )
-
     def _selected_person_ids(self) -> list[int]:
-        ids = []
-        for i in range(self.person_list_widget.count()):
-            item = self.person_list_widget.item(i)
-            if item and item.checkState() == QtCore.Qt.CheckState.Checked:
-                ids.append(item.data(QtCore.Qt.ItemDataRole.UserRole))
-        return ids
+        return [
+            item.data(QtCore.Qt.ItemDataRole.UserRole)
+            for item in self.person_list_widget.selectedItems()
+        ]
 
     def _build_images_data(self, images: list) -> list:
         result = []
@@ -163,7 +140,16 @@ class LibraryPage(QtWidgets.QWidget):
     def load_images(self) -> None:
         person_ids = self._selected_person_ids()
 
-        if not person_ids or self.vector_store is None:
+        if not person_ids:
+            self.grid.set_results([])
+            self.grid.setVisible(False)
+            self.empty_label.setVisible(True)
+            return
+
+        self.empty_label.setVisible(False)
+        self.grid.setVisible(True)
+
+        if self.vector_store is None:
             with self.session_factory() as session:
                 stmt = select(Image)
                 images = session.execute(stmt).unique().scalars().all()

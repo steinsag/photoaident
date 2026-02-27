@@ -229,19 +229,35 @@ Please close it before starting a new one.</translation>
     <name>LibraryPage</name>
     <message>
         <source>Filter by Person</source>
-        <translation>Filter by Person</translation>
+        <translation type="vanished">Filter by Person</translation>
     </message>
     <message>
         <source>Search persons…</source>
-        <translation>Search persons…</translation>
+        <translation type="vanished">Search persons…</translation>
     </message>
     <message>
         <source>Deselect All</source>
-        <translation>Deselect All</translation>
+        <translation type="vanished">Deselect All</translation>
     </message>
     <message>
         <source>{n} person(s) selected</source>
-        <translation>{n} person(s) selected</translation>
+        <translation type="vanished">{n} person(s) selected</translation>
+    </message>
+    <message>
+        <source>Type to search by keyword. Use @… to search for person.</source>
+        <translation>Type to search by keyword. Use @… to search for person.</translation>
+    </message>
+    <message>
+        <source>Select a person to start searching.</source>
+        <translation>Select a person to start searching.</translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation>Person</translation>
+    </message>
+    <message>
+        <source>Type to filter</source>
+        <translation>Type to filter</translation>
     </message>
 </context>
 <context>

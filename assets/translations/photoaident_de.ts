@@ -229,19 +229,35 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <name>LibraryPage</name>
     <message>
         <source>Filter by Person</source>
-        <translation>Nach Person filtern</translation>
+        <translation type="vanished">Nach Person filtern</translation>
     </message>
     <message>
         <source>Search persons…</source>
-        <translation>Personen suchen…</translation>
+        <translation type="vanished">Personen suchen…</translation>
     </message>
     <message>
         <source>Deselect All</source>
-        <translation>Alle abwählen</translation>
+        <translation type="vanished">Alle abwählen</translation>
     </message>
     <message>
         <source>{n} person(s) selected</source>
-        <translation>{n} Person(en) ausgewählt</translation>
+        <translation type="vanished">{n} Person(en) ausgewählt</translation>
+    </message>
+    <message>
+        <source>Type to search by keyword. Use @… to search for person.</source>
+        <translation>Stichwort eingeben. @… für Personensuche.</translation>
+    </message>
+    <message>
+        <source>Select a person to start searching.</source>
+        <translation>Person auswählen, um die Suche zu starten.</translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation>Person</translation>
+    </message>
+    <message>
+        <source>Type to filter</source>
+        <translation>Zum Filtern tippen</translation>
     </message>
 </context>
 <context>
