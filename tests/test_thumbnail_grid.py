@@ -700,16 +700,14 @@ def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_path):
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
         MockDlg.return_value.exec.return_value = None
         # Capture the slot connected to navigate_to_labelling
-        connected_slot = None
+        captured_slots: list = []
 
         def capture_connect(slot):
-            nonlocal connected_slot
-            connected_slot = slot
+            captured_slots.append(slot)
 
         MockDlg.return_value.navigate_to_labelling.connect.side_effect = capture_connect
         grid._on_image_selected(img_id)
 
-        assert connected_slot is not None
-        connected_slot(img_id)
+        captured_slots[0](img_id)
 
     assert received == [img_id]

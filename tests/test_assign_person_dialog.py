@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
@@ -129,14 +129,33 @@ def test_search_filters_persons(qtbot, session_factory):
 
 
 def test_create_new_person(qtbot, session_factory):
-    """'New person…' creates a Person with all 5 age clusters."""
+    """'New person…' opens NewPersonDialog; on accept, person appears in the list."""
     dialog = AssignPersonDialog(session_factory)
     qtbot.addWidget(dialog)
 
     assert dialog.person_list.count() == 0
 
-    with patch.object(
-        QtWidgets.QInputDialog, "getText", return_value=("Charlie", True)
+    # Create the person directly so we have a real id to return
+    with session_factory() as session:
+        person = Person(name="Charlie")
+        session.add(person)
+        session.flush()
+        new_person_id = person.id
+        for age_key in AGE_CLUSTERS:
+            session.add(
+                EmbeddingCluster(
+                    person_id=new_person_id, label=age_key, age_group=age_key
+                )
+            )
+        session.commit()
+
+    mock_dlg = MagicMock()
+    mock_dlg.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
+    mock_dlg.created_person_id.return_value = new_person_id
+
+    with patch(
+        "photoaident.ui.widgets.assign_person_dialog.NewPersonDialog",
+        return_value=mock_dlg,
     ):
         dialog._create_new_person()
 
@@ -253,22 +272,35 @@ def test_deselect_cluster_clears_cluster_selection(qtbot, session_factory):
 
 
 def test_create_new_person_cancelled(qtbot, session_factory):
-    """Cancelling the input dialog does not create a person."""
+    """Cancelling NewPersonDialog does not create a person."""
     dialog = AssignPersonDialog(session_factory)
     qtbot.addWidget(dialog)
 
-    with patch.object(QtWidgets.QInputDialog, "getText", return_value=("", False)):
+    mock_dlg = MagicMock()
+    mock_dlg.exec.return_value = QtWidgets.QDialog.DialogCode.Rejected
+
+    with patch(
+        "photoaident.ui.widgets.assign_person_dialog.NewPersonDialog",
+        return_value=mock_dlg,
+    ):
         dialog._create_new_person()
 
     assert dialog.person_list.count() == 0
 
 
-def test_create_new_person_empty_name_is_noop(qtbot, session_factory):
-    """Accepting with whitespace-only name does not create a person."""
+def test_create_new_person_none_id_is_noop(qtbot, session_factory):
+    """If NewPersonDialog returns None from created_person_id(), nothing is added."""
     dialog = AssignPersonDialog(session_factory)
     qtbot.addWidget(dialog)
 
-    with patch.object(QtWidgets.QInputDialog, "getText", return_value=("   ", True)):
+    mock_dlg = MagicMock()
+    mock_dlg.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
+    mock_dlg.created_person_id.return_value = None
+
+    with patch(
+        "photoaident.ui.widgets.assign_person_dialog.NewPersonDialog",
+        return_value=mock_dlg,
+    ):
         dialog._create_new_person()
 
     assert dialog.person_list.count() == 0

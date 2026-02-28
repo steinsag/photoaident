@@ -1,5 +1,7 @@
 """Tests for PersonsPage and ReferenceFaceWidget."""
 
+from unittest.mock import patch, MagicMock
+
 from PySide6 import QtWidgets
 
 from photoaident.app import MainWindow
@@ -430,3 +432,51 @@ def test_switch_to_persons_page(tmp_path, qtbot):
     window = _make_window(tmp_path, qtbot)
     window._switch_page(2)
     assert window.stacked.currentWidget() is window.persons_page
+
+
+def test_new_person_button_exists(tmp_path, qtbot):
+    """PersonsPage has a 'New Person…' button in the left panel."""
+    page = _make_page(tmp_path, qtbot)
+    assert hasattr(page, "_new_person_btn")
+    assert "New Person" in page._new_person_btn.text()
+
+
+def test_new_person_dialog_creates_person_and_selects_it(tmp_path, qtbot):
+    """Accepting NewPersonDialog refreshes the list and selects the new person."""
+    page = _make_page(tmp_path, qtbot)
+    page.refresh()
+    assert page._person_list.count() == 0
+
+    new_person_id = _add_person_with_clusters(page.session_factory, "Zara")
+
+    mock_dialog = MagicMock()
+    mock_dialog.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
+    mock_dialog.created_person_id.return_value = new_person_id
+
+    with patch(
+        "photoaident.ui.pages.persons.NewPersonDialog", return_value=mock_dialog
+    ):
+        page._on_new_person()
+
+    assert page._person_list.count() == 1
+    assert page._person_list.item(0).text() == "Zara"
+    assert page._person_list.currentItem() is not None
+    assert page._person_list.currentItem().text() == "Zara"
+
+
+def test_new_person_dialog_cancel_does_not_change_list(tmp_path, qtbot):
+    """Cancelling NewPersonDialog leaves the person list unchanged."""
+    page = _make_page(tmp_path, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    assert page._person_list.count() == 1
+
+    mock_dialog = MagicMock()
+    mock_dialog.exec.return_value = QtWidgets.QDialog.DialogCode.Rejected
+
+    with patch(
+        "photoaident.ui.pages.persons.NewPersonDialog", return_value=mock_dialog
+    ):
+        page._on_new_person()
+
+    assert page._person_list.count() == 1

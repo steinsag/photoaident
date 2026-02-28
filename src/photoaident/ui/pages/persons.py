@@ -14,6 +14,7 @@ from photoaident.db.database import (
     FaceState,
     Person,
 )
+from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -170,6 +171,10 @@ class PersonsPage(QtWidgets.QWidget):
         self._person_list.currentItemChanged.connect(self._on_person_selected)
         left_layout.addWidget(self._person_list)
 
+        self._new_person_btn = QtWidgets.QPushButton(self.tr("New Person\u2026"))
+        self._new_person_btn.clicked.connect(self._on_new_person)
+        left_layout.addWidget(self._new_person_btn)
+
         splitter.addWidget(left)
 
         # ── Right panel ─────────────────────────────────────────────────────
@@ -260,6 +265,22 @@ class PersonsPage(QtWidgets.QWidget):
 
         # Re-apply current filter
         self._on_filter_changed(self._filter_edit.text())
+
+    def _on_new_person(self) -> None:
+        dlg = NewPersonDialog(self.session_factory, parent=self)
+        if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
+            return
+        new_person_id = dlg.created_person_id()
+        self._load_persons()
+        if new_person_id is not None:
+            for i in range(self._person_list.count()):
+                item = self._person_list.item(i)
+                if (
+                    item is not None
+                    and item.data(QtCore.Qt.ItemDataRole.UserRole) == new_person_id
+                ):
+                    self._person_list.setCurrentItem(item)
+                    break
 
     def _on_filter_changed(self, text: str) -> None:
         needle = text.lower().strip()
