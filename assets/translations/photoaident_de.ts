@@ -82,14 +82,6 @@
         <source>Senior (75+)</source>
         <translation>Senior (75+)</translation>
     </message>
-    <message>
-        <source>New Person</source>
-        <translation>Neue Person</translation>
-    </message>
-    <message>
-        <source>Name:</source>
-        <translation>Name:</translation>
-    </message>
 </context>
 <context>
     <name>BrowsePage</name>
@@ -392,10 +384,25 @@ Möchten Sie wirklich fortfahren?</translation>
     </message>
 </context>
 <context>
+    <name>NewPersonDialog</name>
+    <message>
+        <source>New Person</source>
+        <translation>Neue Person</translation>
+    </message>
+    <message>
+        <source>Name:</source>
+        <translation>Name:</translation>
+    </message>
+</context>
+<context>
     <name>PersonsPage</name>
     <message>
         <source>Search persons…</source>
         <translation>Personen suchen…</translation>
+    </message>
+    <message>
+        <source>New Person…</source>
+        <translation>Neue Person…</translation>
     </message>
     <message>
         <source>Select a person to view their reference faces.</source>

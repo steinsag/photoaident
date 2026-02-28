@@ -13,6 +13,7 @@ from photoaident.db.database import (
     FaceState,
     Person,
 )
+from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
 
 logger = logging.getLogger(__name__)
 
@@ -307,25 +308,12 @@ class AssignPersonDialog(QtWidgets.QDialog):
         self._update_ok_button()
 
     def _create_new_person(self) -> None:
-        name, ok = QtWidgets.QInputDialog.getText(
-            self, self.tr("New Person"), self.tr("Name:")
-        )
-        if not ok or not name.strip():
+        dlg = NewPersonDialog(self.session_factory, parent=self)
+        if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
-
-        name = name.strip()
-        new_person_id: int
-        with self.session_factory() as session:
-            person = Person(name=name)
-            session.add(person)
-            session.flush()
-            new_person_id = person.id
-            for age_key in AGE_CLUSTERS:
-                cluster = EmbeddingCluster(
-                    person_id=new_person_id, label=age_key, age_group=age_key
-                )
-                session.add(cluster)
-            session.commit()
+        new_person_id = dlg.created_person_id()
+        if new_person_id is None:
+            return
 
         # Reload with clusters eagerly
         with self.session_factory() as session:
