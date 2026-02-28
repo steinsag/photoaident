@@ -223,14 +223,14 @@ class BrowsePage(QtWidgets.QWidget):
         if isinstance(main, MainWindow):
             main.go_to_labelling(image_id)
 
-    def _build_images_data(self, images: list) -> list:
+    def _build_images_data(self, images: list[Image]) -> list[tuple[int, str, Path]]:
         """Build (image_id, file_path, thumb_path) tuples for ThumbnailGrid."""
-        result = []
-        for img in images:
-            thumb_path = (
-                self.paths.thumbs_dir / f"{img.file_hash}.jpg"
-                if img.file_hash
-                else self.paths.thumbs_dir / "unknown.jpg"
+        return [
+            (
+                img.id,
+                img.file_path,
+                self.paths.thumbs_dir
+                / (f"{img.file_hash}.jpg" if img.file_hash else "unknown.jpg"),
             )
-            result.append((img.id, img.file_path, thumb_path))
-        return result
+            for img in images
+        ]

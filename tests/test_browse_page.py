@@ -1,6 +1,9 @@
 """Tests for the Browse page (Miller columns folder navigation)."""
 
-from PySide6 import QtCore
+from pathlib import Path
+from unittest.mock import patch
+
+from PySide6 import QtCore, QtWidgets
 
 from photoaident.db.database import Image, get_engine, get_session_factory
 from photoaident.db.migrate import apply_migrations
@@ -279,3 +282,98 @@ def test_browse_page_reclick_ancestor_collapses_child_columns(tmp_path, qtbot):
     col0.itemClicked.emit(col0.item(0))
     QtCore.QCoreApplication.processEvents()
     assert len(page._columns) == 2  # col 0 + col 1 (sub's children)
+
+
+# ---------------------------------------------------------------------------
+# 9. Non-existent collection path clears UI and shows hint (lines 91–94)
+# ---------------------------------------------------------------------------
+
+
+def test_browse_page_nonexistent_collection(tmp_path, qtbot):
+    """refresh() with a configured-but-missing directory clears UI and shows hint."""
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(tmp_path / "gone"))
+    page.refresh()
+    assert len(page._columns) == 0
+    assert not page._hint_label.isHidden()
+
+
+# ---------------------------------------------------------------------------
+# 10. _clear_columns loop body exercises deletion of existing columns (lines 106–107)
+# ---------------------------------------------------------------------------
+
+
+def test_browse_page_clear_columns_removes_existing(tmp_path, qtbot):
+    """A second refresh() exercises the deletion loop inside _clear_columns."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()  # builds columns
+    assert len(page._columns) == 2  # col0=root, col1=[sub]
+    page.refresh()  # _clear_columns now iterates over non-empty _columns
+    assert len(page._columns) == 2  # rebuilt identically
+
+
+# ---------------------------------------------------------------------------
+# 11. None-guard in _on_column_item_changed is a no-op (line 182)
+# ---------------------------------------------------------------------------
+
+
+def test_browse_page_column_item_changed_none_is_noop(tmp_path, qtbot):
+    """Passing None to _on_column_item_changed must not raise or mutate state."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+    before = len(page._columns)
+    page._on_column_item_changed(0, None)  # must be a no-op
+    assert len(page._columns) == before
+
+
+# ---------------------------------------------------------------------------
+# 12. PermissionError in _get_subfolders returns [] (lines 207–208)
+# ---------------------------------------------------------------------------
+
+
+def test_browse_page_permission_error_returns_empty(tmp_path, qtbot, monkeypatch):
+    """_get_subfolders returns [] when the OS raises PermissionError."""
+    page = _make_browse_page(tmp_path, qtbot)
+    restricted = tmp_path / "locked"
+    restricted.mkdir()
+
+    original_iterdir = Path.iterdir
+
+    def raise_permission(self):
+        if self == restricted:
+            raise PermissionError("access denied")
+        return original_iterdir(self)
+
+    monkeypatch.setattr(Path, "iterdir", raise_permission)
+    assert page._get_subfolders(restricted) == []
+
+
+# ---------------------------------------------------------------------------
+# 13. _on_navigate_to_labelling forwards call to MainWindow (lines 220–224)
+# ---------------------------------------------------------------------------
+
+
+def test_browse_page_navigate_to_labelling(tmp_path, qtbot, monkeypatch):
+    """navigate_to_labelling signal causes go_to_labelling() on the MainWindow."""
+    import photoaident.app as app_module
+
+    calls: list[int] = []
+
+    class FakeMainWindow(QtWidgets.QMainWindow):
+        def go_to_labelling(self, priority_image_id: int) -> None:
+            calls.append(priority_image_id)
+
+    fake_win = FakeMainWindow()
+    qtbot.addWidget(fake_win)
+
+    page = _make_browse_page(tmp_path, qtbot)
+    monkeypatch.setattr(page, "window", lambda: fake_win)
+    monkeypatch.setattr(app_module, "MainWindow", FakeMainWindow)
+
+    page._on_navigate_to_labelling(42)
+    assert calls == [42]
