@@ -309,10 +309,10 @@ def test_browse_page_clear_columns_removes_existing(tmp_path, qtbot):
     (collection / "sub").mkdir()
 
     page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
-    page.refresh()  # builds columns
-    assert len(page._columns) == 2  # col0=root, col1=[sub]
-    page.refresh()  # _clear_columns now iterates over non-empty _columns
-    assert len(page._columns) == 2  # rebuilt identically
+    page.refresh()
+    assert len(page._columns) == 2
+    page.refresh()
+    assert len(page._columns) == 2
 
 
 # ---------------------------------------------------------------------------
