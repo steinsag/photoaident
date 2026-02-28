@@ -120,15 +120,19 @@ def test_persist_new_person_returns_id(tmp_path, qtbot):
         assert person.name == "Carol"
 
 
-def test_persist_new_person_strips_whitespace(tmp_path, qtbot):
+def test_persist_new_person_strips_whitespace(tmp_path, qtbot, monkeypatch):
     """Leading/trailing whitespace is stripped by the caller (_on_accept)."""
     dlg = _make_dialog(tmp_path, qtbot)
+    called_names = []
 
-    dlg._persist_new_person("  Eve  ".strip())
+    def fake_persist_new_person(name: str):
+        called_names.append(name)
+        return 1
 
-    with dlg.session_factory() as session:
-        person = session.execute(select(Person)).scalars().one()
-        assert person.name == "Eve"
+    monkeypatch.setattr(dlg, "_persist_new_person", fake_persist_new_person)
+    dlg._name_edit.setText("  Eve  ")
+    dlg._on_accept()
+    assert called_names == ["Eve"]
 
 
 # ── created_person_id ────────────────────────────────────────────────────────
