@@ -101,6 +101,38 @@ def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
     assert loaded_settings.collection_path == "/mock/saved/path"
 
 
+def test_browse_path_updates_edit(qtbot, monkeypatch):
+    """_browse_path updates path_edit when a directory is chosen."""
+    dialog = PreferencesDialog("/initial/path", 0, 0)
+    qtbot.add_widget(dialog)
+
+    monkeypatch.setattr(
+        QtWidgets.QFileDialog,
+        "getExistingDirectory",
+        lambda *_: "/chosen/path",
+    )
+
+    dialog._browse_path()
+
+    assert dialog.path_edit.text() == "/chosen/path"
+
+
+def test_browse_path_cancelled_keeps_edit(qtbot, monkeypatch):
+    """_browse_path leaves path_edit unchanged when the dialog is cancelled."""
+    dialog = PreferencesDialog("/initial/path", 0, 0)
+    qtbot.add_widget(dialog)
+
+    monkeypatch.setattr(
+        QtWidgets.QFileDialog,
+        "getExistingDirectory",
+        lambda *_: "",
+    )
+
+    dialog._browse_path()
+
+    assert dialog.path_edit.text() == "/initial/path"
+
+
 def test_preferences_cancel_not_saved(qtbot, test_paths, monkeypatch):
     """Test that settings are NOT saved when the dialog is cancelled."""
     # Apply migrations to the test DB
