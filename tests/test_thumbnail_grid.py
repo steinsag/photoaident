@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -700,14 +701,17 @@ def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_path):
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
         MockDlg.return_value.exec.return_value = None
         # Capture the slot connected to navigate_to_labelling
-        captured_slots: list = []
+        captured_slots: list[Callable] = []
 
-        def capture_connect(slot):
+        def capture_connect(slot: Callable) -> None:
             captured_slots.append(slot)
 
         MockDlg.return_value.navigate_to_labelling.connect.side_effect = capture_connect
         grid._on_image_selected(img_id)
 
+        assert (
+            len(captured_slots) == 1
+        ), "Expected exactly one slot connected to navigate_to_labelling"
         captured_slots[0](img_id)
 
     assert received == [img_id]
