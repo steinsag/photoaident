@@ -1,7 +1,6 @@
 """Tests for the Browse page (Miller columns folder navigation)."""
 
 from pathlib import Path
-from unittest.mock import patch
 
 from PySide6 import QtCore, QtWidgets
 

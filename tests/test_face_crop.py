@@ -2,7 +2,6 @@
 
 import pytest
 from PIL import Image as PILImage
-from PySide6 import QtGui
 
 from photoaident.ui.widgets.face_crop import FaceCropWidget
 

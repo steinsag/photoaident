@@ -54,12 +54,6 @@ target-version = "py312"
 select = ["E", "F"]
 ignore = []
 
-[tool.ruff.lint.per-file-ignores]
-# Test files often legitimately trigger F401 and F811:
-# - F401 (unused imports): fixtures, parametrization, and side-effect imports are common in tests.
-# - F811 (redefinition of unused name): pytest fixtures/parametrized tests redefine names across scopes.
-"tests/**/*" = ["F401", "F811"]
-
 [tool.pytest.ini_options]
 addopts = "-ra --cov=photoaident --cov-report=term-missing:skip-covered --cov-report=xml --cov-report=html -q"
 testpaths = ["tests"]
