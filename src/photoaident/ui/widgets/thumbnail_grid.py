@@ -24,7 +24,7 @@ PAGE_SIZE = 30
 _SCROLL_LOAD_MARGIN = 200  # px from bottom triggers load
 _THUMBNAIL_MAX_SIZE = 150  # max dimension for thumbnail scaling
 _THUMBNAIL_WIDGET_SIZE = 160  # fixed widget/overlay size (px)
-_THUMBNAIL_GRID_ITEM_WIDTH = 170  # widget size + grid spacing (used for column calc)
+_THUMBNAIL_GRID_SPACING = 10  # spacing between thumbnail widgets in the grid
 _SCROLL_AREA_MARGIN = 20  # reserved for scrollbar in column width calc
 
 
@@ -309,7 +309,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
         self.container = QtWidgets.QWidget()
         self.grid_layout = QtWidgets.QGridLayout(self.container)
-        self.grid_layout.setSpacing(10)
+        self.grid_layout.setSpacing(_THUMBNAIL_GRID_SPACING)
         self.grid_layout.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop
         )
@@ -429,7 +429,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
         # Subtract some margin for scrollbar
         new_cols = max(
             1,
-            (self.width() - _SCROLL_AREA_MARGIN) // _THUMBNAIL_GRID_ITEM_WIDTH,
+            (self.width() - _SCROLL_AREA_MARGIN)
+            // (_THUMBNAIL_WIDGET_SIZE + _THUMBNAIL_GRID_SPACING),
         )
         if new_cols != self.cols:
             self.cols = new_cols
