@@ -263,9 +263,9 @@ class ThumbnailWidget(QtWidgets.QWidget):
         if not self.thumb_path.exists():
             try:
                 generate_thumbnail(Path(self.file_path), self.thumb_path)
-            except Exception as e:
+            except Exception:
                 logger.warning(
-                    "Error generating thumbnail for %s: %s", self.file_path, e
+                    "Error generating thumbnail for %s", self.file_path, exc_info=True
                 )
 
         target_path = (

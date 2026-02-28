@@ -165,8 +165,8 @@ class IndexingTask(QtCore.QObject):
                 orientation=orientation,
             )
             session.add(metadata)
-        except Exception as e:
-            logger.warning("EXIF extraction failed for %s: %s", path, e)
+        except Exception:
+            logger.warning("EXIF extraction failed for %s", path, exc_info=True)
 
     def _save_face_crops(
         self,
@@ -263,8 +263,10 @@ class IndexingTask(QtCore.QObject):
                         indexed_count += 1
                         total_faces += new_face_count
                         self.progress.emit(indexed_count, total_images, total_faces)
-                    except Exception as e:
-                        logger.warning("Error indexing %s: %s", img.file_path, e)
+                    except Exception:
+                        logger.warning(
+                            "Error indexing %s", img.file_path, exc_info=True
+                        )
                         img.file_hash = "ERROR"
                         session.commit()
 

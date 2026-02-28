@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import threading
@@ -24,6 +25,8 @@ from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.pages.persons import PersonsPage
 from photoaident.ui.preferences_dialog import PreferencesDialog
 from photoaident.ui.widgets.progress_dialog import ProgressDialog
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from photoaident.paths import AppPaths
@@ -523,7 +526,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._inventory_thread.quit()
                 self._inventory_thread.wait(3000)
             except Exception:
-                pass
+                logger.debug("Error stopping inventory thread", exc_info=True)
         if self._indexing_task is not None and self._indexing_thread is not None:
             try:
                 self._indexing_task.cancel()
@@ -531,13 +534,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._indexing_thread.quit()
                 self._indexing_thread.wait(5000)
             except Exception:
-                pass
+                logger.debug("Error stopping indexing thread", exc_info=True)
             finally:
                 # Ensure FAISS index is persisted
                 try:
                     self.vector_store.save(self.paths.faiss_path)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to save FAISS index on shutdown", exc_info=True
+                    )
         event.accept()
 
     def _set_app_icon(self):
