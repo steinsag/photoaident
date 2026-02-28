@@ -1,4 +1,4 @@
-# CLAUDE.md — PhotoAIdent
+# AGENTS.md — PhotoAIdent
 
 ## App Functionality
 
