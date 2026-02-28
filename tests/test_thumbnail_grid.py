@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image as PILImage
@@ -17,6 +17,11 @@ from photoaident.ui.widgets.thumbnail_grid import (
     PAGE_SIZE,
     ThumbnailGrid,
     ThumbnailWidget,
+    _get_scaled_size,
+    _has_unidentified_faces,
+    _icon_path,
+    _read_pixmap,
+    _reveal_in_file_manager,
 )
 
 
@@ -166,8 +171,10 @@ def test_label_button_enabled_with_unidentified_face(qtbot, sample_image, tmp_pa
         img_id, str(sample_image), tmp_path / "t.jpg", session_factory
     )
     qtbot.addWidget(widget)
+    widget.show()
 
     widget._overlay.show()
+    QtWidgets.QApplication.processEvents()
 
     assert widget._overlay.label_btn.isEnabled()
 
@@ -412,6 +419,192 @@ def test_scroll_triggers_load_more(qtbot, sample_image, tmp_path):
     grid._on_scroll_changed(grid.scroll_area.verticalScrollBar().maximum())
 
     assert grid._loaded_count == initial_count + PAGE_SIZE
+
+
+# --- _icon_path tests ---
+
+
+def test_icon_path_dev():
+    """In dev mode (no _MEIPASS) the path points to assets/icons/."""
+    path = _icon_path("test.svg")
+    assert path.endswith("assets/icons/test.svg")
+
+
+def test_icon_path_bundle(tmp_path):
+    """In a PyInstaller bundle (_MEIPASS set) the path is relative to _MEIPASS."""
+    with patch("sys._MEIPASS", str(tmp_path), create=True):
+        path = _icon_path("view.svg")
+    assert path == str(tmp_path / "assets" / "icons" / "view.svg")
+
+
+# --- _reveal_in_file_manager tests ---
+
+
+def test_reveal_in_file_manager_macos(tmp_path):
+    p = tmp_path / "photo.jpg"
+    p.touch()
+    with patch("sys.platform", "darwin"), patch("subprocess.Popen") as mock_popen:
+        _reveal_in_file_manager(str(p))
+    mock_popen.assert_called_once_with(["open", "-R", str(p)])
+
+
+def test_reveal_in_file_manager_windows(tmp_path):
+    p = tmp_path / "photo.jpg"
+    p.touch()
+    with patch("sys.platform", "win32"), patch("subprocess.Popen") as mock_popen:
+        _reveal_in_file_manager(str(p))
+    mock_popen.assert_called_once_with(["explorer", "/select,", str(p)])
+
+
+def test_reveal_in_file_manager_linux_dbus_success(tmp_path):
+    """D-Bus call succeeds — no xdg-open fallback."""
+    p = tmp_path / "photo.jpg"
+    p.touch()
+    mock_iface = MagicMock()
+    mock_iface.isValid.return_value = True
+    mock_reply = MagicMock()
+    # Anything other than ErrorMessage — use a sentinel that won't equal ErrorMessage
+    mock_reply.type.return_value = object()
+    mock_iface.call.return_value = mock_reply
+
+    with (
+        patch("sys.platform", "linux"),
+        patch("subprocess.Popen") as mock_popen,
+        patch("PySide6.QtDBus.QDBusInterface", return_value=mock_iface),
+    ):
+        _reveal_in_file_manager(str(p))
+    mock_popen.assert_not_called()
+
+
+def test_reveal_in_file_manager_linux_dbus_fallback(tmp_path):
+    """D-Bus interface invalid — falls back to xdg-open."""
+    p = tmp_path / "photo.jpg"
+    p.touch()
+    mock_iface = MagicMock()
+    mock_iface.isValid.return_value = False
+
+    with (
+        patch("sys.platform", "linux"),
+        patch("subprocess.Popen") as mock_popen,
+        patch("PySide6.QtDBus.QDBusInterface", return_value=mock_iface),
+    ):
+        _reveal_in_file_manager(str(p))
+    mock_popen.assert_called_once()
+    assert mock_popen.call_args[0][0][0] == "xdg-open"
+
+
+# --- _has_unidentified_faces tests ---
+
+
+def test_has_unidentified_faces_true(tmp_path):
+    session_factory = _make_session_factory(tmp_path)
+    with session_factory() as session:
+        img = DBImage(file_path="/tmp/img.jpg", file_size=1)
+        session.add(img)
+        session.flush()
+        face = Face(
+            image_id=img.id,
+            faiss_id=0,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.UNIDENTIFIED,
+        )
+        session.add(face)
+        session.commit()
+        img_id = img.id
+    assert _has_unidentified_faces(session_factory, img_id) is True
+
+
+def test_has_unidentified_faces_false_no_faces(tmp_path):
+    session_factory = _make_session_factory(tmp_path)
+    with session_factory() as session:
+        img = DBImage(file_path="/tmp/img.jpg", file_size=1)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+    assert _has_unidentified_faces(session_factory, img_id) is False
+
+
+def test_has_unidentified_faces_false_identified(tmp_path):
+    session_factory = _make_session_factory(tmp_path)
+    with session_factory() as session:
+        img = DBImage(file_path="/tmp/img.jpg", file_size=1)
+        session.add(img)
+        session.flush()
+        face = Face(
+            image_id=img.id,
+            faiss_id=0,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+        )
+        session.add(face)
+        session.commit()
+        img_id = img.id
+    assert _has_unidentified_faces(session_factory, img_id) is False
+
+
+# --- _get_scaled_size edge case tests ---
+
+
+def test_get_scaled_size_unreadable_file(tmp_path):
+    """Non-image file → canRead() returns False → invalid QSize."""
+    txt = tmp_path / "not_an_image.txt"
+    txt.write_text("hello")
+    size = _get_scaled_size(txt)
+    assert not size.isValid()
+
+
+# --- _read_pixmap edge case tests ---
+
+
+def test_read_pixmap_null_image(tmp_path):
+    """Corrupted JPEG → image.isNull() → null QPixmap."""
+    bad = tmp_path / "bad.jpg"
+    bad.write_bytes(b"not a jpeg")
+    valid_size = QtCore.QSize(100, 100)
+    pixmap = _read_pixmap(bad, valid_size)
+    assert pixmap.isNull()
+
+
+def test_read_pixmap_invalid_size(sample_image):
+    """Invalid scaled_size → early return with null QPixmap."""
+    pixmap = _read_pixmap(sample_image, QtCore.QSize())
+    assert pixmap.isNull()
+
+
+# --- overlay showEvent with session_factory tests ---
+
+
+def test_label_button_disabled_with_session_factory_but_no_faces(
+    qtbot, sample_image, tmp_path
+):
+    """label_btn is disabled when session_factory is set but image has no faces."""
+    session_factory = _make_session_factory(tmp_path)
+    with session_factory() as session:
+        img = DBImage(file_path=str(sample_image), file_size=100)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    widget = ThumbnailWidget(
+        img_id, str(sample_image), tmp_path / "t.jpg", session_factory
+    )
+    qtbot.addWidget(widget)
+    widget.show()
+
+    widget._overlay.show()
+    QtWidgets.QApplication.processEvents()
+
+    assert not widget._overlay.label_btn.isEnabled()
 
 
 # --- image detail dialog tests ---
