@@ -272,7 +272,8 @@ class PersonsPage(QtWidgets.QWidget):
             return
         new_person_id = dlg.created_person_id()
         if new_person_id is None:
-            # Dialog was accepted but no person was actually created; preserve current UI state.
+            # Dialog was accepted but no person was actually created;
+            # preserve current UI state.
             return
         self._filter_edit.clear()  # ensure new person isn't hidden by an active filter
         self._load_persons()

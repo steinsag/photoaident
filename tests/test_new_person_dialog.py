@@ -5,6 +5,8 @@ reject() — those interact with the native window system and would block or fla
 a real dialog on screen.
 """
 
+from unittest.mock import patch
+
 from PySide6 import QtWidgets
 from sqlalchemy import select
 
@@ -154,3 +156,40 @@ def test_created_person_id_set_after_persist(tmp_path, qtbot):
     dlg._created_person_id = person_id
 
     assert dlg.created_person_id() == person_id
+
+
+# ── _on_accept ───────────────────────────────────────────────────────────────
+
+
+def test_on_accept_persists_and_accepts_dialog(tmp_path, qtbot):
+    """_on_accept() strips name, persists, sets created_person_id, and accepts."""
+    dlg = _make_dialog(tmp_path, qtbot)
+    dlg._name_edit.setText("  Grace  ")
+
+    with patch.object(dlg, "accept") as mock_accept:
+        dlg._on_accept()
+
+        # 1. Check created_person_id is set
+        person_id = dlg.created_person_id()
+        assert person_id is not None
+
+        # 2. Verify name was stripped in DB
+        with dlg.session_factory() as session:
+            person = session.get(Person, person_id)
+            assert person is not None
+            assert person.name == "Grace"
+
+        # 3. Verify dialog was accepted
+        mock_accept.assert_called_once()
+
+
+def test_on_accept_early_return_if_name_empty(tmp_path, qtbot):
+    """_on_accept() returns early if the name is empty (safety check)."""
+    dlg = _make_dialog(tmp_path, qtbot)
+    # ok_btn would normally be disabled, but calling _on_accept directly
+    dlg._name_edit.setText("   ")
+
+    with patch.object(dlg, "accept") as mock_accept:
+        dlg._on_accept()
+        assert dlg.created_person_id() is None
+        mock_accept.assert_not_called()
