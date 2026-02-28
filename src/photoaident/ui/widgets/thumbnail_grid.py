@@ -98,6 +98,8 @@ def _get_scaled_size(path: Path) -> QtCore.QSize:
         return QtCore.QSize()
     w = orig_size.width()
     h = orig_size.height()
+    if w <= 0 or h <= 0:
+        return QtCore.QSize()
     scale = min(_THUMBNAIL_MAX_SIZE / w, _THUMBNAIL_MAX_SIZE / h)
     return QtCore.QSize(int(w * scale), int(h * scale))
 

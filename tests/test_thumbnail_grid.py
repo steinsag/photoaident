@@ -564,6 +564,23 @@ def test_get_scaled_size_unreadable_file(tmp_path):
     assert not size.isValid()
 
 
+def test_get_scaled_size_zero_dimension(monkeypatch):
+    """QImageReader returns valid but zero-dimension size → invalid QSize returned, no ZeroDivisionError."""  # noqa: E501
+    from unittest.mock import MagicMock
+
+    from PySide6 import QtCore, QtGui
+
+    mock_reader = MagicMock(spec=QtGui.QImageReader)
+    mock_reader.canRead.return_value = True
+    mock_reader.size.return_value = QtCore.QSize(0, 0)
+    monkeypatch.setattr(
+        "photoaident.ui.widgets.thumbnail_grid.QtGui.QImageReader",
+        lambda _path: mock_reader,
+    )
+    size = _get_scaled_size(Path("/fake/image.jpg"))
+    assert not size.isValid()
+
+
 # --- _read_pixmap edge case tests ---
 
 
