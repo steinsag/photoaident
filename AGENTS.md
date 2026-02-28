@@ -188,6 +188,7 @@ You are a senior Python engineer.
 - Use dependency injection instead of globals
 - Include docstring of public functions
 - Be testable and side-effect minimal
+- Use proper logging instead of print
 - Remove dead code when modifying files
 - Improve surrounding code when toucch a file (Boy Scout Rule)
 - Refactor obvious duplication

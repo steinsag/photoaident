@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -13,6 +14,8 @@ from photoaident.core.embeddings import FaceEmbedder
 from photoaident.db.database import Image, Face, FaceState, ImageMetadata, TakenAtSource
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
+
+logger = logging.getLogger(__name__)
 
 
 def _dms_to_decimal(values, ref: str) -> float | None:
@@ -163,7 +166,7 @@ class IndexingTask(QtCore.QObject):
             )
             session.add(metadata)
         except Exception as e:
-            print(f"EXIF extraction failed for {path}: {e}")
+            logger.warning("EXIF extraction failed for %s: %s", path, e)
 
     def _save_face_crops(
         self,
@@ -261,7 +264,7 @@ class IndexingTask(QtCore.QObject):
                         total_faces += new_face_count
                         self.progress.emit(indexed_count, total_images, total_faces)
                     except Exception as e:
-                        print(f"Error indexing {img.file_path}: {e}")
+                        logger.warning("Error indexing %s: %s", img.file_path, e)
                         img.file_hash = "ERROR"
                         session.commit()
 
