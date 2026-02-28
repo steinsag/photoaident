@@ -464,6 +464,39 @@ def test_new_person_dialog_creates_person_and_selects_it(tmp_path, qtbot):
     assert page._person_list.currentItem().text() == "Zara"
 
 
+def test_new_person_clears_filter_so_person_is_visible(tmp_path, qtbot):
+    """Active search filter is cleared when a new person is created, so the
+    newly created person is not immediately hidden by the filter."""
+    page = _make_page(tmp_path, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+
+    # Activate a filter that would hide "Zara"
+    page._filter_edit.setText("ali")
+    assert page._person_list.count() == 1  # Alice visible
+
+    new_person_id = _add_person_with_clusters(page.session_factory, "Zara")
+
+    mock_dialog = MagicMock()
+    mock_dialog.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
+    mock_dialog.created_person_id.return_value = new_person_id
+
+    with patch(
+        "photoaident.ui.pages.persons.NewPersonDialog", return_value=mock_dialog
+    ):
+        page._on_new_person()
+
+    # Filter must be cleared
+    assert page._filter_edit.text() == ""
+    # Both persons visible
+    assert page._person_list.count() == 2
+    # New person selected and not hidden
+    current = page._person_list.currentItem()
+    assert current is not None
+    assert current.text() == "Zara"
+    assert not current.isHidden()
+
+
 def test_new_person_dialog_cancel_does_not_change_list(tmp_path, qtbot):
     """Cancelling NewPersonDialog leaves the person list unchanged."""
     page = _make_page(tmp_path, qtbot)

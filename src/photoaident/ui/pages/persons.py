@@ -271,6 +271,7 @@ class PersonsPage(QtWidgets.QWidget):
         if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
         new_person_id = dlg.created_person_id()
+        self._filter_edit.clear()  # ensure new person isn't hidden by an active filter
         self._load_persons()
         if new_person_id is not None:
             for i in range(self._person_list.count()):
