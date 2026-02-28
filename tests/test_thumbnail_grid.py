@@ -499,7 +499,7 @@ def test_reveal_in_file_manager_linux_dbus_fallback(tmp_path):
 def test_has_unidentified_faces_true(tmp_path):
     session_factory = _make_session_factory(tmp_path)
     with session_factory() as session:
-        img = DBImage(file_path="/tmp/img.jpg", file_size=1)
+        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=1)
         session.add(img)
         session.flush()
         face = Face(
@@ -516,23 +516,23 @@ def test_has_unidentified_faces_true(tmp_path):
         session.add(face)
         session.commit()
         img_id = img.id
-    assert _has_unidentified_faces(session_factory, img_id) is True
+    assert _has_unidentified_faces(session_factory, img_id)
 
 
 def test_has_unidentified_faces_false_no_faces(tmp_path):
     session_factory = _make_session_factory(tmp_path)
     with session_factory() as session:
-        img = DBImage(file_path="/tmp/img.jpg", file_size=1)
+        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=1)
         session.add(img)
         session.commit()
         img_id = img.id
-    assert _has_unidentified_faces(session_factory, img_id) is False
+    assert not _has_unidentified_faces(session_factory, img_id)
 
 
 def test_has_unidentified_faces_false_identified(tmp_path):
     session_factory = _make_session_factory(tmp_path)
     with session_factory() as session:
-        img = DBImage(file_path="/tmp/img.jpg", file_size=1)
+        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=1)
         session.add(img)
         session.flush()
         face = Face(
@@ -549,7 +549,7 @@ def test_has_unidentified_faces_false_identified(tmp_path):
         session.add(face)
         session.commit()
         img_id = img.id
-    assert _has_unidentified_faces(session_factory, img_id) is False
+    assert not _has_unidentified_faces(session_factory, img_id)
 
 
 # --- _get_scaled_size edge case tests ---
