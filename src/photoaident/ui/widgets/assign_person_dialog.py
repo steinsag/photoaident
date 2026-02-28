@@ -1,3 +1,4 @@
+import logging
 from typing import Optional, TYPE_CHECKING
 
 import numpy as np
@@ -12,6 +13,8 @@ from photoaident.db.database import (
     FaceState,
     Person,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -260,7 +263,9 @@ class AssignPersonDialog(QtWidgets.QDialog):
                 try:
                     embeddings.append(self.vector_store.get_embedding(fid))
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to retrieve embedding %s", fid, exc_info=True
+                    )
             if not embeddings:
                 continue
             mean_vec = np.mean(np.stack(embeddings, axis=0), axis=0).astype(np.float32)

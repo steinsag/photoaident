@@ -27,8 +27,8 @@ class Settings:
 
             # For simplicity, just get known keys
             return cls(collection_path=data.get("collection_path", ""))
-        except Exception as e:
-            logger.error(f"Failed to load settings from {path}: {e}")
+        except Exception:
+            logger.error("Failed to load settings from %s", path, exc_info=True)
             return cls()
 
     def save(self, path: Path) -> None:
@@ -39,5 +39,5 @@ class Settings:
         try:
             with open(path, "w") as f:
                 f.write(f'collection_path = "{self.collection_path}"\n')
-        except Exception as e:
-            logger.error(f"Failed to save settings to {path}: {e}")
+        except Exception:
+            logger.error("Failed to save settings to %s", path, exc_info=True)

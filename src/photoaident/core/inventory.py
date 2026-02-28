@@ -1,3 +1,4 @@
+import logging
 import os
 from pathlib import Path
 from typing import List, Optional
@@ -7,6 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import sessionmaker
 
 from photoaident.db.database import Image
+
+logger = logging.getLogger(__name__)
 
 
 class InventoryTask(QtCore.QObject):
@@ -98,6 +101,9 @@ class InventoryTask(QtCore.QObject):
                         if self._add_image_if_missing(session, p):
                             added_count += 1
                     except Exception:
+                        logger.warning(
+                            "Failed to add image %s to database", p, exc_info=True
+                        )
                         continue
 
                 session.commit()

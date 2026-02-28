@@ -1,6 +1,8 @@
+import logging
 import os
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -16,8 +18,14 @@ from photoaident.utils.image_utils import generate_thumbnail
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
+logger = logging.getLogger(__name__)
+
 PAGE_SIZE = 30
 _SCROLL_LOAD_MARGIN = 200  # px from bottom triggers load
+_THUMBNAIL_MAX_SIZE = 150  # max dimension for thumbnail scaling
+_THUMBNAIL_WIDGET_SIZE = 160  # fixed widget/overlay size (px)
+_THUMBNAIL_GRID_SPACING = 10  # spacing between thumbnail widgets in the grid
+_SCROLL_AREA_MARGIN = 20  # reserved for scrollbar in column width calc
 
 
 def _icon_path(name: str) -> str:
@@ -67,7 +75,7 @@ def _reveal_in_file_manager(file_path: str) -> None:
         subprocess.Popen(["xdg-open", str(p.parent)], env=env)
 
 
-def _has_unidentified_faces(session_factory, image_id: int) -> bool:
+def _has_unidentified_faces(session_factory: "sessionmaker", image_id: int) -> bool:
     """Return True if the image has at least one unidentified, non-deleted face."""
     with session_factory() as session:
         n = session.scalar(
@@ -90,7 +98,9 @@ def _get_scaled_size(path: Path) -> QtCore.QSize:
         return QtCore.QSize()
     w = orig_size.width()
     h = orig_size.height()
-    scale = min(150 / w, 150 / h)
+    if w <= 0 or h <= 0:
+        return QtCore.QSize()
+    scale = min(_THUMBNAIL_MAX_SIZE / w, _THUMBNAIL_MAX_SIZE / h)
     return QtCore.QSize(int(w * scale), int(h * scale))
 
 
@@ -116,7 +126,7 @@ class _HoverOverlay(QtWidgets.QWidget):
         self,
         image_id: int,
         file_path: str,
-        session_factory,
+        session_factory: "sessionmaker | None",
         parent=None,
     ):
         super().__init__(parent)
@@ -125,7 +135,7 @@ class _HoverOverlay(QtWidgets.QWidget):
         self._session_factory = session_factory
 
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedSize(160, 160)
+        self.setFixedSize(_THUMBNAIL_WIDGET_SIZE, _THUMBNAIL_WIDGET_SIZE)
 
         # WA_TranslucentBackground breaks palette-based button rendering, so we
         # use explicit rgba values.  autoRaise=False is required so the button
@@ -222,7 +232,7 @@ class ThumbnailWidget(QtWidgets.QWidget):
         image_id: int,
         file_path: str,
         thumb_path: Path,
-        session_factory=None,
+        session_factory: "sessionmaker | None" = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -230,7 +240,7 @@ class ThumbnailWidget(QtWidgets.QWidget):
         self.file_path = file_path
         self.thumb_path = thumb_path
 
-        self.setFixedSize(160, 160)
+        self.setFixedSize(_THUMBNAIL_WIDGET_SIZE, _THUMBNAIL_WIDGET_SIZE)
         self.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_Hover)
 
@@ -253,8 +263,10 @@ class ThumbnailWidget(QtWidgets.QWidget):
         if not self.thumb_path.exists():
             try:
                 generate_thumbnail(Path(self.file_path), self.thumb_path)
-            except Exception as e:
-                print(f"Error generating thumbnail for {self.file_path}: {e}")
+            except Exception:
+                logger.warning(
+                    "Error generating thumbnail for %s", self.file_path, exc_info=True
+                )
 
         target_path = (
             self.thumb_path if self.thumb_path.exists() else Path(self.file_path)
@@ -297,7 +309,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
         self.container = QtWidgets.QWidget()
         self.grid_layout = QtWidgets.QGridLayout(self.container)
-        self.grid_layout.setSpacing(10)
+        self.grid_layout.setSpacing(_THUMBNAIL_GRID_SPACING)
         self.grid_layout.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop
         )
@@ -369,7 +381,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.grid_layout.addWidget(thumb, row, col)
         self.thumbnails.append(thumb)
 
-    def set_results(self, results):
+    def set_results(self, results: Iterable[tuple[int, str, Path]]) -> None:
         self.clear()
         self._all_results = list(results)
         self._load_next_page()
@@ -415,7 +427,11 @@ class ThumbnailGrid(QtWidgets.QWidget):
         super().resizeEvent(event)
         # Recalculate columns based on width
         # Subtract some margin for scrollbar
-        new_cols = max(1, (self.width() - 20) // 170)
+        new_cols = max(
+            1,
+            (self.width() - _SCROLL_AREA_MARGIN)
+            // (_THUMBNAIL_WIDGET_SIZE + _THUMBNAIL_GRID_SPACING),
+        )
         if new_cols != self.cols:
             self.cols = new_cols
             self._rearrange_grid()

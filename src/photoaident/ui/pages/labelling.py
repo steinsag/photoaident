@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -9,6 +10,8 @@ from sqlalchemy.orm import contains_eager
 from photoaident.db.database import Face, FaceState, Image, ImageMetadata
 from photoaident.ui.widgets.assign_person_dialog import AssignPersonDialog
 from photoaident.ui.widgets.face_crop import FaceCropWidget
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -243,7 +246,11 @@ class LabellingPage(QtWidgets.QWidget):
                 try:
                     query_embedding = self.vector_store.get_embedding(face.faiss_id)
                 except Exception:
-                    pass
+                    logger.warning(
+                        "Failed to retrieve embedding for face %s",
+                        face.faiss_id,
+                        exc_info=True,
+                    )
         dialog = AssignPersonDialog(
             self.session_factory,
             query_embedding=query_embedding,
