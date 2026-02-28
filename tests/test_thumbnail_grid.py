@@ -1,3 +1,4 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -427,7 +428,7 @@ def test_scroll_triggers_load_more(qtbot, sample_image, tmp_path):
 def test_icon_path_dev():
     """In dev mode (no _MEIPASS) the path points to assets/icons/."""
     path = _icon_path("test.svg")
-    assert path.endswith("assets/icons/test.svg")
+    assert Path(path).parts[-3:] == ("assets", "icons", "test.svg")
 
 
 def test_icon_path_bundle(tmp_path):

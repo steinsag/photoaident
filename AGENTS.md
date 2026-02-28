@@ -67,7 +67,7 @@ Canonical key list: `AGE_CLUSTERS` in `db/database.py`. A face matches a person 
 | Linter/formatter           | ruff, black                       |                            |
 | Type checker               | ty                                |                            |
 | Testing                    | pytest, pytest-qt, pytest-alembic | In-memory SQLite for tests |
-| Distribution               | PyInstaller + appimagetool        | AppImage                   |
+| Distribution               | PyInstaller + linuxdeploy         | AppImage                   |
 
 ---
 
@@ -190,7 +190,7 @@ You are a senior Python engineer.
 - Be testable and side-effect minimal
 - Use proper logging instead of print
 - Remove dead code when modifying files
-- Improve surrounding code when toucch a file (Boy Scout Rule)
+- Improve surrounding code when touch a file (Boy Scout Rule)
 - Refactor obvious duplication
 - Simplify overly complex logic
 - Replace legacy patterns with modern Python
