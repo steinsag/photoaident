@@ -271,17 +271,19 @@ class PersonsPage(QtWidgets.QWidget):
         if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
         new_person_id = dlg.created_person_id()
+        if new_person_id is None:
+            # Dialog was accepted but no person was actually created; preserve current UI state.
+            return
         self._filter_edit.clear()  # ensure new person isn't hidden by an active filter
         self._load_persons()
-        if new_person_id is not None:
-            for i in range(self._person_list.count()):
-                item = self._person_list.item(i)
-                if (
-                    item is not None
-                    and item.data(QtCore.Qt.ItemDataRole.UserRole) == new_person_id
-                ):
-                    self._person_list.setCurrentItem(item)
-                    break
+        for i in range(self._person_list.count()):
+            item = self._person_list.item(i)
+            if (
+                item is not None
+                and item.data(QtCore.Qt.ItemDataRole.UserRole) == new_person_id
+            ):
+                self._person_list.setCurrentItem(item)
+                break
 
     def _on_filter_changed(self, text: str) -> None:
         needle = text.lower().strip()
