@@ -72,6 +72,10 @@ class _ImagePreviewWidget(QtWidgets.QWidget):
     def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self._original_pixmap: Optional[QtGui.QPixmap] = None
+        self._resize_timer = QtCore.QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(10)
+        self._resize_timer.timeout.connect(self._update_display)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         self._label = QtWidgets.QLabel()
@@ -127,7 +131,7 @@ class _ImagePreviewWidget(QtWidgets.QWidget):
 
     def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
-        QtCore.QTimer.singleShot(10, self._update_display)
+        self._resize_timer.start()
 
     def _update_display(self) -> None:
         if self._original_pixmap is None:
