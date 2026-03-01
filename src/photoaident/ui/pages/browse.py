@@ -2,8 +2,7 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
-from PySide6 import QtCore, QtWidgets
-from PySide6.QtGui import QKeyEvent
+from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
 from photoaident.db.database import Image
