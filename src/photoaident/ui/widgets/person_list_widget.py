@@ -66,7 +66,7 @@ class PersonListWidget(QtWidgets.QWidget):
         return False
 
     def clear_selection(self) -> None:
-        """Deselect all items without emitting person_selected."""
+        """Deselect all items and emit person_selected(None)."""
         self._list_widget.setCurrentRow(-1)
 
     def current_filter_text(self) -> str:
