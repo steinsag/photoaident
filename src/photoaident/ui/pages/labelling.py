@@ -365,6 +365,7 @@ class LabellingPage(QtWidgets.QWidget):
         if crop_path is not None and crop_path.exists():
             pix = QtGui.QPixmap(str(crop_path))
             if not pix.isNull():
+                self._crop_label.setText("")
                 self._crop_label.setPixmap(
                     pix.scaledToHeight(
                         300, QtCore.Qt.TransformationMode.SmoothTransformation
