@@ -197,6 +197,7 @@ class LabellingPage(QtWidgets.QWidget):
 
         self._crop_label = QtWidgets.QLabel()
         self._crop_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._crop_label.setWordWrap(True)
         self._crop_label.setFixedSize(300, 300)
         self._crop_label.setStyleSheet(
             "background-color: #aaa; border: 1px solid #888;"
