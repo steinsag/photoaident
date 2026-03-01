@@ -32,6 +32,40 @@ def _make_window(tmp_path, qtbot, collection_path: str = "") -> MainWindow:
     return window
 
 
+def test_navigation_shortcuts(qtbot, tmp_path):
+    """Test that Alt+1 to Alt+4 shortcuts switch to the correct page."""
+    window = _make_window(tmp_path, qtbot)
+
+    # Verify shortcuts are set correctly
+    assert window.btn_search.shortcut().toString() == "Alt+1"
+    assert window.btn_browse.shortcut().toString() == "Alt+2"
+    assert window.btn_persons.shortcut().toString() == "Alt+3"
+    assert window.btn_label.shortcut().toString() == "Alt+4"
+
+    # Initial page should be 0 (Search)
+    assert window.stacked.currentIndex() == 0
+
+    # Switch to Browse (Alt+2)
+    window.btn_browse.animateClick()
+    qtbot.wait(100)
+    assert window.stacked.currentIndex() == 1
+
+    # Switch to Persons (Alt+3)
+    window.btn_persons.animateClick()
+    qtbot.wait(100)
+    assert window.stacked.currentIndex() == 2
+
+    # Switch to Labelling (Alt+4)
+    window.btn_label.animateClick()
+    qtbot.wait(100)
+    assert window.stacked.currentIndex() == 3
+
+    # Switch back to Search (Alt+1)
+    window.btn_search.animateClick()
+    qtbot.wait(100)
+    assert window.stacked.currentIndex() == 0
+
+
 def test_app_setup(qtbot, tmp_path):
     """
     Test that the application window can be instantiated.
