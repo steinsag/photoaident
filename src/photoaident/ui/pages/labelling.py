@@ -688,7 +688,7 @@ class LabellingPage(QtWidgets.QWidget):
         self._person_list.clear()
         self._selected_person = None
         self._selected_cluster = None
-        self._cluster_table.clearSelection()
+        self._clear_cluster_table()
         self._set_buttons_enabled(False)
         self._update_confirm_button()
 
