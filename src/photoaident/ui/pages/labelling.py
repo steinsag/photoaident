@@ -477,34 +477,50 @@ class LabellingPage(QtWidgets.QWidget):
         current: Optional[QtWidgets.QListWidgetItem],
         _: Optional[QtWidgets.QListWidgetItem],
     ) -> None:
-        if current is None:
-            self._selected_person = None
-            self._selected_cluster = None
-            self._cluster_table.blockSignals(True)
-            self._cluster_table.clearSelection()
-            for row in range(self._cluster_table.rowCount()):
-                name_item = self._cluster_table.item(row, _COL_NAME)
-                score_item = self._cluster_table.item(row, _COL_SCORE)
-                if name_item is not None:
-                    name_item.setData(QtCore.Qt.ItemDataRole.UserRole, None)
-                if score_item is not None:
-                    score_item.setText("\u2014")
-            self._cluster_table.blockSignals(False)
-            self._update_confirm_button()
-            return
-
-        person: Person = current.data(QtCore.Qt.ItemDataRole.UserRole)
-        self._selected_person = person
         self._selected_cluster = None
 
-        cluster_by_age: dict[str, EmbeddingCluster] = {
-            c.age_group: c for c in person.clusters if c.age_group is not None
-        }
+        if current is None:
+            self._selected_person = None
+            self._clear_cluster_table()
+        else:
+            person: Person = current.data(QtCore.Qt.ItemDataRole.UserRole)
+            self._selected_person = person
+            cluster_by_age: dict[str, EmbeddingCluster] = {
+                c.age_group: c for c in person.clusters if c.age_group is not None
+            }
+            scores = (
+                self._compute_cluster_scores(cluster_by_age)
+                if self._query_embedding is not None
+                else {}
+            )
+            best_row = self._populate_cluster_table(cluster_by_age, scores)
+            if best_row is not None:
+                self._cluster_table.selectRow(best_row)
 
-        scores: dict[str, float] = {}
-        if self._query_embedding is not None:
-            scores = self._compute_cluster_scores(cluster_by_age)
+        self._update_confirm_button()
 
+    def _clear_cluster_table(self) -> None:
+        """Reset all cluster table rows to empty state with no associated data."""
+        self._cluster_table.blockSignals(True)
+        self._cluster_table.clearSelection()
+        for row in range(self._cluster_table.rowCount()):
+            name_item = self._cluster_table.item(row, _COL_NAME)
+            score_item = self._cluster_table.item(row, _COL_SCORE)
+            if name_item is not None:
+                name_item.setData(QtCore.Qt.ItemDataRole.UserRole, None)
+            if score_item is not None:
+                score_item.setText("\u2014")
+        self._cluster_table.blockSignals(False)
+
+    def _populate_cluster_table(
+        self,
+        cluster_by_age: dict[str, EmbeddingCluster],
+        scores: dict[str, float],
+    ) -> Optional[int]:
+        """Fill cluster table rows with cluster data and similarity scores.
+
+        Returns the index of the best-scoring row, or None if no scores are available.
+        """
         best_row: Optional[int] = None
         best_score: float = -1.0
         self._cluster_table.blockSignals(True)
@@ -524,13 +540,8 @@ class LabellingPage(QtWidgets.QWidget):
                     best_row = row
             else:
                 score_item.setText("\u2014")
-
         self._cluster_table.blockSignals(False)
-
-        if best_row is not None:
-            self._cluster_table.selectRow(best_row)
-
-        self._update_confirm_button()
+        return best_row
 
     def _compute_cluster_scores(
         self, cluster_by_age: dict[str, EmbeddingCluster]
