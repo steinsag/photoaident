@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
@@ -29,6 +30,15 @@ if TYPE_CHECKING:
 
 _COL_NAME = 0
 _COL_SCORE = 1
+
+
+@dataclass(frozen=True, slots=True)
+class _FaceData:
+    face_id: int
+    crop_path: Optional[Path]
+    image_path: Path
+    bbox: tuple[int, int, int, int]
+    faiss_id: int
 
 
 def _exif_pixmap_transform(
@@ -332,32 +342,22 @@ class LabellingPage(QtWidgets.QWidget):
             self._show_empty_state()
             return
 
-        (
-            face_id,
-            crop_path,
-            _,
-            _,
-            _,
-            image_path,
-            bbox,
-            faiss_id,
-        ) = face_data
-        self._current_face_id = face_id
+        self._current_face_id = face_data.face_id
 
         # Fetch embedding for similarity scoring
         self._query_embedding = None
         try:
-            self._query_embedding = self.vector_store.get_embedding(faiss_id)
+            self._query_embedding = self.vector_store.get_embedding(face_data.faiss_id)
         except Exception:
             logger.warning(
                 "Failed to retrieve embedding for face %s (faiss_id=%s)",
-                face_id,
-                faiss_id,
+                face_data.face_id,
+                face_data.faiss_id,
                 exc_info=True,
             )
 
-        self._image_preview.load(image_path, bbox)
-        self._load_crop(crop_path)
+        self._image_preview.load(face_data.image_path, face_data.bbox)
+        self._load_crop(face_data.crop_path)
         self._set_buttons_enabled(True)
         self._load_persons()
 
@@ -425,47 +425,19 @@ class LabellingPage(QtWidgets.QWidget):
             stmt = stmt.where(Face.id.not_in(list(self._skipped)))
         return stmt
 
-    def _extract_next_face_data(self, session: "Session") -> Optional[
-        tuple[
-            int,
-            Optional[Path],
-            Optional[Path],
-            str,
-            float,
-            Path,
-            tuple[int, int, int, int],
-            int,
-        ]
-    ]:
+    def _extract_next_face_data(self, session: "Session") -> Optional[_FaceData]:
         face = (
             session.execute(self._build_next_face_stmt()).unique().scalar_one_or_none()
         )
         if face is None:
             return None
         face_id = face.id
-        crop_path: Optional[Path] = self.paths.face_crops_dir / f"{face_id}.jpg"
-        thumb_path = (
-            self.paths.thumbs_dir / f"{face.image.file_hash}.jpg"
-            if face.image.file_hash
-            else None
-        )
-        meta = face.image.metadata_rel
-        taken_at = (
-            meta.taken_at.strftime("%Y-%m-%d")
-            if meta is not None and meta.taken_at is not None
-            else self.tr("Unknown")
-        )
-        image_path = Path(face.image.file_path)
-        bbox = (face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h)
-        return (
-            face_id,
-            crop_path,
-            thumb_path,
-            taken_at,
-            face.detection_confidence,
-            image_path,
-            bbox,
-            face.faiss_id,
+        return _FaceData(
+            face_id=face_id,
+            crop_path=self.paths.face_crops_dir / f"{face_id}.jpg",
+            image_path=Path(face.image.file_path),
+            bbox=(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h),
+            faiss_id=face.faiss_id,
         )
 
     # ------------------------------------------------------------------
