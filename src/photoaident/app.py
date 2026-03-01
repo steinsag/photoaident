@@ -126,15 +126,19 @@ class MainWindow(QtWidgets.QMainWindow):
         # Sidebar navigation buttons
         self.btn_search = self._make_nav_button(self.tr("Search"), "search.svg")
         self.btn_search.clicked.connect(lambda: self._switch_page(0))
+        self.btn_search.setShortcut(QtGui.QKeySequence("Alt+1"))
 
         self.btn_browse = self._make_nav_button(self.tr("Browse"), "browse.svg")
         self.btn_browse.clicked.connect(lambda: self._switch_page(1))
+        self.btn_browse.setShortcut(QtGui.QKeySequence("Alt+2"))
 
         self.btn_persons = self._make_nav_button(self.tr("Persons"), "person.svg")
         self.btn_persons.clicked.connect(lambda: self._switch_page(2))
+        self.btn_persons.setShortcut(QtGui.QKeySequence("Alt+3"))
 
         self.btn_label = self._make_nav_button(self.tr("Labelling"), "label.svg")
         self.btn_label.clicked.connect(lambda: self._switch_page(3))
+        self.btn_label.setShortcut(QtGui.QKeySequence("Alt+4"))
 
         nav_group = QtWidgets.QButtonGroup(self)
         nav_group.setExclusive(True)
