@@ -723,8 +723,8 @@ class LabellingPage(QtWidgets.QWidget):
         """Clear the current person/cluster selection."""
         self._selected_person = None
         self._selected_cluster = None
-        self._person_list.clearSelection()
-        self._cluster_table.clearSelection()
+        self._person_list.setCurrentRow(-1)
+        self._clear_cluster_table()
         self._update_confirm_button()
 
     def _mark_anonymous(self) -> None:
