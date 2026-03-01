@@ -5,6 +5,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from photoaident.db.database import (
     AGE_CLUSTERS,
@@ -160,6 +162,18 @@ def _insert_identified_face(
         session.add(face)
         session.commit()
         return face.id, faiss_id
+
+
+def _get_cluster_by_age(session_factory, person_id: int) -> dict:
+    """Load a person with clusters eagerly; return a {age_group: cluster} dict."""
+    with session_factory() as session:
+        person = session.execute(
+            select(Person)
+            .where(Person.id == person_id)
+            .options(selectinload(Person.clusters))
+        ).scalar_one()
+        session.expunge_all()
+    return {c.age_group: c for c in person.clusters if c.age_group}
 
 
 # ===========================================================================
@@ -456,9 +470,7 @@ def test_on_person_selected_populates_cluster_table(
 ):
     """Selecting a person in the list stores the person and populates cluster data."""
     _insert_face(session_factory)
-    person_id, cluster_id = _insert_person_with_cluster(
-        session_factory, "Marc", "adult"
-    )
+    person_id, _ = _insert_person_with_cluster(session_factory, "Marc", "adult")
 
     page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
@@ -616,18 +628,7 @@ def test_compute_cluster_scores_returns_float(
     # Set a non-trivial query embedding
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
-    with session_factory() as session:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        person = session.execute(
-            select(Person)
-            .where(Person.id == person_id)
-            .options(selectinload(Person.clusters))
-        ).scalar_one()
-        session.expunge_all()
-
-    cluster_by_age = {c.age_group: c for c in person.clusters if c.age_group}
+    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
 
     assert "adult" in scores
@@ -648,18 +649,7 @@ def test_compute_cluster_scores_zero_norm_query_returns_empty(
     qtbot.addWidget(page)
     page._query_embedding = np.zeros(512, dtype=np.float32)
 
-    with session_factory() as session:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        person = session.execute(
-            select(Person)
-            .where(Person.id == person_id)
-            .options(selectinload(Person.clusters))
-        ).scalar_one()
-        session.expunge_all()
-
-    cluster_by_age = {c.age_group: c for c in person.clusters if c.age_group}
+    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
     assert scores == {}
 
@@ -668,24 +658,13 @@ def test_compute_cluster_scores_empty_cluster_skipped(
     qtbot, session_factory, test_paths, vector_store
 ):
     """_compute_cluster_scores() skips clusters that have no identified faces."""
-    person_id, cluster_id = _insert_person_with_cluster(session_factory, "NF", "adult")
+    person_id, _ = _insert_person_with_cluster(session_factory, "NF", "adult")
 
     page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
-    with session_factory() as session:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        person = session.execute(
-            select(Person)
-            .where(Person.id == person_id)
-            .options(selectinload(Person.clusters))
-        ).scalar_one()
-        session.expunge_all()
-
-    cluster_by_age = {c.age_group: c for c in person.clusters if c.age_group}
+    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
     # No identified faces in the cluster → no score
     assert "adult" not in scores
@@ -701,7 +680,7 @@ def test_on_cluster_row_selected_sets_cluster(
 ):
     """Selecting a cluster row stores the cluster and enables confirm."""
     _insert_face(session_factory)
-    person_id, cluster_id = _insert_person_with_cluster(session_factory, "Row", "adult")
+    _insert_person_with_cluster(session_factory, "Row", "adult")
 
     page = LabellingPage(session_factory, test_paths, vector_store)
     qtbot.addWidget(page)
@@ -1290,18 +1269,7 @@ def test_compute_cluster_scores_get_embedding_exception(
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
-    with session_factory() as session:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        person = session.execute(
-            select(Person)
-            .where(Person.id == person_id)
-            .options(selectinload(Person.clusters))
-        ).scalar_one()
-        session.expunge_all()
-
-    cluster_by_age = {c.age_group: c for c in person.clusters if c.age_group}
+    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
 
     # All embeddings failed → cluster skipped → no score
@@ -1343,18 +1311,7 @@ def test_compute_cluster_scores_near_zero_mean_norm(
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
-    with session_factory() as session:
-        from sqlalchemy import select
-        from sqlalchemy.orm import selectinload
-
-        person = session.execute(
-            select(Person)
-            .where(Person.id == person_id)
-            .options(selectinload(Person.clusters))
-        ).scalar_one()
-        session.expunge_all()
-
-    cluster_by_age = {c.age_group: c for c in person.clusters if c.age_group}
+    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
 
     # Mean norm is ~0 → cluster skipped
