@@ -2,10 +2,6 @@
   "env": {
     "ENABLE_LSP_TOOL": "1"
   },
-  "enabledPlugins": {
-    "commit-commands@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true
-  },
   "hooks": {
     "PostToolUse": [
       {
@@ -13,10 +9,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run black ."
+            "command": "uv run ruff check --fix --unfixable F401 --quiet ."
+          },
+          {
+            "type": "command",
+            "command": "uv run black --quiet ."
           }
         ]
       }
     ]
+  },
+  "enabledPlugins": {
+    "commit-commands@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "claude-md-management@claude-plugins-official": true,
+    "code-simplifier@claude-plugins-official": true,
+    "claude-code-setup@claude-plugins-official": true
   }
 }
