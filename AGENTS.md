@@ -43,11 +43,9 @@ Canonical key list: `AGE_CLUSTERS` in `db/database.py`. A face matches a person 
 
 1. Run `uv run scripts/verify.py` — runs black, ruff --fix, ty check, lupdate staleness check, and pytest in sequence
 2. Fix all reported issues; never skip verification, even for trivial changes
-3. **If you added or modified any UI strings:**
-   - Wrap all user-facing strings in `self.tr()`
-   - Run `pyside6-lupdate` (see Development Commands) to update `.ts` files
-   - Add German translations in `photoaident_de.ts`
-   - Recompile `.qm` files with `pyside6-lrelease`
+3. **If you added a new module or widget without tests:** use the `test-writer` agent to generate them (target: 90%+ coverage)
+4. **If you added, removed, or changed any user-facing string (`self.tr("...")`):**
+   - Invoke the `/i18n` skill — it runs lupdate, fills in German translations, and recompiles `.qm` files
    - `verify.py` will fail if `.ts` files are stale
 
 ---
