@@ -1,4 +1,3 @@
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -359,53 +358,6 @@ def test_load_crop_missing_file_shows_placeholder(
     page.refresh()
 
     assert page._crop_label.text() == page.tr("No image")
-
-
-# ===========================================================================
-# _extract_next_face_data / date formatting
-# ===========================================================================
-
-
-def test_face_with_taken_at_date_formatted(
-    qtbot, session_factory, test_paths, vector_store
-):
-    """When metadata has taken_at, _extract_next_face_data formats it as YYYY-MM-DD."""
-    with session_factory() as session:
-        img = Image(file_path="/dated.jpg", file_size=1000, file_hash="datehash")
-        session.add(img)
-        session.flush()
-        session.add(
-            ImageMetadata(
-                image_id=img.id,
-                taken_at_source=TakenAtSource.EXIF,
-                taken_at=datetime(2020, 6, 15, 10, 30),
-                width=800,
-                height=600,
-            )
-        )
-        session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=77,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=50,
-                bbox_h=50,
-                detection_confidence=0.9,
-                state=FaceState.UNIDENTIFIED,
-                model_version="test",
-            )
-        )
-        session.commit()
-
-    page = LabellingPage(session_factory, test_paths, vector_store)
-    qtbot.addWidget(page)
-
-    with session_factory() as session:
-        data = page._extract_next_face_data(session)
-    assert data is not None
-    assert data[3] == "2020-06-15"
 
 
 # ===========================================================================

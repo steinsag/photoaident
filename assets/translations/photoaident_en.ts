@@ -254,7 +254,7 @@ Please close it before starting a new one.</translation>
     </message>
     <message>
         <source>Unknown</source>
-        <translation>Unknown</translation>
+        <translation type="vanished">Unknown</translation>
     </message>
     <message>
         <source>{count} face(s) remaining</source>
