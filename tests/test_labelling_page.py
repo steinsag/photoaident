@@ -460,6 +460,57 @@ def test_filter_persons_empty_text_shows_all(
     assert page._person_list.count() == 2
 
 
+def test_filter_text_preserved_across_face_advances(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """Filter text must survive _load_persons() — user should not have to retype."""
+    _insert_face(session_factory, "/img/a.jpg")
+    _insert_face(session_factory, "/img/b.jpg")
+    _insert_person_with_cluster(session_factory, "Alice")
+    _insert_person_with_cluster(session_factory, "Bob")
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    # User types a filter — only Alice visible
+    page._search_edit.setText("ali")
+    assert page._person_list.count() == 1
+
+    # Simulate advancing to the next face (as _load_next_face does)
+    page._load_persons()
+
+    # Filter text and filtered list must be intact
+    assert page._search_edit.text() == "ali"
+    assert page._person_list.count() == 1
+    assert page._person_list.item(0).text() == "Alice"
+
+
+def test_previous_person_selection_restored_after_face_advance(
+    qtbot, session_factory, test_paths, vector_store
+):
+    """The previously selected person is re-selected when loading the next face."""
+    _insert_face(session_factory, "/img/a.jpg")
+    _insert_face(session_factory, "/img/b.jpg")
+    person_id, _ = _insert_person_with_cluster(session_factory, "Alice")
+    _insert_person_with_cluster(session_factory, "Bob")
+
+    page = LabellingPage(session_factory, test_paths, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    # Select Alice
+    page._person_list.setCurrentRow(0)
+    assert page._selected_person is not None
+    assert page._selected_person.id == person_id
+
+    # Advance to next face — Alice should still be selected
+    page._load_persons()
+
+    assert page._selected_person is not None
+    assert page._selected_person.id == person_id
+
+
 # ===========================================================================
 # _on_person_selected / cluster table
 # ===========================================================================

@@ -424,7 +424,10 @@ class LabellingPage(QtWidgets.QWidget):
     # ------------------------------------------------------------------
 
     def _load_persons(self) -> None:
-        """Load all persons from DB and populate the list."""
+        """Load all persons from DB, preserving filter text and current selection."""
+        prev_person_id = (
+            self._selected_person.id if self._selected_person is not None else None
+        )
         self._selected_person = None
         self._selected_cluster = None
         with self.session_factory() as session:
@@ -439,10 +442,19 @@ class LabellingPage(QtWidgets.QWidget):
             )
             session.expunge_all()
             self._all_persons = list(persons)
-        self._search_edit.blockSignals(True)
-        self._search_edit.clear()
-        self._search_edit.blockSignals(False)
-        self._populate_person_list(self._all_persons)
+        # Preserve the current filter text so the user does not have to retype
+        # after each face advance.
+        self._filter_persons(self._search_edit.text())
+        # Restore the previously selected person if it is still in the filtered
+        # list (useful when labelling many faces for the same person in a row).
+        if prev_person_id is not None:
+            for i in range(self._person_list.count()):
+                item = self._person_list.item(i)
+                if item is None:  # pragma: no cover
+                    continue  # pragma: no cover
+                if item.data(QtCore.Qt.ItemDataRole.UserRole).id == prev_person_id:
+                    self._person_list.setCurrentItem(item)
+                    break
         self._update_confirm_button()
 
     def _populate_person_list(self, persons: list[Person]) -> None:
