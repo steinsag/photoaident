@@ -815,7 +815,6 @@ def test_navigate_right_expands_into_subfolder(tmp_path, qtbot):
     # "sub" has a subfolder, so a new column should appear as col 2 with "grand".
     assert len(page._columns) == 3
     grand_items = [
-        page._columns[2].item(row).text()
-        for row in range(page._columns[2].count())
+        page._columns[2].item(row).text() for row in range(page._columns[2].count())
     ]
     assert "grand" in grand_items
