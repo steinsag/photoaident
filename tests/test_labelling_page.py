@@ -895,7 +895,11 @@ def test_skip_image_noop_when_no_current_face(
 def test_skip_image_face_deleted_in_db(
     qtbot, session_factory, test_paths, vector_store
 ):
-    """_skip_image does nothing when the current face no longer exists in the DB."""
+    """_skip_image recovers gracefully when the current face no longer exists in DB.
+
+    Instead of staying stuck on a stale _current_face_id, the page advances
+    (clearing the current face) so the UI is not left in a broken state.
+    """
     face_id = _insert_face(session_factory)
 
     page = LabellingPage(session_factory, test_paths, vector_store)
@@ -913,7 +917,9 @@ def test_skip_image_face_deleted_in_db(
 
     page._skip_image()  # must not raise
 
+    # Page must have recovered: no stale image skip recorded, and current face cleared
     assert len(page._skipped_images) == 0
+    assert page._current_face_id is None
 
 
 def test_skip_image_button_exists_and_enabled_with_face(
