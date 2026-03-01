@@ -466,6 +466,16 @@ class LabellingPage(QtWidgets.QWidget):
         if current is None:
             self._selected_person = None
             self._selected_cluster = None
+            self._cluster_table.blockSignals(True)
+            self._cluster_table.clearSelection()
+            for row in range(self._cluster_table.rowCount()):
+                name_item = self._cluster_table.item(row, _COL_NAME)
+                score_item = self._cluster_table.item(row, _COL_SCORE)
+                if name_item is not None:
+                    name_item.setData(QtCore.Qt.ItemDataRole.UserRole, None)
+                if score_item is not None:
+                    score_item.setText("\u2014")
+            self._cluster_table.blockSignals(False)
             self._update_confirm_button()
             return
 
