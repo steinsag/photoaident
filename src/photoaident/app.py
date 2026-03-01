@@ -36,7 +36,7 @@ def get_resource_path(relative_path: str) -> str:
     """Get absolute path to resource, works for dev and for PyInstaller"""
     if hasattr(sys, "_MEIPASS"):
         # PyInstaller creates a temp folder and stores path in _MEIPASS
-        return os.path.join(sys._MEIPASS, relative_path)
+        return os.path.join(getattr(sys, "_MEIPASS"), relative_path)
 
     # In development, resources are in project_root/assets.
     # project_root is two levels up from this file (src/photoaident/app.py)
