@@ -404,9 +404,9 @@ def test_event_filter_non_keypress_falls_through(tmp_path, qtbot):
         QtCore.Qt.KeyboardModifier.NoModifier,
     )
     # super().eventFilter returns False for unhandled events; verify no crash
-    # and that the return value is a plain bool.
+    # and that the return value is False (unhandled).
     result = page.eventFilter(col, mouse_event)
-    assert isinstance(result, bool)
+    assert result is False
 
 
 # ===========================================================================
@@ -431,7 +431,7 @@ def test_event_filter_keypress_on_non_column_falls_through(tmp_path, qtbot):
         QtCore.Qt.KeyboardModifier.NoModifier,
     )
     result = page.eventFilter(unrelated, key_event)
-    assert isinstance(result, bool)
+    assert result is False
 
 
 # ===========================================================================
@@ -812,5 +812,10 @@ def test_navigate_right_expands_into_subfolder(tmp_path, qtbot):
     page.eventFilter(page._columns[0], key_event)
     QtCore.QCoreApplication.processEvents()
 
-    # "sub" has a subfolder, so a new column should appear.
-    assert len(page._columns) >= 2
+    # "sub" has a subfolder, so a new column should appear as col 2 with "grand".
+    assert len(page._columns) == 3
+    grand_items = [
+        page._columns[2].item(row).text()
+        for row in range(page._columns[2].count())
+    ]
+    assert "grand" in grand_items
