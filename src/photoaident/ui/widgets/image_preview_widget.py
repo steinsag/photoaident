@@ -94,6 +94,7 @@ class ImagePreviewWidget(QtWidgets.QWidget):
             )
 
         self._original_pixmap = pixmap
+        self._label.setText("")
         self._update_display()
 
     def clear(self) -> None:
