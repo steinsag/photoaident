@@ -21,8 +21,11 @@ class FaceCropWidget(QtWidgets.QLabel):
             if not pix.isNull():
                 self.setText("")
                 self.setPixmap(
-                    pix.scaledToHeight(
-                        300, QtCore.Qt.TransformationMode.SmoothTransformation
+                    pix.scaled(
+                        300,
+                        300,
+                        QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                        QtCore.Qt.TransformationMode.SmoothTransformation,
                     )
                 )
                 return
