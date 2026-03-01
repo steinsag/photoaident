@@ -142,7 +142,8 @@ def _insert_identified_face(
 
     Returns (face_id, faiss_id).
     """
-    embedding = np.random.randn(512).astype(np.float32)
+    rng = np.random.default_rng()
+    embedding = rng.standard_normal(512).astype(np.float32)
     embedding /= np.linalg.norm(embedding)
     faiss_id = vector_store.add(embedding)
     with session_factory() as session:
