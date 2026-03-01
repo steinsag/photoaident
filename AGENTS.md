@@ -10,7 +10,7 @@ external API calls.
 
 1. **Index** — scan images read-only, detect faces, compute embeddings, store in DB; all faces start as `unidentified`
 2. **Label** — review face crops; assign to a person, create a new person, or mark as `anonymous`
-3. **Propagate** — suggestion engine finds similar unidentified faces for fast confirm/reject; confirmed suggestions grow the cluster
+3. **Propagate** — suggestion engine finds similar unidentified faces for fast confirm/reject; confirmed suggestions grow the cluster *(not yet implemented — `core/labeller.py` is pending)*
 4. **Search** — filter by person, date range, GPS area, scene tags
 
 **Embedding clusters:** The 30-year photo span means a single embedding per person fails (baby → adult). Each person has exactly **5 fixed age-group clusters** created automatically on insert:
@@ -27,6 +27,12 @@ Canonical key list: `AGE_CLUSTERS` in `db/database.py`. A face matches a person 
 
 **Face states:** `unidentified` (in queue) · `identified` (assigned to person+cluster) · `anonymous` (permanently dismissed)
 
+**UI layout:** 4-page `QStackedWidget` in `MainWindow`:
+- Index 0: `LibraryPage` — thumbnail grid + person/FAISS search
+- Index 1: `BrowsePage` — folder-tree column browser
+- Index 2: `PersonsPage` — manage persons and embedding clusters
+- Index 3: `LabellingPage` — face-by-face labelling queue
+
 ---
 
 ## ⚠️ CRITICAL: Image Collection Is Read-Only
@@ -36,6 +42,23 @@ Canonical key list: `AGE_CLUSTERS` in `db/database.py`. A face matches a person 
 - All output goes to XDG paths (see below); the indexer opens files read-only only
 - Never write outside `~/.local/share/photoaident/` or `~/.cache/photoaident/`
 - If in doubt: **do not touch the image collection**
+
+---
+
+## Key Files
+
+| Concept                       | Path                                                      |
+|-------------------------------|-----------------------------------------------------------|
+| Entry point                   | `src/photoaident/__main__.py`                             |
+| QApplication + MainWindow     | `src/photoaident/app.py`                                  |
+| DB models (SQLAlchemy)        | `src/photoaident/db/database.py`                          |
+| FAISS wrapper                 | `src/photoaident/db/vector_store.py`                      |
+| Face embedding (ArcFace)      | `src/photoaident/core/embeddings.py`                      |
+| Indexer (Qt worker threads)   | `src/photoaident/core/indexing.py` + `core/inventory.py`  |
+| XDG paths                     | `src/photoaident/paths.py`                                |
+| Settings (TOML)               | `src/photoaident/settings.py`                             |
+| Pages (4-page stacked UI)     | `src/photoaident/ui/pages/`                               |
+| Reusable widgets              | `src/photoaident/ui/widgets/`                             |
 
 ---
 
@@ -141,7 +164,7 @@ For pure metadata queries (no person filter): skip FAISS, query SQLite directly.
 
 - Tests use in-memory SQLite with per-test transaction rollback (`tests/conftest.py`).
 - Test coverage should be 90%+ when possible.
-- `core/indexer.py` - Use fixture images; mock GPU calls
+- `core/indexing.py` / `core/inventory.py` — `IndexingTask` and `InventoryTask`; use fixture images; mock GPU calls
 - `ui/` - pytest-qt for smoke tests; avoid testing Qt internals
 - GPU tests: `@pytest.mark.gpu` — skipped when CUDA unavailable.
 - All others must pass on CPU-only CI.
