@@ -504,6 +504,7 @@ class LabellingPage(QtWidgets.QWidget):
         with self.session_factory() as session:
             face = session.get(Face, self._current_face_id)
             if face is None:
+                self._load_next_face()
                 return
             image_id = face.image_id
             self._skipped_images.add(image_id)
