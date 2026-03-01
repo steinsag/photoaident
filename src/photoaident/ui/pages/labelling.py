@@ -1,3 +1,4 @@
+import bisect
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -649,7 +650,7 @@ class LabellingPage(QtWidgets.QWidget):
             ).scalar_one()
             session.expunge_all()
 
-        self._all_persons.append(loaded)
+        bisect.insort(self._all_persons, loaded, key=lambda p: p.name)
         self._filter_persons(self._search_edit.text())
 
         for i in range(self._person_list.count()):
