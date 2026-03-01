@@ -40,47 +40,47 @@
     <name>AssignPersonDialog</name>
     <message>
         <source>Assign to Person</source>
-        <translation>Person zuweisen</translation>
+        <translation type="vanished">Person zuweisen</translation>
     </message>
     <message>
         <source>Person</source>
-        <translation>Person</translation>
+        <translation type="vanished">Person</translation>
     </message>
     <message>
         <source>Search…</source>
-        <translation>Suchen…</translation>
+        <translation type="vanished">Suchen…</translation>
     </message>
     <message>
         <source>New Person…</source>
-        <translation>Neue Person…</translation>
+        <translation type="vanished">Neue Person…</translation>
     </message>
     <message>
         <source>Age Group</source>
-        <translation>Altersgruppe</translation>
+        <translation type="vanished">Altersgruppe</translation>
     </message>
     <message>
         <source>Similarity</source>
-        <translation>Ähnlichkeit</translation>
+        <translation type="vanished">Ähnlichkeit</translation>
     </message>
     <message>
         <source>Infant (0–3)</source>
-        <translation>Kleinkind (0–3)</translation>
+        <translation type="vanished">Kleinkind (0–3)</translation>
     </message>
     <message>
         <source>Youngster (4–12)</source>
-        <translation>Kind (4–12)</translation>
+        <translation type="vanished">Kind (4–12)</translation>
     </message>
     <message>
         <source>Teenager (13–19)</source>
-        <translation>Teenager (13–19)</translation>
+        <translation type="vanished">Teenager (13–19)</translation>
     </message>
     <message>
         <source>Adult (20–75)</source>
-        <translation>Erwachsener (20–75)</translation>
+        <translation type="vanished">Erwachsener (20–75)</translation>
     </message>
     <message>
         <source>Senior (75+)</source>
-        <translation>Senior (75+)</translation>
+        <translation type="vanished">Senior (75+)</translation>
     </message>
 </context>
 <context>
@@ -94,16 +94,16 @@
     <name>FaceCropWidget</name>
     <message>
         <source>No image</source>
-        <translation>Kein Bild</translation>
+        <translation type="vanished">Kein Bild</translation>
     </message>
     <message>
         <source>No thumbnail</source>
-        <translation>Keine Miniaturansicht</translation>
+        <translation type="vanished">Keine Miniaturansicht</translation>
     </message>
     <message>
         <source>Date: {taken_at}
 Confidence: {confidence}%</source>
-        <translation>Datum: {taken_at}
+        <translation type="vanished">Datum: {taken_at}
 Konfidenz: {confidence}%</translation>
     </message>
 </context>
@@ -182,7 +182,7 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <name>LabellingPage</name>
     <message>
         <source>Assign to Person…</source>
-        <translation>Person zuweisen…</translation>
+        <translation type="vanished">Person zuweisen…</translation>
     </message>
     <message>
         <source>Mark Anonymous</source>
@@ -190,11 +190,67 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
     <message>
         <source>Skip</source>
-        <translation>Überspringen</translation>
+        <translation type="vanished">Überspringen</translation>
     </message>
     <message>
         <source>Skip Image</source>
         <translation>Bild überspringen</translation>
+    </message>
+    <message>
+        <source>Skip Face</source>
+        <translation>Gesicht überspringen</translation>
+    </message>
+    <message>
+        <source>Select Person</source>
+        <translation>Person auswählen</translation>
+    </message>
+    <message>
+        <source>Type to filter</source>
+        <translation>Zum Filtern tippen</translation>
+    </message>
+    <message>
+        <source>New Person…</source>
+        <translation>Neue Person…</translation>
+    </message>
+    <message>
+        <source>Age Group</source>
+        <translation>Altersgruppe</translation>
+    </message>
+    <message>
+        <source>Similarity</source>
+        <translation>Ähnlichkeit</translation>
+    </message>
+    <message>
+        <source>Infant (0–3)</source>
+        <translation>Kleinkind (0–3)</translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation>Kind (4–12)</translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation>Teenager (13–19)</translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation>Erwachsener (20–75)</translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
+        <translation>Senior (75+)</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Abbrechen</translation>
+    </message>
+    <message>
+        <source>Confirm</source>
+        <translation>Bestätigen</translation>
+    </message>
+    <message>
+        <source>No image</source>
+        <translation>Kein Bild</translation>
     </message>
     <message>
         <source>Unknown</source>
@@ -202,11 +258,11 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
     <message>
         <source>{count} face(s) remaining</source>
-        <translation>{count} Gesicht(er) verbleibend</translation>
+        <translation type="vanished">{count} Gesicht(er) verbleibend</translation>
     </message>
     <message>
         <source>{count} face(s) remaining in this image</source>
-        <translation>{count} Gesicht(er) in diesem Bild verbleibend</translation>
+        <translation type="vanished">{count} Gesicht(er) in diesem Bild verbleibend</translation>
     </message>
     <message>
         <source>All done! No unidentified faces remain.</source>
