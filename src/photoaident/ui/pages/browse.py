@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from PySide6 import QtCore, QtWidgets
+from PySide6.QtGui import QKeyEvent
 from sqlalchemy import select
 
 from photoaident.db.database import Image
@@ -95,6 +96,8 @@ class BrowsePage(QtWidgets.QWidget):
 
         self._hint_label.setVisible(False)
         self._rebuild_root_column(root)
+        if self._columns:
+            self._columns[0].setFocus()
 
     def _clear_columns(self) -> None:
         """Remove all column widgets from the layout."""
@@ -152,6 +155,7 @@ class BrowsePage(QtWidgets.QWidget):
         insert_pos = self._columns_layout.count() - 1
         self._columns_layout.insertWidget(insert_pos, col)
         self._columns.append(col)
+        col.installEventFilter(self)
         self._update_container_width()
 
         # Scroll to make the new column fully visible.  The scrollbar maximum is
@@ -215,6 +219,64 @@ class BrowsePage(QtWidgets.QWidget):
             images = session.scalars(stmt).all()
             direct = [img for img in images if Path(img.file_path).parent == folder]
             self.grid.set_results(self._build_images_data(direct))
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        """Intercept arrow keys in column widgets for keyboard navigation."""
+        if event.type() != QtCore.QEvent.Type.KeyPress:
+            return super().eventFilter(obj, event)
+
+        col_index = next((i for i, c in enumerate(self._columns) if c is obj), -1)
+        if col_index < 0:
+            return super().eventFilter(obj, event)
+
+        col = self._columns[col_index]
+        key = cast(QKeyEvent, event).key()
+
+        if key == QtCore.Qt.Key.Key_Left:
+            self._navigate_left(col_index)
+            return True
+
+        if key == QtCore.Qt.Key.Key_Right:
+            self._navigate_right(col_index)
+            return True
+
+        if key in (QtCore.Qt.Key.Key_Up, QtCore.Qt.Key.Key_Down):
+            prev_row = col.currentRow()
+            col.keyPressEvent(cast(QKeyEvent, event))
+            if col.currentRow() != prev_row:
+                current = col.currentItem()
+                if current is not None:
+                    self._on_column_item_changed(col_index, current)
+            return True
+
+        return super().eventFilter(obj, event)
+
+    def _navigate_left(self, col_index: int) -> None:
+        """Move focus one column left and collapse columns to the right."""
+        if col_index == 0:
+            return
+        left_col = self._columns[col_index - 1]
+        current = left_col.currentItem()
+        if current is not None:
+            # _on_column_item_changed calls _add_column → insertWidget, which
+            # can transfer focus to the newly inserted widget.  Set focus after
+            # the layout mutation so the intended column always wins.
+            self._on_column_item_changed(col_index - 1, current)
+        left_col.setFocus()
+
+    def _navigate_right(self, col_index: int) -> None:
+        """Move focus one column right, selecting its first item if needed."""
+        if col_index >= len(self._columns) - 1:
+            return
+        right_col = self._columns[col_index + 1]
+        if right_col.currentItem() is None:
+            right_col.setCurrentRow(0)
+        current = right_col.currentItem()
+        if current is not None:
+            # Same reasoning as _navigate_left: set focus after the layout
+            # mutation so insertWidget cannot steal it from right_col.
+            self._on_column_item_changed(col_index + 1, current)
+        right_col.setFocus()
 
     def _on_navigate_to_labelling(self, image_id: int) -> None:
         from photoaident.app import MainWindow  # local import breaks circular dep

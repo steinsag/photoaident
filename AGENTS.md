@@ -10,8 +10,7 @@ external API calls.
 
 1. **Index** — scan images read-only, detect faces, compute embeddings, store in DB; all faces start as `unidentified`
 2. **Label** — review face crops; assign to a person, create a new person, or mark as `anonymous`
-3. **Propagate** — suggestion engine finds similar unidentified faces for fast confirm/reject; confirmed suggestions grow the cluster *(not yet implemented — `core/labeller.py` is pending)*
-4. **Search** — filter by person, date range, GPS area, scene tags
+3. **Search** — filter by person, date range, GPS area, scene tags
 
 **Embedding clusters:** The 30-year photo span means a single embedding per person fails (baby → adult). Each person has exactly **5 fixed age-group clusters** created automatically on insert:
 

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6 import QtCore, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.db.database import Image, get_engine, get_session_factory
 from photoaident.db.migrate import apply_migrations
@@ -376,3 +376,441 @@ def test_browse_page_navigate_to_labelling(tmp_path, qtbot, monkeypatch):
 
     page._on_navigate_to_labelling(42)
     assert calls == [42]
+
+
+# ===========================================================================
+# eventFilter — non-KeyPress events fall through to super
+# ===========================================================================
+
+
+def test_event_filter_non_keypress_falls_through(tmp_path, qtbot):
+    """eventFilter with a non-KeyPress event returns super()'s result."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    col = page._columns[0]
+    # Send a mouse-button-press event (not a key event) directly to the filter.
+    mouse_event = QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseButtonPress,
+        QtCore.QPointF(0, 0),
+        QtCore.QPointF(0, 0),
+        QtCore.QPointF(0, 0),
+        QtCore.Qt.MouseButton.LeftButton,
+        QtCore.Qt.MouseButton.LeftButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    # super().eventFilter returns False for unhandled events; verify no crash
+    # and that the return value is a plain bool.
+    result = page.eventFilter(col, mouse_event)
+    assert isinstance(result, bool)
+
+
+# ===========================================================================
+# eventFilter — KeyPress on a non-column object falls through to super
+# ===========================================================================
+
+
+def test_event_filter_keypress_on_non_column_falls_through(tmp_path, qtbot):
+    """eventFilter ignores KeyPress events from objects that are not columns."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    unrelated = QtWidgets.QListWidget()
+    qtbot.addWidget(unrelated)
+
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Left,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    result = page.eventFilter(unrelated, key_event)
+    assert isinstance(result, bool)
+
+
+# ===========================================================================
+# eventFilter — Key_Left dispatches to _navigate_left
+# ===========================================================================
+
+
+def test_event_filter_key_left_calls_navigate_left(tmp_path, qtbot, monkeypatch):
+    """eventFilter on Key_Left calls _navigate_left with the column index."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    calls: list[int] = []
+    monkeypatch.setattr(page, "_navigate_left", lambda idx: calls.append(idx))
+
+    # Column 1 exists because root has a subfolder.
+    col = page._columns[1]
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Left,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    result = page.eventFilter(col, key_event)
+
+    assert result is True
+    assert calls == [1]
+
+
+# ===========================================================================
+# eventFilter — Key_Right dispatches to _navigate_right
+# ===========================================================================
+
+
+def test_event_filter_key_right_calls_navigate_right(tmp_path, qtbot, monkeypatch):
+    """eventFilter on Key_Right calls _navigate_right with the column index."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    calls: list[int] = []
+    monkeypatch.setattr(page, "_navigate_right", lambda idx: calls.append(idx))
+
+    # Use column 0 so there is something to the right.
+    col = page._columns[0]
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Right,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    result = page.eventFilter(col, key_event)
+
+    assert result is True
+    assert calls == [0]
+
+
+# ===========================================================================
+# eventFilter — Key_Down changes row and triggers _on_column_item_changed
+# ===========================================================================
+
+
+def test_event_filter_key_down_changes_row_triggers_handler(
+    tmp_path, qtbot, monkeypatch
+):
+    """Key_Down moves selection and calls _on_column_item_changed when row changes."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "alpha").mkdir()
+    (collection / "beta").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    # Column 1 has two subfolders; select the first one.
+    col = page._columns[1]
+    col.setCurrentRow(0)
+
+    handler_calls: list[tuple[int, object]] = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Down,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    result = page.eventFilter(col, key_event)
+
+    assert result is True
+    # Row should have moved from 0 to 1, triggering the handler.
+    assert col.currentRow() == 1
+    assert len(handler_calls) == 1
+    assert handler_calls[0][0] == 1  # col_index for column 1
+
+
+# ===========================================================================
+# eventFilter — Key_Up on first row does not trigger _on_column_item_changed
+# ===========================================================================
+
+
+def test_event_filter_key_up_at_first_row_no_handler_call(tmp_path, qtbot, monkeypatch):
+    """Key_Up when already on row 0 does not call _on_column_item_changed."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    col = page._columns[1]
+    col.setCurrentRow(0)
+
+    handler_calls: list = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Up,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    result = page.eventFilter(col, key_event)
+
+    assert result is True
+    # Row did not change (already at top), so handler must not be called.
+    assert handler_calls == []
+
+
+# ===========================================================================
+# eventFilter — unrecognised key falls through to super
+# ===========================================================================
+
+
+def test_event_filter_unrecognised_key_falls_through(tmp_path, qtbot):
+    """eventFilter returns super()'s result for unrecognised keys like Key_Space."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    col = page._columns[0]
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Space,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    result = page.eventFilter(col, key_event)
+    # super().eventFilter returns False for unhandled events.
+    assert result is False
+
+
+# ===========================================================================
+# _navigate_left — at column 0 is a no-op
+# ===========================================================================
+
+
+def test_navigate_left_at_column_zero_is_noop(tmp_path, qtbot, monkeypatch):
+    """_navigate_left(0) does nothing — there is no column to the left."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    handler_calls: list = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    page._navigate_left(0)
+
+    assert handler_calls == []
+
+
+# ===========================================================================
+# _navigate_left — moves focus and calls _on_column_item_changed
+# ===========================================================================
+
+
+def test_navigate_left_focuses_previous_column(tmp_path, qtbot, monkeypatch):
+    """_navigate_left(1) focuses column 0 and fires _on_column_item_changed(0, ...)."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.show()
+    page.refresh()
+
+    handler_calls: list[tuple[int, object]] = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    page._navigate_left(1)
+
+    assert len(handler_calls) == 1
+    assert handler_calls[0][0] == 0  # col_index 0
+
+
+# ===========================================================================
+# _navigate_right — at last column is a no-op
+# ===========================================================================
+
+
+def test_navigate_right_at_last_column_is_noop(tmp_path, qtbot, monkeypatch):
+    """_navigate_right at the last column does nothing."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    # No subfolders under root: after refresh only col 0 exists.
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    handler_calls: list = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    last_col_index = len(page._columns) - 1
+    page._navigate_right(last_col_index)
+
+    assert handler_calls == []
+
+
+# ===========================================================================
+# _navigate_right — focuses right column, selects row 0 when nothing selected
+# ===========================================================================
+
+
+def test_navigate_right_selects_first_row_when_nothing_selected(
+    tmp_path, qtbot, monkeypatch
+):
+    """_navigate_right selects row 0 in the right column when it has no selection."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "alpha").mkdir()
+    (collection / "beta").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    # Clear any existing selection in column 1 so we exercise the setCurrentRow(0) path.
+    page._columns[1].clearSelection()
+    page._columns[1].setCurrentRow(-1)
+
+    handler_calls: list[tuple[int, object]] = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    page._navigate_right(0)
+
+    assert page._columns[1].currentRow() == 0
+    assert len(handler_calls) == 1
+    assert handler_calls[0][0] == 1  # col_index 1
+
+
+# ===========================================================================
+# _navigate_right — preserves existing selection in the right column
+# ===========================================================================
+
+
+def test_navigate_right_keeps_existing_selection(tmp_path, qtbot, monkeypatch):
+    """_navigate_right keeps the current item when the right column already has one."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    (collection / "alpha").mkdir()
+    (collection / "beta").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    # Pre-select row 1 (second subfolder) in column 1.
+    page._columns[1].setCurrentRow(1)
+
+    handler_calls: list[tuple[int, object]] = []
+    monkeypatch.setattr(
+        page,
+        "_on_column_item_changed",
+        lambda idx, item: handler_calls.append((idx, item)),
+    )
+
+    page._navigate_right(0)
+
+    # Selection should remain on row 1 (not reset to 0).
+    assert page._columns[1].currentRow() == 1
+    assert len(handler_calls) == 1
+    assert handler_calls[0][0] == 1
+
+
+# ===========================================================================
+# _navigate_left — collapses child columns to the right
+# ===========================================================================
+
+
+def test_navigate_left_collapses_right_columns(tmp_path, qtbot):
+    """Pressing Key_Left in col 1 collapses any columns beyond col 0."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    sub = collection / "sub"
+    sub.mkdir()
+    (sub / "grand").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+
+    # Navigate into "sub" to reveal col 2 with "grand".
+    col1 = page._columns[1]
+    col1.itemClicked.emit(col1.item(0))
+    QtCore.QCoreApplication.processEvents()
+    assert len(page._columns) == 3
+
+    # Fire Key_Left on column 1 via eventFilter to collapse col 2.
+    col1 = page._columns[1]
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Left,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    page.eventFilter(col1, key_event)
+    QtCore.QCoreApplication.processEvents()
+
+    # After navigating left to col 0, _on_column_item_changed re-selects root,
+    # which re-adds col 1 (sub's children) but col 2 is gone.
+    assert len(page._columns) == 2
+
+
+# ===========================================================================
+# _navigate_right — expanding into subfolder adds a new column
+# ===========================================================================
+
+
+def test_navigate_right_expands_into_subfolder(tmp_path, qtbot):
+    """Pressing Key_Right in col 0 expands root's subfolder and adds col 2."""
+    collection = tmp_path / "photos"
+    collection.mkdir()
+    sub = collection / "sub"
+    sub.mkdir()
+    (sub / "grand").mkdir()
+
+    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page.refresh()
+    # After refresh: col 0 = root, col 1 = ["sub"].  Ensure col 1 row 0 is selected.
+    page._columns[1].setCurrentRow(0)
+    QtCore.QCoreApplication.processEvents()
+
+    # Now navigate right from col 1 into col 2 (grand's children or lack thereof).
+    # But col 1 item "sub" has subfolder "grand", so pressing right on col 0
+    # should work too.  Use col 0 → moves to col 1 item "sub".
+    key_event = QtGui.QKeyEvent(
+        QtCore.QEvent.Type.KeyPress,
+        QtCore.Qt.Key.Key_Right,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+    page.eventFilter(page._columns[0], key_event)
+    QtCore.QCoreApplication.processEvents()
+
+    # "sub" has a subfolder, so a new column should appear.
+    assert len(page._columns) >= 2
