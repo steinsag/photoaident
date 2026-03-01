@@ -175,6 +175,7 @@ class LabellingPage(QtWidgets.QWidget):
         self._skipped.clear()
         self._skipped_images.clear()
         self._priority_image_id = priority_image_id
+        self._load_persons()
         self._load_next_face()
 
     # ------------------------------------------------------------------
@@ -209,7 +210,7 @@ class LabellingPage(QtWidgets.QWidget):
         self._image_preview.load(face_data.image_path, face_data.bbox)
         self._face_crop.load(face_data.crop_path)
         self._set_buttons_enabled(True)
-        self._load_persons()
+        self._refresh_cluster_selection()
 
     def _maybe_clear_priority(self, session: "Session") -> None:
         if self._priority_image_id is None:
@@ -312,13 +313,15 @@ class LabellingPage(QtWidgets.QWidget):
         _: object = None,
     ) -> None:
         """Handle person selection from PersonListWidget signal or direct call."""
-        self._selected_cluster = None
+        self._selected_person = person
+        self._populate_clusters_for_person(person)
 
+    def _populate_clusters_for_person(self, person: Optional[Person]) -> None:
+        """Populate the cluster widget for *person*, auto-selecting the best match."""
+        self._selected_cluster = None
         if person is None:
-            self._selected_person = None
             self._cluster_widget.clear_data()
         else:
-            self._selected_person = person
             cluster_by_age: dict[str, EmbeddingCluster] = {
                 c.age_group: c for c in person.clusters if c.age_group is not None
             }
@@ -330,8 +333,11 @@ class LabellingPage(QtWidgets.QWidget):
             best_row = self._cluster_widget.populate(cluster_by_age, scores)
             if best_row is not None:
                 self._cluster_widget.select_row(best_row)
-
         self._update_confirm_button()
+
+    def _refresh_cluster_selection(self) -> None:
+        """Recalculate cluster scores for the current face; no DB round-trip."""
+        self._populate_clusters_for_person(self._selected_person)
 
     def _on_cluster_selected(self, cluster: Optional[EmbeddingCluster]) -> None:
         self._selected_cluster = cluster
