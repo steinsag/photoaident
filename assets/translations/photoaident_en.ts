@@ -91,10 +91,41 @@
     </message>
 </context>
 <context>
+    <name>ClusterTableWidget</name>
+    <message>
+        <source>Age Group</source>
+        <translation>Age Group</translation>
+    </message>
+    <message>
+        <source>Similarity</source>
+        <translation>Similarity</translation>
+    </message>
+    <message>
+        <source>Infant (0–3)</source>
+        <translation>Infant (0–3)</translation>
+    </message>
+    <message>
+        <source>Youngster (4–12)</source>
+        <translation>Youngster (4–12)</translation>
+    </message>
+    <message>
+        <source>Teenager (13–19)</source>
+        <translation>Teenager (13–19)</translation>
+    </message>
+    <message>
+        <source>Adult (20–75)</source>
+        <translation>Adult (20–75)</translation>
+    </message>
+    <message>
+        <source>Senior (75+)</source>
+        <translation>Senior (75+)</translation>
+    </message>
+</context>
+<context>
     <name>FaceCropWidget</name>
     <message>
         <source>No image</source>
-        <translation type="vanished">No image</translation>
+        <translation>No image</translation>
     </message>
     <message>
         <source>No thumbnail</source>
@@ -206,39 +237,39 @@ Please close it before starting a new one.</translation>
     </message>
     <message>
         <source>Type to filter</source>
-        <translation>Type to filter</translation>
+        <translation type="vanished">Type to filter</translation>
     </message>
     <message>
         <source>New Person…</source>
-        <translation>New Person…</translation>
+        <translation type="vanished">New Person…</translation>
     </message>
     <message>
         <source>Age Group</source>
-        <translation>Age Group</translation>
+        <translation type="vanished">Age Group</translation>
     </message>
     <message>
         <source>Similarity</source>
-        <translation>Similarity</translation>
+        <translation type="vanished">Similarity</translation>
     </message>
     <message>
         <source>Infant (0–3)</source>
-        <translation>Infant (0–3)</translation>
+        <translation type="vanished">Infant (0–3)</translation>
     </message>
     <message>
         <source>Youngster (4–12)</source>
-        <translation>Youngster (4–12)</translation>
+        <translation type="vanished">Youngster (4–12)</translation>
     </message>
     <message>
         <source>Teenager (13–19)</source>
-        <translation>Teenager (13–19)</translation>
+        <translation type="vanished">Teenager (13–19)</translation>
     </message>
     <message>
         <source>Adult (20–75)</source>
-        <translation>Adult (20–75)</translation>
+        <translation type="vanished">Adult (20–75)</translation>
     </message>
     <message>
         <source>Senior (75+)</source>
-        <translation>Senior (75+)</translation>
+        <translation type="vanished">Senior (75+)</translation>
     </message>
     <message>
         <source>Cancel</source>
@@ -250,7 +281,7 @@ Please close it before starting a new one.</translation>
     </message>
     <message>
         <source>No image</source>
-        <translation>No image</translation>
+        <translation type="vanished">No image</translation>
     </message>
     <message>
         <source>Unknown</source>
@@ -448,6 +479,17 @@ Do you really want to proceed?</translation>
     <message>
         <source>Name:</source>
         <translation>Name:</translation>
+    </message>
+</context>
+<context>
+    <name>PersonListWidget</name>
+    <message>
+        <source>Type to filter</source>
+        <translation>Type to filter</translation>
+    </message>
+    <message>
+        <source>New Person…</source>
+        <translation>New Person…</translation>
     </message>
 </context>
 <context>
