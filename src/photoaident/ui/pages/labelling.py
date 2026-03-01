@@ -47,6 +47,7 @@ class _ImagePreviewWidget(QtWidgets.QWidget):
     def load(self, image_path: Path, bbox: tuple[int, int, int, int]) -> None:
         """Load image from path and draw a red bounding box at bbox (x, y, w, h)."""
         if not image_path.exists():
+            self._label.setPixmap(QtGui.QPixmap())
             self._label.setText(str(image_path))
             self._original_pixmap = None
             return
@@ -55,6 +56,7 @@ class _ImagePreviewWidget(QtWidgets.QWidget):
         reader.setAutoTransform(True)
         qimage = reader.read()
         if qimage.isNull():
+            self._label.setPixmap(QtGui.QPixmap())
             self._label.setText(reader.errorString())
             self._original_pixmap = None
             return
@@ -284,9 +286,9 @@ class LabellingPage(QtWidgets.QWidget):
         (
             face_id,
             crop_path,
-            _thumb_path,
-            _taken_at,
-            _confidence,
+            _,
+            _,
+            _,
             image_path,
             bbox,
             faiss_id,
@@ -461,7 +463,7 @@ class LabellingPage(QtWidgets.QWidget):
     def _on_person_selected(
         self,
         current: Optional[QtWidgets.QListWidgetItem],
-        _previous: Optional[QtWidgets.QListWidgetItem],
+        _: Optional[QtWidgets.QListWidgetItem],
     ) -> None:
         if current is None:
             self._selected_person = None
