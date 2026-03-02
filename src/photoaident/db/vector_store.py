@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Any, List, Tuple
 
-import faiss
 import numpy as np
+from faiss import IndexFlatIP, read_index, write_index
 
 
 class VectorStore:
@@ -18,7 +18,7 @@ class VectorStore:
         self.dimension = dimension
         # IndexFlatIP does not support IDs by default, but it returns the 0-indexed
         # position which acts as the faiss_id.
-        self.index: Any = getattr(faiss, "IndexFlatIP")(self.dimension)
+        self.index: Any = IndexFlatIP(self.dimension)
 
     def add(self, embedding: np.ndarray) -> int:
         """Adds an embedding to the index and returns its faiss_id.
@@ -107,7 +107,7 @@ class VectorStore:
             path: Path to the .index file.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        getattr(faiss, "write_index")(self.index, str(path))
+        write_index(self.index, str(path))
 
     def load(self, path: Path) -> None:
         """Loads a FAISS index from a file.
@@ -118,7 +118,7 @@ class VectorStore:
         if not path.exists():
             raise FileNotFoundError(f"Index file not found: {path}")
 
-        self.index = getattr(faiss, "read_index")(str(path))
+        self.index = read_index(str(path))
         if self.index.d != self.dimension:
             raise ValueError(
                 f"Loaded index dimension {self.index.d} "

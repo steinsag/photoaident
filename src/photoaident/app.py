@@ -347,7 +347,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._update_db_counts()
         self.library_page.load_images()
 
-    def _make_nav_button(self, label: str, icon_name: str) -> QtWidgets.QToolButton:
+    @staticmethod
+    def _make_nav_button(label: str, icon_name: str) -> QtWidgets.QToolButton:
         """Create a checkable sidebar navigation button with an icon and label."""
         btn = QtWidgets.QToolButton()
         btn.setText(label)
