@@ -11,19 +11,15 @@ from photoaident.settings import Settings
 from photoaident.ui.pages.browse import BrowsePage
 
 
-def _make_browse_page(tmp_path, qtbot, collection_path: str = "") -> BrowsePage:
+def _make_browse_page(
+    tmp_app_paths: AppPaths, qtbot, collection_path: str = ""
+) -> BrowsePage:
     """Create a BrowsePage with isolated DB and optional collection path."""
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    apply_migrations(f"sqlite:///{paths.db_path}")
-    engine = get_engine(str(paths.db_path))
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+    engine = get_engine(str(tmp_app_paths.db_path))
     session_factory = get_session_factory(engine)
     settings = Settings(collection_path=collection_path)
-    page = BrowsePage(session_factory, paths, settings)
+    page = BrowsePage(session_factory, tmp_app_paths, settings)
     qtbot.addWidget(page)
     return page
 
@@ -33,9 +29,9 @@ def _make_browse_page(tmp_path, qtbot, collection_path: str = "") -> BrowsePage:
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_renders(tmp_path, qtbot):
+def test_browse_page_renders(tmp_app_paths, qtbot):
     """BrowsePage instantiates without error and exposes a grid widget."""
-    page = _make_browse_page(tmp_path, qtbot)
+    page = _make_browse_page(tmp_app_paths, qtbot)
     assert page.grid is not None
 
 
@@ -44,9 +40,9 @@ def test_browse_page_renders(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_empty_collection(tmp_path, qtbot):
+def test_browse_page_empty_collection(tmp_app_paths, qtbot):
     """Calling refresh() with no collection_path produces no columns and no crash."""
-    page = _make_browse_page(tmp_path, qtbot, collection_path="")
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path="")
     page.refresh()
     assert len(page._columns) == 0
 
@@ -56,14 +52,14 @@ def test_browse_page_empty_collection(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_root_column_shows_subfolders(tmp_path, qtbot):
+def test_browse_page_root_column_shows_subfolders(tmp_app_paths, qtbot):
     """After refresh(), column 0 holds the root folder and column 1 its children."""
-    collection = tmp_path / "photos"
+    collection = tmp_app_paths.thumbs_dir / "photos"
     collection.mkdir()
     (collection / "2020").mkdir()
     (collection / "2021").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     # Column 0: root itself (single item, auto-selected)
@@ -83,21 +79,15 @@ def test_browse_page_root_column_shows_subfolders(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_root_images_shown_on_open(tmp_path, qtbot):
+def test_browse_page_root_images_shown_on_open(tmp_app_paths, qtbot):
     """Images directly in the collection root are shown when the page opens."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     sub = collection / "sub"
     sub.mkdir()
 
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    apply_migrations(f"sqlite:///{paths.db_path}")
-    engine = get_engine(str(paths.db_path))
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+    engine = get_engine(str(tmp_app_paths.db_path))
     session_factory = get_session_factory(engine)
 
     with session_factory() as session:
@@ -106,7 +96,7 @@ def test_browse_page_root_images_shown_on_open(tmp_path, qtbot):
         session.commit()
 
     settings = Settings(collection_path=str(collection))
-    page = BrowsePage(session_factory, paths, settings)
+    page = BrowsePage(session_factory, tmp_app_paths, settings)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -120,23 +110,17 @@ def test_browse_page_root_images_shown_on_open(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_loads_direct_images_only(tmp_path, qtbot):
+def test_browse_page_loads_direct_images_only(tmp_app_paths, qtbot):
     """Selecting a folder only loads images whose direct parent is that folder."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     sub_a = collection / "subA"
     sub_a.mkdir()
     sub_b = sub_a / "subB"
     sub_b.mkdir()
 
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    apply_migrations(f"sqlite:///{paths.db_path}")
-    engine = get_engine(str(paths.db_path))
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+    engine = get_engine(str(tmp_app_paths.db_path))
     session_factory = get_session_factory(engine)
 
     with session_factory() as session:
@@ -146,7 +130,7 @@ def test_browse_page_loads_direct_images_only(tmp_path, qtbot):
         session.commit()
 
     settings = Settings(collection_path=str(collection))
-    page = BrowsePage(session_factory, paths, settings)
+    page = BrowsePage(session_factory, tmp_app_paths, settings)
     qtbot.addWidget(page)
     page.refresh()
     # After refresh: col 0 = root (auto-selected), col 1 = ["subA"]
@@ -170,10 +154,10 @@ def test_browse_page_loads_direct_images_only(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_column_hierarchy(tmp_path, qtbot):
+def test_browse_page_column_hierarchy(tmp_app_paths, qtbot):
     """Selecting a folder with subfolders adds a new column; a leaf removes it."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     parent_dir = collection / "events"
     parent_dir.mkdir()
     (parent_dir / "wedding").mkdir()
@@ -181,7 +165,7 @@ def test_browse_page_column_hierarchy(tmp_path, qtbot):
     leaf_dir = collection / "misc"
     leaf_dir.mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     # col 0 = root (auto-selected), col 1 = ["events", "misc"]
     assert len(page._columns) == 2
@@ -211,10 +195,10 @@ def test_browse_page_column_hierarchy(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_column_replaced_on_new_selection(tmp_path, qtbot):
+def test_browse_page_column_replaced_on_new_selection(tmp_app_paths, qtbot):
     """Selecting a new folder replaces child columns to the right."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     dir_a = collection / "dirA"
     dir_a.mkdir()
     (dir_a / "child1").mkdir()
@@ -223,7 +207,7 @@ def test_browse_page_column_replaced_on_new_selection(tmp_path, qtbot):
     dir_b.mkdir()
     (dir_b / "other").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     # col 0 = root (auto-selected), col 1 = ["dirA", "dirB"]
 
@@ -258,15 +242,15 @@ def test_browse_page_column_replaced_on_new_selection(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_reclick_ancestor_collapses_child_columns(tmp_path, qtbot):
+def test_browse_page_reclick_ancestor_collapses_child_columns(tmp_app_paths, qtbot):
     """Re-clicking col 0 (root) while col 1 and col 2 are open removes col 2."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     sub = collection / "sub"
     sub.mkdir()
     (sub / "grand").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     # col 0 = root (auto-selected), col 1 = ["sub"]
 
@@ -288,9 +272,13 @@ def test_browse_page_reclick_ancestor_collapses_child_columns(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_nonexistent_collection(tmp_path, qtbot):
+def test_browse_page_nonexistent_collection(tmp_app_paths, qtbot):
     """refresh() with a configured-but-missing directory clears UI and shows hint."""
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(tmp_path / "gone"))
+    collection = _make_collection_dir(tmp_app_paths)
+
+    page = _make_browse_page(
+        tmp_app_paths, qtbot, collection_path=str(collection / "gone")
+    )
     page.refresh()
     assert len(page._columns) == 0
     assert not page._hint_label.isHidden()
@@ -301,13 +289,12 @@ def test_browse_page_nonexistent_collection(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_clear_columns_removes_existing(tmp_path, qtbot):
+def test_browse_page_clear_columns_removes_existing(tmp_app_paths, qtbot):
     """A second refresh() exercises the deletion loop inside _clear_columns."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     assert len(page._columns) == 2
     page.refresh()
@@ -319,11 +306,11 @@ def test_browse_page_clear_columns_removes_existing(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_column_item_changed_none_is_noop(tmp_path, qtbot):
+def test_browse_page_column_item_changed_none_is_noop(tmp_app_paths, qtbot):
     """Passing None to _on_column_item_changed must not raise or mutate state."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    collection = _make_collection_dir(tmp_app_paths)
+
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     before = len(page._columns)
     page._on_column_item_changed(0, None)  # must be a no-op
@@ -335,21 +322,20 @@ def test_browse_page_column_item_changed_none_is_noop(tmp_path, qtbot):
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_permission_error_returns_empty(tmp_path, qtbot, monkeypatch):
+def test_browse_page_permission_error_returns_empty(qtbot, monkeypatch, tmp_app_paths):
     """_get_subfolders returns [] when the OS raises PermissionError."""
-    page = _make_browse_page(tmp_path, qtbot)
-    restricted = tmp_path / "locked"
-    restricted.mkdir()
+    page = _make_browse_page(tmp_app_paths, qtbot)
+    collection = _make_collection_dir(tmp_app_paths)
 
     original_iterdir = Path.iterdir
 
     def raise_permission(self):
-        if self == restricted:
+        if self == collection:
             raise PermissionError("access denied")
         return original_iterdir(self)
 
     monkeypatch.setattr(Path, "iterdir", raise_permission)
-    assert page._get_subfolders(restricted) == []
+    assert page._get_subfolders(collection) == []
 
 
 # ---------------------------------------------------------------------------
@@ -357,7 +343,7 @@ def test_browse_page_permission_error_returns_empty(tmp_path, qtbot, monkeypatch
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_navigate_to_labelling(tmp_path, qtbot, monkeypatch):
+def test_browse_page_navigate_to_labelling(qtbot, monkeypatch, tmp_app_paths):
     """navigate_to_labelling signal causes go_to_labelling() on the MainWindow."""
     import photoaident.app as app_module
 
@@ -370,7 +356,7 @@ def test_browse_page_navigate_to_labelling(tmp_path, qtbot, monkeypatch):
     fake_win = FakeMainWindow()
     qtbot.addWidget(fake_win)
 
-    page = _make_browse_page(tmp_path, qtbot)
+    page = _make_browse_page(tmp_app_paths, qtbot)
     monkeypatch.setattr(page, "window", lambda: fake_win)
     monkeypatch.setattr(app_module, "MainWindow", FakeMainWindow)
 
@@ -383,13 +369,13 @@ def test_browse_page_navigate_to_labelling(tmp_path, qtbot, monkeypatch):
 # ===========================================================================
 
 
-def test_event_filter_non_keypress_falls_through(tmp_path, qtbot):
+def test_event_filter_non_keypress_falls_through(tmp_app_paths, qtbot):
     """eventFilter with a non-KeyPress event returns super()'s result."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     col = page._columns[0]
@@ -414,12 +400,11 @@ def test_event_filter_non_keypress_falls_through(tmp_path, qtbot):
 # ===========================================================================
 
 
-def test_event_filter_keypress_on_non_column_falls_through(tmp_path, qtbot):
+def test_event_filter_keypress_on_non_column_falls_through(tmp_app_paths, qtbot):
     """eventFilter ignores KeyPress events from objects that are not columns."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     unrelated = QtWidgets.QListWidget()
@@ -439,13 +424,13 @@ def test_event_filter_keypress_on_non_column_falls_through(tmp_path, qtbot):
 # ===========================================================================
 
 
-def test_event_filter_key_left_calls_navigate_left(tmp_path, qtbot, monkeypatch):
+def test_event_filter_key_left_calls_navigate_left(qtbot, monkeypatch, tmp_app_paths):
     """eventFilter on Key_Left calls _navigate_left with the column index."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     calls: list[int] = []
@@ -469,13 +454,13 @@ def test_event_filter_key_left_calls_navigate_left(tmp_path, qtbot, monkeypatch)
 # ===========================================================================
 
 
-def test_event_filter_key_right_calls_navigate_right(tmp_path, qtbot, monkeypatch):
+def test_event_filter_key_right_calls_navigate_right(qtbot, monkeypatch, tmp_app_paths):
     """eventFilter on Key_Right calls _navigate_right with the column index."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     calls: list[int] = []
@@ -500,15 +485,15 @@ def test_event_filter_key_right_calls_navigate_right(tmp_path, qtbot, monkeypatc
 
 
 def test_event_filter_key_down_changes_row_triggers_handler(
-    tmp_path, qtbot, monkeypatch
+    qtbot, monkeypatch, tmp_app_paths
 ):
     """Key_Down moves selection and calls _on_column_item_changed when row changes."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "alpha").mkdir()
     (collection / "beta").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     # Column 1 has two subfolders; select the first one.
@@ -541,13 +526,15 @@ def test_event_filter_key_down_changes_row_triggers_handler(
 # ===========================================================================
 
 
-def test_event_filter_key_up_at_first_row_no_handler_call(tmp_path, qtbot, monkeypatch):
+def test_event_filter_key_up_at_first_row_no_handler_call(
+    qtbot, monkeypatch, tmp_app_paths
+):
     """Key_Up when already on row 0 does not call _on_column_item_changed."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     col = page._columns[1]
@@ -577,12 +564,11 @@ def test_event_filter_key_up_at_first_row_no_handler_call(tmp_path, qtbot, monke
 # ===========================================================================
 
 
-def test_event_filter_unrecognised_key_falls_through(tmp_path, qtbot):
+def test_event_filter_unrecognised_key_falls_through(tmp_app_paths, qtbot):
     """eventFilter returns super()'s result for unrecognised keys like Key_Space."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     col = page._columns[0]
@@ -601,13 +587,13 @@ def test_event_filter_unrecognised_key_falls_through(tmp_path, qtbot):
 # ===========================================================================
 
 
-def test_navigate_left_at_column_zero_is_noop(tmp_path, qtbot, monkeypatch):
+def test_navigate_left_at_column_zero_is_noop(qtbot, monkeypatch, tmp_app_paths):
     """_navigate_left(0) does nothing — there is no column to the left."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     handler_calls: list = []
@@ -627,13 +613,13 @@ def test_navigate_left_at_column_zero_is_noop(tmp_path, qtbot, monkeypatch):
 # ===========================================================================
 
 
-def test_navigate_left_focuses_previous_column(tmp_path, qtbot, monkeypatch):
+def test_navigate_left_focuses_previous_column(qtbot, monkeypatch, tmp_app_paths):
     """_navigate_left(1) focuses column 0 and fires _on_column_item_changed(0, ...)."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "sub").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.show()
     page.refresh()
 
@@ -655,13 +641,13 @@ def test_navigate_left_focuses_previous_column(tmp_path, qtbot, monkeypatch):
 # ===========================================================================
 
 
-def test_navigate_right_at_last_column_is_noop(tmp_path, qtbot, monkeypatch):
+def test_navigate_right_at_last_column_is_noop(qtbot, monkeypatch, tmp_app_paths):
     """_navigate_right at the last column does nothing."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     # No subfolders under root: after refresh only col 0 exists.
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     handler_calls: list = []
@@ -683,15 +669,15 @@ def test_navigate_right_at_last_column_is_noop(tmp_path, qtbot, monkeypatch):
 
 
 def test_navigate_right_selects_first_row_when_nothing_selected(
-    tmp_path, qtbot, monkeypatch
+    qtbot, monkeypatch, tmp_app_paths
 ):
     """_navigate_right selects row 0 in the right column when it has no selection."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "alpha").mkdir()
     (collection / "beta").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     # Clear any existing selection in column 1 so we exercise the setCurrentRow(0) path.
@@ -717,14 +703,14 @@ def test_navigate_right_selects_first_row_when_nothing_selected(
 # ===========================================================================
 
 
-def test_navigate_right_keeps_existing_selection(tmp_path, qtbot, monkeypatch):
+def test_navigate_right_keeps_existing_selection(qtbot, monkeypatch, tmp_app_paths):
     """_navigate_right keeps the current item when the right column already has one."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     (collection / "alpha").mkdir()
     (collection / "beta").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     # Pre-select row 1 (second subfolder) in column 1.
@@ -750,15 +736,15 @@ def test_navigate_right_keeps_existing_selection(tmp_path, qtbot, monkeypatch):
 # ===========================================================================
 
 
-def test_navigate_left_collapses_right_columns(tmp_path, qtbot):
+def test_navigate_left_collapses_right_columns(tmp_app_paths, qtbot):
     """Pressing Key_Left in col 1 collapses any columns beyond col 0."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     sub = collection / "sub"
     sub.mkdir()
     (sub / "grand").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
 
     # Navigate into "sub" to reveal col 2 with "grand".
@@ -787,15 +773,15 @@ def test_navigate_left_collapses_right_columns(tmp_path, qtbot):
 # ===========================================================================
 
 
-def test_navigate_right_expands_into_subfolder(tmp_path, qtbot):
+def test_navigate_right_expands_into_subfolder(tmp_app_paths, qtbot):
     """Pressing Key_Right in col 0 expands root's subfolder and adds col 2."""
-    collection = tmp_path / "photos"
-    collection.mkdir()
+    collection = _make_collection_dir(tmp_app_paths)
+
     sub = collection / "sub"
     sub.mkdir()
     (sub / "grand").mkdir()
 
-    page = _make_browse_page(tmp_path, qtbot, collection_path=str(collection))
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     # After refresh: col 0 = root, col 1 = ["sub"].  Ensure col 1 row 0 is selected.
     page._columns[1].setCurrentRow(0)
@@ -818,3 +804,9 @@ def test_navigate_right_expands_into_subfolder(tmp_path, qtbot):
         page._columns[2].item(row).text() for row in range(page._columns[2].count())
     ]
     assert "grand" in grand_items
+
+
+def _make_collection_dir(tmp_app_paths: AppPaths) -> Path:
+    collection_dir = tmp_app_paths.thumbs_dir / "photos"
+    collection_dir.mkdir(exist_ok=True)
+    return collection_dir

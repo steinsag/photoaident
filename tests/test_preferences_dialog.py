@@ -1,24 +1,9 @@
-import pytest
 from PySide6 import QtCore, QtWidgets
 
 from photoaident.app import MainWindow
 from photoaident.db.migrate import apply_migrations
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
-
-
-@pytest.fixture
-def test_paths(tmp_path):
-    from photoaident.paths import AppPaths
-
-    base = tmp_path / "photoaident"
-    paths = AppPaths(
-        base_data=base / "data",
-        base_cache=base / "cache",
-        base_config=base / "config",
-    )
-    paths.ensure_dirs()
-    return paths
 
 
 def test_preferences_dialog_initial_path(qtbot):
@@ -60,13 +45,13 @@ def test_preferences_dialog_reject(qtbot):
     assert dialog.get_collection_path() == "/new/path"
 
 
-def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
+def test_preferences_save_settings(qtbot, tmp_app_paths, monkeypatch):
     """Test that settings are saved when the dialog is accepted in MainWindow."""
     # Apply migrations to the test DB
-    apply_migrations(f"sqlite:///{test_paths.db_path}")
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
 
     # Create a MainWindow
-    window = MainWindow(test_paths, check_gpu=False, enable_onboarding=False)
+    window = MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
     qtbot.add_widget(window)
 
     # Mock PreferencesDialog.exec to simulate OK
@@ -97,7 +82,7 @@ def test_preferences_save_settings(qtbot, test_paths, monkeypatch):
     assert window.settings.collection_path == "/mock/saved/path"
 
     # Verify settings on disk
-    loaded_settings = Settings.load(test_paths.config_file)
+    loaded_settings = Settings.load(tmp_app_paths.config_file)
     assert loaded_settings.collection_path == "/mock/saved/path"
 
 
@@ -133,16 +118,16 @@ def test_browse_path_cancelled_keeps_edit(qtbot, monkeypatch):
     assert dialog.path_edit.text() == "/initial/path"
 
 
-def test_preferences_cancel_not_saved(qtbot, test_paths, monkeypatch):
+def test_preferences_cancel_not_saved(qtbot, tmp_app_paths, monkeypatch):
     """Test that settings are NOT saved when the dialog is cancelled."""
     # Apply migrations to the test DB
-    apply_migrations(f"sqlite:///{test_paths.db_path}")
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
 
     initial_path = "/initial/path"
-    test_paths.config_file.parent.mkdir(parents=True, exist_ok=True)
-    Settings(collection_path=initial_path).save(test_paths.config_file)
+    tmp_app_paths.config_file.parent.mkdir(parents=True, exist_ok=True)
+    Settings(collection_path=initial_path).save(tmp_app_paths.config_file)
 
-    window = MainWindow(test_paths, check_gpu=False, enable_onboarding=False)
+    window = MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
     qtbot.add_widget(window)
 
     # Mock PreferencesDialog.exec to simulate Cancel
@@ -159,5 +144,5 @@ def test_preferences_cancel_not_saved(qtbot, test_paths, monkeypatch):
     assert window.settings.collection_path == initial_path
 
     # Verify settings on disk NOT updated
-    loaded_settings = Settings.load(test_paths.config_file)
+    loaded_settings = Settings.load(tmp_app_paths.config_file)
     assert loaded_settings.collection_path == initial_path

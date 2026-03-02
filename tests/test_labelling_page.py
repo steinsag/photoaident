@@ -21,19 +21,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
-from photoaident.paths import AppPaths
 from photoaident.ui.pages.labelling import LabellingPage
-
-
-@pytest.fixture
-def test_paths(tmp_path):
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    return paths
 
 
 @pytest.fixture
@@ -181,9 +169,9 @@ def _get_cluster_by_age(session_factory, person_id: int) -> dict:
 # ===========================================================================
 
 
-def test_labelling_page_no_faces(qtbot, session_factory, test_paths, vector_store):
+def test_labelling_page_no_faces(qtbot, session_factory, tmp_app_paths, vector_store):
     """Page disables action buttons when the DB has no unidentified faces."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -193,11 +181,11 @@ def test_labelling_page_no_faces(qtbot, session_factory, test_paths, vector_stor
     assert not page.skip_image_btn.isEnabled()
 
 
-def test_labelling_page_shows_face(qtbot, session_factory, test_paths, vector_store):
+def test_labelling_page_shows_face(qtbot, session_factory, tmp_app_paths, vector_store):
     """Page loads and enables action buttons when a face exists in the DB."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -209,10 +197,10 @@ def test_labelling_page_shows_face(qtbot, session_factory, test_paths, vector_st
 
 
 def test_labelling_page_empty_state_all_done(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Empty state when no unidentified faces remain shows 'All done' in crop label."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -220,12 +208,12 @@ def test_labelling_page_empty_state_all_done(
 
 
 def test_labelling_page_empty_state_all_skipped(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Empty state when faces exist but all are skipped shows 'skipped' message."""
     _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
     page._skip_face()  # skip the only face
@@ -238,15 +226,17 @@ def test_labelling_page_empty_state_all_skipped(
 # ===========================================================================
 
 
-def test_load_crop_with_existing_file(qtbot, session_factory, test_paths, vector_store):
+def test_load_crop_with_existing_file(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
     """_load_crop() sets a pixmap when the crop file exists and is a valid JPEG."""
     face_id = _insert_face(session_factory)
 
     # Place a valid JPEG at the expected crop location
-    crop_path = test_paths.face_crops_dir / f"{face_id}.jpg"
+    crop_path = tmp_app_paths.face_crops_dir / f"{face_id}.jpg"
     _make_jpeg(crop_path)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -255,12 +245,12 @@ def test_load_crop_with_existing_file(qtbot, session_factory, test_paths, vector
 
 
 def test_load_crop_missing_file_shows_placeholder(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_load_crop() shows 'No image' text when crop file does not exist."""
     _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -272,13 +262,15 @@ def test_load_crop_missing_file_shows_placeholder(
 # ===========================================================================
 
 
-def test_load_persons_populates_list(qtbot, session_factory, test_paths, vector_store):
+def test_load_persons_populates_list(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
     """After refresh(), the person list contains all persons in DB order."""
     _insert_face(session_factory)
     _insert_person_with_cluster(session_factory, "Alice")
     _insert_person_with_cluster(session_factory, "Bob")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -288,7 +280,7 @@ def test_load_persons_populates_list(qtbot, session_factory, test_paths, vector_
 
 
 def test_filter_text_preserved_across_face_advances(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Filter text must survive _load_persons() — user should not have to retype."""
     _insert_face(session_factory, "/img/a.jpg")
@@ -296,7 +288,7 @@ def test_filter_text_preserved_across_face_advances(
     _insert_person_with_cluster(session_factory, "Alice")
     _insert_person_with_cluster(session_factory, "Bob")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -314,7 +306,7 @@ def test_filter_text_preserved_across_face_advances(
 
 
 def test_previous_person_selection_restored_after_face_advance(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """The previously selected person is re-selected when loading the next face."""
     _insert_face(session_factory, "/img/a.jpg")
@@ -322,7 +314,7 @@ def test_previous_person_selection_restored_after_face_advance(
     person_id, _ = _insert_person_with_cluster(session_factory, "Alice")
     _insert_person_with_cluster(session_factory, "Bob")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -344,13 +336,13 @@ def test_previous_person_selection_restored_after_face_advance(
 
 
 def test_on_person_selected_populates_cluster_table(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Selecting a person in the list stores the person and populates cluster data."""
     _insert_face(session_factory)
     person_id, _ = _insert_person_with_cluster(session_factory, "Marc", "adult")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -362,13 +354,13 @@ def test_on_person_selected_populates_cluster_table(
 
 
 def test_on_person_selected_deselect_clears_state(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Deselecting a person clears _selected_person and disables confirm."""
     _insert_face(session_factory)
     _insert_person_with_cluster(session_factory, "Marc")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -383,7 +375,7 @@ def test_on_person_selected_deselect_clears_state(
 
 
 def test_on_person_selected_with_embedding_shows_scores(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Selecting a person when a query embedding is present shows similarity scores."""
     img_id = _insert_image(session_factory, "/emb.jpg", "embhash")
@@ -413,7 +405,7 @@ def test_on_person_selected_with_embedding_shows_scores(
         session_factory, vector_store, person_id, cluster_id, ref_img_id
     )
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -432,7 +424,7 @@ def test_on_person_selected_with_embedding_shows_scores(
 
 
 def test_on_person_selected_preselects_best_cluster(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """The cluster with the highest score is pre-selected after person selection."""
     img_id = _insert_image(session_factory, "/pre.jpg", "prehash")
@@ -459,7 +451,7 @@ def test_on_person_selected_preselects_best_cluster(
         session_factory, vector_store, person_id, cluster_id, ref_img_id
     )
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -475,7 +467,7 @@ def test_on_person_selected_preselects_best_cluster(
 # ===========================================================================
 
 
-def test_get_cluster_faiss_ids(qtbot, session_factory, test_paths, vector_store):
+def test_get_cluster_faiss_ids(qtbot, session_factory, tmp_app_paths, vector_store):
     """_get_cluster_faiss_ids() returns only identified-face faiss_ids for a cluster."""
     img_id = _insert_image(session_factory, "/gfi.jpg", "gfihash")
     person_id, cluster_id = _insert_person_with_cluster(session_factory, "GFI", "adult")
@@ -483,7 +475,7 @@ def test_get_cluster_faiss_ids(qtbot, session_factory, test_paths, vector_store)
         session_factory, vector_store, person_id, cluster_id, img_id
     )
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
     result = page._get_cluster_faiss_ids(cluster_id)
@@ -491,7 +483,7 @@ def test_get_cluster_faiss_ids(qtbot, session_factory, test_paths, vector_store)
 
 
 def test_compute_cluster_scores_returns_float(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_compute_cluster_scores() returns a float score for clusters with embeddings."""
     img_id = _insert_image(session_factory, "/ccs.jpg", "ccshash")
@@ -500,7 +492,7 @@ def test_compute_cluster_scores_returns_float(
         session_factory, vector_store, person_id, cluster_id, img_id
     )
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
     # Set a non-trivial query embedding
@@ -514,7 +506,7 @@ def test_compute_cluster_scores_returns_float(
 
 
 def test_compute_cluster_scores_zero_norm_query_returns_empty(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_compute_cluster_scores() returns {} when query embedding is all zeros."""
     img_id = _insert_image(session_factory, "/znq.jpg", "znqhash")
@@ -523,7 +515,7 @@ def test_compute_cluster_scores_zero_norm_query_returns_empty(
         session_factory, vector_store, person_id, cluster_id, img_id
     )
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page._query_embedding = np.zeros(512, dtype=np.float32)
 
@@ -533,12 +525,12 @@ def test_compute_cluster_scores_zero_norm_query_returns_empty(
 
 
 def test_compute_cluster_scores_empty_cluster_skipped(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_compute_cluster_scores() skips clusters that have no identified faces."""
     person_id, _ = _insert_person_with_cluster(session_factory, "NF", "adult")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
@@ -554,13 +546,13 @@ def test_compute_cluster_scores_empty_cluster_skipped(
 
 
 def test_create_new_person_rejected_does_nothing(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Cancelling NewPersonDialog leaves the person list unchanged."""
     _insert_face(session_factory)
     _insert_person_with_cluster(session_factory, "Existing")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -575,7 +567,7 @@ def test_create_new_person_rejected_does_nothing(
 
 
 def test_create_new_person_accepted_adds_and_selects(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Accepting NewPersonDialog adds the new person and selects them in the list."""
     _insert_face(session_factory)
@@ -583,7 +575,7 @@ def test_create_new_person_accepted_adds_and_selects(
     # Pre-insert the person that the dialog would create
     person_id, _ = _insert_person_with_cluster(session_factory, "NewGuy", "adult")
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -604,12 +596,12 @@ def test_create_new_person_accepted_adds_and_selects(
 
 
 def test_create_new_person_accepted_none_id_does_nothing(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """If created_person_id() returns None, _create_new_person does nothing."""
     _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -629,7 +621,7 @@ def test_create_new_person_accepted_none_id_does_nothing(
 
 
 def test_confirm_assigns_face_and_advances(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_on_confirm sets state=IDENTIFIED and advances to the next face."""
     with session_factory() as session:
@@ -644,7 +636,7 @@ def test_confirm_assigns_face_and_advances(
 
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -671,9 +663,11 @@ def test_confirm_assigns_face_and_advances(
         assert face.labelled_at is not None
 
 
-def test_on_confirm_noop_when_no_face(qtbot, session_factory, test_paths, vector_store):
+def test_on_confirm_noop_when_no_face(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
     """_on_confirm does nothing when no face is loaded."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
     assert page._current_face_id is None
@@ -682,12 +676,12 @@ def test_on_confirm_noop_when_no_face(qtbot, session_factory, test_paths, vector
 
 
 def test_on_confirm_noop_when_no_selection(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_on_confirm does nothing when no person/cluster is selected."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -703,12 +697,12 @@ def test_on_confirm_noop_when_no_selection(
 
 
 def test_confirm_disabled_without_selection(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """confirm_btn is disabled when no person+cluster is selected."""
     _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -724,11 +718,11 @@ def test_confirm_disabled_without_selection(
     assert page.confirm_btn.isEnabled()
 
 
-def test_cancel_clears_selection(qtbot, session_factory, test_paths, vector_store):
+def test_cancel_clears_selection(qtbot, session_factory, tmp_app_paths, vector_store):
     """_on_cancel clears person/cluster selection without changing face or advancing."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -750,11 +744,11 @@ def test_cancel_clears_selection(qtbot, session_factory, test_paths, vector_stor
 # ===========================================================================
 
 
-def test_mark_anonymous(qtbot, session_factory, test_paths, vector_store):
+def test_mark_anonymous(qtbot, session_factory, tmp_app_paths, vector_store):
     """Clicking Mark Anonymous sets face.state = ANONYMOUS and advances."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -772,10 +766,10 @@ def test_mark_anonymous(qtbot, session_factory, test_paths, vector_store):
 
 
 def test_mark_anonymous_noop_when_no_current_face(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_mark_anonymous does nothing when _current_face_id is None."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
     assert page._current_face_id is None
@@ -788,11 +782,11 @@ def test_mark_anonymous_noop_when_no_current_face(
 # ===========================================================================
 
 
-def test_skip_face(qtbot, session_factory, test_paths, vector_store):
+def test_skip_face(qtbot, session_factory, tmp_app_paths, vector_store):
     """Skip does not change face state and moves to next (or done when all skipped)."""
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -810,10 +804,10 @@ def test_skip_face(qtbot, session_factory, test_paths, vector_store):
 
 
 def test_skip_face_noop_when_no_current_face(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_skip_face does nothing when _current_face_id is None."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
     assert page._current_face_id is None
@@ -827,7 +821,7 @@ def test_skip_face_noop_when_no_current_face(
 
 
 def test_skip_image_skips_all_faces_of_current_image(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_skip_image records the current image in _skipped_images so all its faces
     are excluded from subsequent face queries."""
@@ -837,7 +831,7 @@ def test_skip_image_skips_all_faces_of_current_image(
     face2_id = _insert_face_for_image(session_factory, img1_id, faiss_id=51)
     face3_id = _insert_face_for_image(session_factory, img2_id, faiss_id=52)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -859,14 +853,14 @@ def test_skip_image_skips_all_faces_of_current_image(
 
 
 def test_skip_image_does_not_change_face_state(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_skip_image must not alter face state in the DB."""
     img_id = _insert_image(session_factory, "/sino.jpg", "sinohash")
     face1_id = _insert_face_for_image(session_factory, img_id, faiss_id=60)
     face2_id = _insert_face_for_image(session_factory, img_id, faiss_id=61)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
     page._skip_image()
@@ -880,10 +874,10 @@ def test_skip_image_does_not_change_face_state(
 
 
 def test_skip_image_noop_when_no_current_face(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_skip_image does nothing when _current_face_id is None."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
     assert page._current_face_id is None
@@ -893,7 +887,7 @@ def test_skip_image_noop_when_no_current_face(
 
 
 def test_skip_image_face_deleted_in_db(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_skip_image recovers gracefully when the current face no longer exists in DB.
 
@@ -902,7 +896,7 @@ def test_skip_image_face_deleted_in_db(
     """
     face_id = _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -923,12 +917,12 @@ def test_skip_image_face_deleted_in_db(
 
 
 def test_skip_image_button_exists_and_enabled_with_face(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """The Skip Image button is present and enabled when a face is loaded."""
     _insert_face(session_factory)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -937,10 +931,10 @@ def test_skip_image_button_exists_and_enabled_with_face(
 
 
 def test_skip_image_button_disabled_when_no_faces(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """The Skip Image button is disabled when there are no faces to label."""
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -954,7 +948,7 @@ def test_skip_image_button_disabled_when_no_faces(
 
 
 def test_priority_image_shows_image_faces_first(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """refresh(priority_image_id=X) causes the first face to come from image X."""
     img1_id = _insert_image(session_factory, "/img1.jpg", "hash1")
@@ -962,7 +956,7 @@ def test_priority_image_shows_image_faces_first(
     _insert_face_for_image(session_factory, img2_id, faiss_id=10)
     face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=11)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh(priority_image_id=img1_id)
 
@@ -971,7 +965,7 @@ def test_priority_image_shows_image_faces_first(
 
 
 def test_priority_clears_after_all_image_faces_done(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """After all priority-image faces are labelled, priority is cleared."""
     img1_id = _insert_image(session_factory, "/p1.jpg", "phash1")
@@ -979,7 +973,7 @@ def test_priority_clears_after_all_image_faces_done(
     face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=20)
     _insert_face_for_image(session_factory, img2_id, faiss_id=21)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh(priority_image_id=img1_id)
 
@@ -992,7 +986,7 @@ def test_priority_clears_after_all_image_faces_done(
 
 
 def test_maybe_clear_priority_with_skipped_faces(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_maybe_clear_priority counts remaining faces excluding skipped ones."""
     img1_id = _insert_image(session_factory, "/mcp.jpg", "mcphash")
@@ -1001,7 +995,7 @@ def test_maybe_clear_priority_with_skipped_faces(
     face2_id = _insert_face_for_image(session_factory, img1_id, faiss_id=81)
     _insert_face_for_image(session_factory, img2_id, faiss_id=82)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh(priority_image_id=img1_id)
 
@@ -1017,13 +1011,13 @@ def test_maybe_clear_priority_with_skipped_faces(
 
 
 def test_refresh_without_priority_clears_priority(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Calling refresh() without arguments clears any previously set priority."""
     img_id = _insert_image(session_factory, "/clr.jpg", "clrhash")
     _insert_face_for_image(session_factory, img_id, faiss_id=40)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh(priority_image_id=img_id)
     assert page._priority_image_id == img_id
@@ -1033,7 +1027,7 @@ def test_refresh_without_priority_clears_priority(
 
 
 def test_skip_image_clears_priority_when_all_image_faces_skipped(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """Skipping the priority image via _skip_image clears priority in one click."""
     img1_id = _insert_image(session_factory, "/pri1.jpg", "prihash1")
@@ -1042,7 +1036,7 @@ def test_skip_image_clears_priority_when_all_image_faces_skipped(
     _insert_face_for_image(session_factory, img1_id, faiss_id=72)
     _insert_face_for_image(session_factory, img2_id, faiss_id=71)
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page.refresh(priority_image_id=img1_id)
 
@@ -1060,7 +1054,7 @@ def test_skip_image_clears_priority_when_all_image_faces_skipped(
 
 
 def test_compute_cluster_scores_get_embedding_exception(
-    qtbot, session_factory, test_paths
+    qtbot, session_factory, tmp_app_paths
 ):
     """get_embedding exceptions cause the embedding to be skipped; no score produced."""
     failing_store = MagicMock()
@@ -1087,7 +1081,7 @@ def test_compute_cluster_scores_get_embedding_exception(
         session.add(face)
         session.commit()
 
-    page = LabellingPage(session_factory, test_paths, failing_store)
+    page = LabellingPage(session_factory, tmp_app_paths, failing_store)
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
@@ -1099,7 +1093,7 @@ def test_compute_cluster_scores_get_embedding_exception(
 
 
 def test_compute_cluster_scores_near_zero_mean_norm(
-    qtbot, session_factory, test_paths, vector_store
+    qtbot, session_factory, tmp_app_paths, vector_store
 ):
     """_compute_cluster_scores skips clusters with a near-zero mean embedding norm."""
     img_id = _insert_image(session_factory, "/znm.jpg", "znmhash")
@@ -1129,7 +1123,7 @@ def test_compute_cluster_scores_near_zero_mean_norm(
             )
         session.commit()
 
-    page = LabellingPage(session_factory, test_paths, vector_store)
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 

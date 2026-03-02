@@ -46,24 +46,9 @@ def test_app_paths_overrides(tmp_path):
     assert paths.face_crops_dir == base_cache / "faces"
 
 
-def test_app_paths_ensure_dirs(tmp_path):
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-
-    paths.ensure_dirs()
-
-    assert (tmp_path / "data" / "db").exists()
-    assert (tmp_path / "cache" / "faces").exists()
-    assert (tmp_path / "cache" / "thumbs").exists()
-    assert (tmp_path / "config").exists()
-
-
-def test_tmp_paths_fixture(tmp_paths):
-    assert "photoaident" in str(tmp_paths.data)
-    assert tmp_paths.data.exists()
-    assert tmp_paths.cache.exists()
-    assert tmp_paths.config.exists()
-    assert tmp_paths.db_path.parent.exists()
+def test_tmp_paths_fixture(tmp_app_paths):
+    assert "photoaident" in str(tmp_app_paths.data)
+    assert tmp_app_paths.data.exists()
+    assert tmp_app_paths.cache.exists()
+    assert tmp_app_paths.config.exists()
+    assert tmp_app_paths.db_path.parent.exists()
