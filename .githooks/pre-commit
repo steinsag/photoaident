@@ -75,7 +75,7 @@ fi
 if ! run_pyright_check; then
   echo
   echo "[pre-commit] pyright check failed. Please fix type errors and try again."
-  echo "You can run locally with: uv run --pythonversion 3.12 pyright src/ tests/"
+  echo "You can run locally with: uv run pyright --pythonversion 3.12 src/ tests/"
   exit 1
 fi
 
