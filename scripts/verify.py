@@ -20,8 +20,9 @@ import sys
 from pathlib import Path
 
 COMMANDS: list[list[str]] = [
-    ["ruff", "check", "--fix", "--quiet", "."],
     ["black", "--quiet", "."],
+    ["ruff", "check", "--fix", "--quiet", "."],
+    ["pyright", "--pythonversion", "3.12", "src/", "tests/"],
     ["ty", "check"],
     ["pytest"],
 ]
