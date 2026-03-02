@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-verify: Run project verification steps in order:
-  1) Ruff (auto-fix)
-  2) Black (format)
-  3) ty (type check)
-  4) pytest (tests)
+verify: Run project verification steps:
+  0) pyside6-lupdate (check translation files are up-to-date)
+  1) Black (format)
+  2) Ruff (auto-fix)
+  3) pyright (type check)
+  4) ty (type check)
+  5) pytest (tests)
 
 Intended to be executed via `uv run verify` once exposed as a console script,
 or directly as `python -m scripts.verify`.
@@ -100,7 +102,7 @@ def _ensure_available(cmd: str) -> None:
 
 def run() -> int:
     # Ensure required tools are present before running
-    for tool in ("ruff", "black", "ty", "pytest", "pyside6-lupdate"):
+    for tool in ("black", "ruff", "pyright", "ty", "pytest", "pyside6-lupdate"):
         _ensure_available(tool)
 
     # First, check translations
