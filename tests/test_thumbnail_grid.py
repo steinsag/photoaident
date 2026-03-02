@@ -146,9 +146,11 @@ def test_label_button_disabled_without_faces(qtbot, sample_image, tmp_path):
     assert not widget._overlay.label_btn.isEnabled()
 
 
-def test_label_button_enabled_with_unidentified_face(qtbot, sample_image, tmp_path):
+def test_label_button_enabled_with_unidentified_face(
+    qtbot, sample_image, tmp_app_paths
+):
     """label_btn is enabled when the image has an unidentified face."""
-    session_factory = _make_session_factory(tmp_path)
+    session_factory = _make_session_factory(tmp_app_paths)
 
     with session_factory() as session:
         img = DBImage(file_path=str(sample_image), file_size=100)
@@ -170,7 +172,7 @@ def test_label_button_enabled_with_unidentified_face(qtbot, sample_image, tmp_pa
         img_id = img.id
 
     widget = ThumbnailWidget(
-        img_id, str(sample_image), tmp_path / "t.jpg", session_factory
+        img_id, str(sample_image), tmp_app_paths.thumbs_dir / "t.jpg", session_factory
     )
     qtbot.addWidget(widget)
     widget.show()
@@ -181,9 +183,9 @@ def test_label_button_enabled_with_unidentified_face(qtbot, sample_image, tmp_pa
     assert widget._overlay.label_btn.isEnabled()
 
 
-def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_path):
+def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
     """Clicking label_btn causes the grid to emit navigate_to_labelling."""
-    session_factory = _make_session_factory(tmp_path)
+    session_factory = _make_session_factory(tmp_app_paths)
 
     with session_factory() as session:
         img = DBImage(file_path=str(sample_image), file_size=100)
@@ -207,7 +209,7 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid(session_factory)
     qtbot.addWidget(grid)
 
-    grid.add_thumbnail(img_id, str(sample_image), tmp_path / "t.jpg")
+    grid.add_thumbnail(img_id, str(sample_image), tmp_app_paths.thumbs_dir / "t.jpg")
     thumb = grid.thumbnails[0]
     thumb._overlay.show()
 
@@ -498,10 +500,10 @@ def test_reveal_in_file_manager_linux_dbus_fallback(tmp_path):
 # --- _has_unidentified_faces tests ---
 
 
-def test_has_unidentified_faces_true(tmp_path):
-    session_factory = _make_session_factory(tmp_path)
+def test_has_unidentified_faces_true(tmp_app_paths):
+    session_factory = _make_session_factory(tmp_app_paths)
     with session_factory() as session:
-        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=1)
+        img = DBImage(file_path=str(tmp_app_paths.thumbs_dir / "img.jpg"), file_size=1)
         session.add(img)
         session.flush()
         face = Face(
@@ -521,20 +523,20 @@ def test_has_unidentified_faces_true(tmp_path):
     assert _has_unidentified_faces(session_factory, img_id)
 
 
-def test_has_unidentified_faces_false_no_faces(tmp_path):
-    session_factory = _make_session_factory(tmp_path)
+def test_has_unidentified_faces_false_no_faces(tmp_app_paths):
+    session_factory = _make_session_factory(tmp_app_paths)
     with session_factory() as session:
-        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=1)
+        img = DBImage(file_path=str(tmp_app_paths.thumbs_dir / "img.jpg"), file_size=1)
         session.add(img)
         session.commit()
         img_id = img.id
     assert not _has_unidentified_faces(session_factory, img_id)
 
 
-def test_has_unidentified_faces_false_identified(tmp_path):
-    session_factory = _make_session_factory(tmp_path)
+def test_has_unidentified_faces_false_identified(tmp_app_paths):
+    session_factory = _make_session_factory(tmp_app_paths)
     with session_factory() as session:
-        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=1)
+        img = DBImage(file_path=str(tmp_app_paths.thumbs_dir / "img.jpg"), file_size=1)
         session.add(img)
         session.flush()
         face = Face(
@@ -604,10 +606,10 @@ def test_read_pixmap_invalid_size(sample_image):
 
 
 def test_label_button_disabled_with_session_factory_but_no_faces(
-    qtbot, sample_image, tmp_path
+    qtbot, sample_image, tmp_app_paths
 ):
     """label_btn is disabled when session_factory is set but image has no faces."""
-    session_factory = _make_session_factory(tmp_path)
+    session_factory = _make_session_factory(tmp_app_paths)
     with session_factory() as session:
         img = DBImage(file_path=str(sample_image), file_size=100)
         session.add(img)
@@ -615,7 +617,7 @@ def test_label_button_disabled_with_session_factory_but_no_faces(
         img_id = img.id
 
     widget = ThumbnailWidget(
-        img_id, str(sample_image), tmp_path / "t.jpg", session_factory
+        img_id, str(sample_image), tmp_app_paths.thumbs_dir / "t.jpg", session_factory
     )
     qtbot.addWidget(widget)
     widget.show()
@@ -629,24 +631,20 @@ def test_label_button_disabled_with_session_factory_but_no_faces(
 # --- image detail dialog tests ---
 
 
-def _make_session_factory(tmp_path):
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
+def _make_session_factory(paths: AppPaths):
     apply_migrations(f"sqlite:///{paths.db_path}")
     engine = get_engine(str(paths.db_path))
     return get_session_factory(engine)
 
 
-def test_on_image_selected_opens_dialog(qtbot, tmp_path):
+def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths):
     """Clicking a thumbnail opens ImageDetailDialog."""
-    session_factory = _make_session_factory(tmp_path)
+    session_factory = _make_session_factory(tmp_app_paths)
 
     with session_factory() as session:
-        img = DBImage(file_path=str(tmp_path / "img.jpg"), file_size=100)
+        img = DBImage(
+            file_path=str(tmp_app_paths.thumbs_dir / "img.jpg"), file_size=100
+        )
         session.add(img)
         session.commit()
         img_id = img.id
@@ -661,9 +659,9 @@ def test_on_image_selected_opens_dialog(qtbot, tmp_path):
         MockDlg.return_value.exec.assert_called_once()
 
 
-def test_on_image_selected_nonexistent_id_skips_dialog(qtbot, tmp_path):
+def test_on_image_selected_nonexistent_id_skips_dialog(qtbot, tmp_app_paths):
     """Selecting a non-existent image id does not open the dialog."""
-    session_factory = _make_session_factory(tmp_path)
+    session_factory = _make_session_factory(tmp_app_paths)
     grid = ThumbnailGrid(session_factory)
     qtbot.addWidget(grid)
 
@@ -682,12 +680,14 @@ def test_on_image_selected_without_session_factory_is_noop(qtbot):
         MockDlg.assert_not_called()
 
 
-def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_path):
+def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_app_paths):
     """navigate_to_labelling from ImageDetailDialog is forwarded by the grid."""
-    session_factory = _make_session_factory(tmp_path)
+    session_factory = _make_session_factory(tmp_app_paths)
 
     with session_factory() as session:
-        img = DBImage(file_path=str(tmp_path / "nav.jpg"), file_size=100)
+        img = DBImage(
+            file_path=str(tmp_app_paths.thumbs_dir / "nav.jpg"), file_size=100
+        )
         session.add(img)
         session.commit()
         img_id = img.id

@@ -20,33 +20,23 @@ from photoaident.ui.pages.persons import PersonsPage, ReferenceFaceWidget, _Pend
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _make_window(tmp_path, qtbot, collection_path: str = "") -> MainWindow:
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    apply_migrations(f"sqlite:///{paths.db_path}")
-    window = MainWindow(paths, check_gpu=False, enable_onboarding=False)
+def _make_window(
+    tmp_app_paths: AppPaths, qtbot, collection_path: str = ""
+) -> MainWindow:
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+    window = MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
     window.settings.collection_path = collection_path
     qtbot.addWidget(window)
     return window
 
 
-def _make_page(tmp_path, qtbot) -> PersonsPage:
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    apply_migrations(f"sqlite:///{paths.db_path}")
+def _make_page(tmp_app_paths: AppPaths, qtbot) -> PersonsPage:
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
     from photoaident.db.database import get_engine, get_session_factory
 
-    engine = get_engine(str(paths.db_path))
+    engine = get_engine(str(tmp_app_paths.db_path))
     session_factory = get_session_factory(engine)
-    page = PersonsPage(session_factory, paths)
+    page = PersonsPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
     return page
 
@@ -120,9 +110,9 @@ def _add_identified_face(
 # ─── Tests ──────────────────────────────────────────────────────────────────
 
 
-def test_empty_db(tmp_path, qtbot):
+def test_empty_db(tmp_app_paths, qtbot):
     """No persons → list is empty, placeholder shown, buttons disabled."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     page.refresh()
 
     assert page._person_list.count() == 0
@@ -131,9 +121,9 @@ def test_empty_db(tmp_path, qtbot):
     assert not page._cancel_btn.isEnabled()
 
 
-def test_persons_listed_sorted(tmp_path, qtbot):
+def test_persons_listed_sorted(tmp_app_paths, qtbot):
     """'Zebra' and 'Alice' → Alice appears first in the list."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Zebra")
     _add_person_with_clusters(page.session_factory, "Alice")
     page.refresh()
@@ -143,9 +133,9 @@ def test_persons_listed_sorted(tmp_path, qtbot):
     assert page._person_list.item(1).text() == "Zebra"
 
 
-def test_person_selection_shows_five_clusters(tmp_path, qtbot):
+def test_person_selection_shows_five_clusters(tmp_app_paths, qtbot):
     """Selecting a person shows 5 QGroupBoxes in AGE_CLUSTERS order."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Alice")
     page.refresh()
 
@@ -156,9 +146,9 @@ def test_person_selection_shows_five_clusters(tmp_path, qtbot):
     assert len(group_boxes) == 5
 
 
-def test_reference_faces_shown(tmp_path, qtbot):
+def test_reference_faces_shown(tmp_app_paths, qtbot):
     """2 IDENTIFIED faces in adult cluster → 2 ReferenceFaceWidgets."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Bob")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -176,9 +166,9 @@ def test_reference_faces_shown(tmp_path, qtbot):
     assert len(widgets) == 2
 
 
-def test_empty_cluster_rendered(tmp_path, qtbot):
+def test_empty_cluster_rendered(tmp_app_paths, qtbot):
     """A cluster with 0 faces shows the '(No faces)' placeholder label."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Carol")
     page.refresh()
 
@@ -193,9 +183,9 @@ def test_empty_cluster_rendered(tmp_path, qtbot):
     assert len(labels) == 5
 
 
-def test_remove_marks_pending(tmp_path, qtbot):
+def test_remove_marks_pending(tmp_app_paths, qtbot):
     """_on_remove_requested adds a REMOVE entry; Confirm becomes enabled."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Dave")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -215,9 +205,9 @@ def test_remove_marks_pending(tmp_path, qtbot):
     assert not widget._status_label.isHidden()
 
 
-def test_remove_twice_undoes_pending(tmp_path, qtbot):
+def test_remove_twice_undoes_pending(tmp_app_paths, qtbot):
     """Calling _on_remove_requested twice removes the entry (undo)."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Eve")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -233,9 +223,9 @@ def test_remove_twice_undoes_pending(tmp_path, qtbot):
     assert not page._cancel_btn.isEnabled()
 
 
-def test_move_marks_pending(tmp_path, qtbot):
+def test_move_marks_pending(tmp_app_paths, qtbot):
     """_on_move_requested creates a MOVE entry in _pending."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Frank")
     adult_cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     infant_cluster_id = _get_cluster_id(page.session_factory, person_id, "infant")
@@ -254,9 +244,9 @@ def test_move_marks_pending(tmp_path, qtbot):
     assert change.new_cluster_id == infant_cluster_id
 
 
-def test_move_overwrites_remove(tmp_path, qtbot):
+def test_move_overwrites_remove(tmp_app_paths, qtbot):
     """Stage REMOVE then MOVE for the same face → only MOVE remains."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Grace")
     adult_cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     infant_cluster_id = _get_cluster_id(page.session_factory, person_id, "infant")
@@ -274,9 +264,9 @@ def test_move_overwrites_remove(tmp_path, qtbot):
     assert len(page._pending) == 1
 
 
-def test_confirm_applies_removal(tmp_path, qtbot):
+def test_confirm_applies_removal(tmp_app_paths, qtbot):
     """After confirm, the face is UNIDENTIFIED with no person/cluster."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Heidi")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -296,9 +286,9 @@ def test_confirm_applies_removal(tmp_path, qtbot):
         assert face.labelled_at is None
 
 
-def test_confirm_applies_move(tmp_path, qtbot):
+def test_confirm_applies_move(tmp_app_paths, qtbot):
     """After confirm, the face has the new cluster_id and stays IDENTIFIED."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Ivan")
     adult_cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     infant_cluster_id = _get_cluster_id(page.session_factory, person_id, "infant")
@@ -319,9 +309,9 @@ def test_confirm_applies_move(tmp_path, qtbot):
         assert face.state == FaceState.IDENTIFIED
 
 
-def test_confirm_clears_pending(tmp_path, qtbot):
+def test_confirm_clears_pending(tmp_app_paths, qtbot):
     """_pending is empty after confirm; Confirm button is disabled."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Julia")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -336,9 +326,9 @@ def test_confirm_clears_pending(tmp_path, qtbot):
     assert not page._confirm_btn.isEnabled()
 
 
-def test_cancel_clears_pending(tmp_path, qtbot):
+def test_cancel_clears_pending(tmp_app_paths, qtbot):
     """After cancel, _pending is empty and widgets show no overlay."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Karl")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -358,9 +348,9 @@ def test_cancel_clears_pending(tmp_path, qtbot):
     assert widget._status_label.isHidden()
 
 
-def test_cancel_no_db_change(tmp_path, qtbot):
+def test_cancel_no_db_change(tmp_app_paths, qtbot):
     """After cancel, the DB face is unchanged."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     person_id = _add_person_with_clusters(page.session_factory, "Laura")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
@@ -379,9 +369,9 @@ def test_cancel_no_db_change(tmp_path, qtbot):
         assert face.cluster_id == cluster_id
 
 
-def test_search_filter(tmp_path, qtbot):
+def test_search_filter(tmp_app_paths, qtbot):
     """Typing 'ali' hides 'Bob' and shows 'Alice'."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Alice")
     _add_person_with_clusters(page.session_factory, "Bob")
     page.refresh()
@@ -401,16 +391,16 @@ def test_search_filter(tmp_path, qtbot):
     assert bob_hidden
 
 
-def test_buttons_disabled_initially(tmp_path, qtbot):
+def test_buttons_disabled_initially(tmp_app_paths, qtbot):
     """Confirm and Cancel are disabled on construction."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     assert not page._confirm_btn.isEnabled()
     assert not page._cancel_btn.isEnabled()
 
 
-def test_refresh_reloads_list(tmp_path, qtbot):
+def test_refresh_reloads_list(tmp_app_paths, qtbot):
     """Adding a person via session then calling refresh() shows it."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     page.refresh()
     assert page._person_list.count() == 0
 
@@ -421,29 +411,29 @@ def test_refresh_reloads_list(tmp_path, qtbot):
     assert page._person_list.item(0).text() == "NewPerson"
 
 
-def test_mainwindow_has_persons_page(tmp_path, qtbot):
+def test_mainwindow_has_persons_page(tmp_app_paths, qtbot):
     """MainWindow.stacked has 4 pages (Library, Label, Persons, Browse)."""
-    window = _make_window(tmp_path, qtbot)
+    window = _make_window(tmp_app_paths, qtbot)
     assert window.stacked.count() == 4
 
 
-def test_switch_to_persons_page(tmp_path, qtbot):
+def test_switch_to_persons_page(tmp_app_paths, qtbot):
     """_switch_page(2) makes persons_page the current widget."""
-    window = _make_window(tmp_path, qtbot)
+    window = _make_window(tmp_app_paths, qtbot)
     window._switch_page(2)
     assert window.stacked.currentWidget() is window.persons_page
 
 
-def test_new_person_button_exists(tmp_path, qtbot):
+def test_new_person_button_exists(tmp_app_paths, qtbot):
     """PersonsPage has a 'New Person…' button in the left panel."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     assert hasattr(page, "_new_person_btn")
     assert "New Person" in page._new_person_btn.text()
 
 
-def test_new_person_dialog_creates_person_and_selects_it(tmp_path, qtbot):
+def test_new_person_dialog_creates_person_and_selects_it(tmp_app_paths, qtbot):
     """Accepting NewPersonDialog refreshes the list and selects the new person."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     page.refresh()
     assert page._person_list.count() == 0
 
@@ -464,10 +454,10 @@ def test_new_person_dialog_creates_person_and_selects_it(tmp_path, qtbot):
     assert page._person_list.currentItem().text() == "Zara"
 
 
-def test_new_person_clears_filter_so_person_is_visible(tmp_path, qtbot):
+def test_new_person_clears_filter_so_person_is_visible(tmp_app_paths, qtbot):
     """Active search filter is cleared when a new person is created, so the
     newly created person is not immediately hidden by the filter."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Alice")
     page.refresh()
 
@@ -497,9 +487,9 @@ def test_new_person_clears_filter_so_person_is_visible(tmp_path, qtbot):
     assert not current.isHidden()
 
 
-def test_new_person_dialog_cancel_does_not_change_list(tmp_path, qtbot):
+def test_new_person_dialog_cancel_does_not_change_list(tmp_app_paths, qtbot):
     """Cancelling NewPersonDialog leaves the person list unchanged."""
-    page = _make_page(tmp_path, qtbot)
+    page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Alice")
     page.refresh()
     assert page._person_list.count() == 1

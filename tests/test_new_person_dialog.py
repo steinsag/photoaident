@@ -22,20 +22,14 @@ from photoaident.paths import AppPaths
 from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
 
 
-def _make_session_factory(tmp_path):
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
+def _make_session_factory(paths: AppPaths):
     apply_migrations(f"sqlite:///{paths.db_path}")
     engine = get_engine(str(paths.db_path))
     return get_session_factory(engine)
 
 
-def _make_dialog(tmp_path, qtbot) -> NewPersonDialog:
-    session_factory = _make_session_factory(tmp_path)
+def _make_dialog(paths: AppPaths, qtbot) -> NewPersonDialog:
+    session_factory = _make_session_factory(paths)
     dlg = NewPersonDialog(session_factory)
     qtbot.addWidget(dlg)
     return dlg
@@ -44,26 +38,26 @@ def _make_dialog(tmp_path, qtbot) -> NewPersonDialog:
 # ── OK button state ──────────────────────────────────────────────────────────
 
 
-def test_ok_button_disabled_when_name_empty(tmp_path, qtbot):
+def test_ok_button_disabled_when_name_empty(tmp_app_paths, qtbot):
     """OK button is disabled when the name field is empty."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     ok_btn = dlg._button_box.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
     assert ok_btn is not None
     assert not ok_btn.isEnabled()
 
 
-def test_ok_button_enabled_when_name_non_empty(tmp_path, qtbot):
+def test_ok_button_enabled_when_name_non_empty(tmp_app_paths, qtbot):
     """OK button is enabled once a non-empty name is typed."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     dlg._name_edit.setText("Alice")
     ok_btn = dlg._button_box.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
     assert ok_btn is not None
     assert ok_btn.isEnabled()
 
 
-def test_ok_button_disabled_again_when_name_cleared(tmp_path, qtbot):
+def test_ok_button_disabled_again_when_name_cleared(tmp_app_paths, qtbot):
     """OK button becomes disabled again when the name is cleared."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     dlg._name_edit.setText("Alice")
     dlg._name_edit.clear()
     ok_btn = dlg._button_box.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
@@ -71,9 +65,9 @@ def test_ok_button_disabled_again_when_name_cleared(tmp_path, qtbot):
     assert not ok_btn.isEnabled()
 
 
-def test_ok_button_disabled_for_whitespace_only(tmp_path, qtbot):
+def test_ok_button_disabled_for_whitespace_only(tmp_app_paths, qtbot):
     """OK button stays disabled when the name contains only whitespace."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     dlg._name_edit.setText("   ")
     ok_btn = dlg._button_box.button(QtWidgets.QDialogButtonBox.StandardButton.Ok)
     assert ok_btn is not None
@@ -83,9 +77,9 @@ def test_ok_button_disabled_for_whitespace_only(tmp_path, qtbot):
 # ── DB persistence ───────────────────────────────────────────────────────────
 
 
-def test_persist_new_person_creates_person_and_clusters(tmp_path, qtbot):
+def test_persist_new_person_creates_person_and_clusters(tmp_app_paths, qtbot):
     """_persist_new_person() creates a Person and 5 EmbeddingCluster rows."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
 
     dlg._persist_new_person("Bob")
 
@@ -107,9 +101,9 @@ def test_persist_new_person_creates_person_and_clusters(tmp_path, qtbot):
         assert {c.age_group for c in clusters} == set(AGE_CLUSTERS)
 
 
-def test_persist_new_person_returns_id(tmp_path, qtbot):
+def test_persist_new_person_returns_id(tmp_app_paths, qtbot):
     """_persist_new_person() returns the new person's DB id."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
 
     person_id = dlg._persist_new_person("Carol")
 
@@ -120,9 +114,9 @@ def test_persist_new_person_returns_id(tmp_path, qtbot):
         assert person.name == "Carol"
 
 
-def test_persist_new_person_strips_whitespace(tmp_path, qtbot, monkeypatch):
+def test_persist_new_person_strips_whitespace(tmp_app_paths, qtbot, monkeypatch):
     """Leading/trailing whitespace is stripped by the caller (_on_accept)."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     called_names = []
 
     def fake_persist_new_person(name: str):
@@ -138,22 +132,22 @@ def test_persist_new_person_strips_whitespace(tmp_path, qtbot, monkeypatch):
 # ── created_person_id ────────────────────────────────────────────────────────
 
 
-def test_created_person_id_none_before_acceptance(tmp_path, qtbot):
+def test_created_person_id_none_before_acceptance(tmp_app_paths, qtbot):
     """created_person_id() returns None before anything is persisted."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     assert dlg.created_person_id() is None
 
 
-def test_created_person_id_none_without_confirmation(tmp_path, qtbot):
+def test_created_person_id_none_without_confirmation(tmp_app_paths, qtbot):
     """Typing a name without confirming leaves created_person_id() as None."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     dlg._name_edit.setText("Dave")
     assert dlg.created_person_id() is None
 
 
-def test_created_person_id_set_after_persist(tmp_path, qtbot):
+def test_created_person_id_set_after_persist(tmp_app_paths, qtbot):
     """After _persist_new_person(), _created_person_id holds the DB id."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
 
     person_id = dlg._persist_new_person("Frank")
     # Simulate what _on_accept() does after persisting
@@ -165,9 +159,9 @@ def test_created_person_id_set_after_persist(tmp_path, qtbot):
 # ── _on_accept ───────────────────────────────────────────────────────────────
 
 
-def test_on_accept_persists_and_accepts_dialog(tmp_path, qtbot):
+def test_on_accept_persists_and_accepts_dialog(tmp_app_paths, qtbot):
     """_on_accept() strips name, persists, sets created_person_id, and accepts."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     dlg._name_edit.setText("  Grace  ")
 
     with patch.object(dlg, "accept") as mock_accept:
@@ -187,9 +181,9 @@ def test_on_accept_persists_and_accepts_dialog(tmp_path, qtbot):
         mock_accept.assert_called_once()
 
 
-def test_on_accept_early_return_if_name_empty(tmp_path, qtbot):
+def test_on_accept_early_return_if_name_empty(tmp_app_paths, qtbot):
     """_on_accept() returns early if the name is empty (safety check)."""
-    dlg = _make_dialog(tmp_path, qtbot)
+    dlg = _make_dialog(tmp_app_paths, qtbot)
     # ok_btn would normally be disabled, but calling _on_accept directly
     dlg._name_edit.setText("   ")
 

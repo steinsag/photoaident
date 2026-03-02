@@ -86,7 +86,7 @@ def clean_db(db_engine):
 
 
 def test_indexing_task_success(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     # Setup: Create an image that needs indexing
     img_file = tmp_path / "img1.jpg"
@@ -98,7 +98,7 @@ def test_indexing_task_success(
         session.commit()
         img_id = img.id
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
 
     # Mock FaceEmbedder to avoid running the real model
     mock_embedder = MagicMock()
@@ -138,11 +138,11 @@ def test_indexing_task_success(
     assert vector_store.index.ntotal == 1
 
     # Verify crop was saved
-    crop_path = tmp_paths.face_crops_dir / f"{face.id}.jpg"
+    crop_path = tmp_app_paths.face_crops_dir / f"{face.id}.jpg"
     assert crop_path.exists()
 
     # Verify no full-photo thumbnail was created during indexing (lazy generation only)
-    assert not any(tmp_paths.thumbs_dir.iterdir())
+    assert not any(tmp_app_paths.thumbs_dir.iterdir())
 
     # Verify image_metadata was populated
     with Session(db_engine) as session:
@@ -157,17 +157,19 @@ def test_indexing_task_success(
         assert meta.taken_at_source == TakenAtSource.FILESYSTEM
 
 
-def test_indexing_task_cancel_method(session_factory, vector_store, tmp_paths):
+def test_indexing_task_cancel_method(session_factory, vector_store, tmp_app_paths):
     """cancel() sets the _is_cancelled flag."""
-    task = IndexingTask(session_factory, vector_store, tmp_paths)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths)
     assert not task._is_cancelled
     task.cancel()
     assert task._is_cancelled
 
 
-def test_indexing_task_get_embedder_cached(session_factory, vector_store, tmp_paths):
+def test_indexing_task_get_embedder_cached(
+    session_factory, vector_store, tmp_app_paths
+):
     """_get_embedder() creates the embedder once and returns the same instance."""
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
 
     with patch("photoaident.core.indexing.FaceEmbedder") as MockFE:
         mock_instance = MagicMock()
@@ -181,15 +183,17 @@ def test_indexing_task_get_embedder_cached(session_factory, vector_store, tmp_pa
     assert MockFE.call_count == 1  # constructor called exactly once
 
 
-def test_indexing_task_no_images_exits_early(session_factory, vector_store, tmp_paths):
+def test_indexing_task_no_images_exits_early(
+    session_factory, vector_store, tmp_app_paths
+):
     """IndexingTask finishes immediately when there are no un-indexed images."""
     # clean_db cleared the DB; no images → total_images == 0
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     task.run()  # must not raise
 
 
 def test_indexing_task_cancel_during_inner_loop(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Cancel triggered mid-batch stops processing after the current image."""
     img1 = tmp_path / "img1_inner.jpg"
@@ -202,7 +206,7 @@ def test_indexing_task_cancel_during_inner_loop(
         session.add(Image(file_path=str(img2), file_size=img2.stat().st_size))
         session.commit()
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
 
     mock_embedder = MagicMock()
 
@@ -227,7 +231,7 @@ def test_indexing_task_cancel_during_inner_loop(
 
 
 def test_indexing_task_marks_missing_file(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """An image whose file no longer exists on disk is marked MISSING."""
     nonexistent = tmp_path / "gone.jpg"
@@ -239,7 +243,7 @@ def test_indexing_task_marks_missing_file(
         session.commit()
         img_id = img.id
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     task._embedder = MagicMock()  # file is missing; don't load the real model
     task.run()
 
@@ -250,7 +254,7 @@ def test_indexing_task_marks_missing_file(
 
 
 def test_indexing_task_marks_error_on_exception(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """An exception during indexing marks the image as ERROR."""
     img_file = tmp_path / "err.jpg"
@@ -262,7 +266,7 @@ def test_indexing_task_marks_error_on_exception(
         session.commit()
         img_id = img.id
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     task._embedder = MagicMock()  # error is in _calculate_hash; don't load real model
 
     with patch.object(task, "_calculate_hash", side_effect=RuntimeError("boom")):
@@ -275,7 +279,7 @@ def test_indexing_task_marks_error_on_exception(
 
 
 def test_indexing_task_metadata_populated(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """ImageMetadata is created for each successfully indexed image."""
     img_file = tmp_path / "meta_test.jpg"
@@ -287,7 +291,7 @@ def test_indexing_task_metadata_populated(
         session.commit()
         img_id = img.id
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     mock_embedder = MagicMock()
     mock_embedder.process_image.return_value = []
     task._embedder = mock_embedder
@@ -306,7 +310,7 @@ def test_indexing_task_metadata_populated(
 
 
 def test_indexing_task_no_thumbnail_during_indexing(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """No thumbnail files are written to thumbs_dir during indexing."""
     img_file = tmp_path / "no_thumb.jpg"
@@ -317,18 +321,18 @@ def test_indexing_task_no_thumbnail_during_indexing(
         session.add(img)
         session.commit()
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     mock_embedder = MagicMock()
     mock_embedder.process_image.return_value = []
     task._embedder = mock_embedder
 
     task.run()
 
-    assert not any(tmp_paths.thumbs_dir.iterdir())
+    assert not any(tmp_app_paths.thumbs_dir.iterdir())
 
 
 def test_indexing_task_exif_failure_does_not_abort(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """EXIF extraction failure must not abort indexing — image is still marked done."""
     img_file = tmp_path / "exif_fail.jpg"
@@ -340,7 +344,7 @@ def test_indexing_task_exif_failure_does_not_abort(
         session.commit()
         img_id = img.id
 
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     mock_embedder = MagicMock()
     mock_embedder.process_image.return_value = []
     task._embedder = mock_embedder
@@ -388,12 +392,12 @@ def test_dms_to_decimal_returns_none_on_error():
 
 
 def test_exif_datetime_from_exif_tag(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """taken_at and taken_at_source == EXIF when DateTimeOriginal is present."""
     _, img_id = _make_indexed_image(tmp_path, session_factory, "dt_exif.jpg")
     fake_tags = {"EXIF DateTimeOriginal": _MockTag("2022:08:20 10:15:30")}
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -405,7 +409,7 @@ def test_exif_datetime_from_exif_tag(
 
 
 def test_exif_invalid_datetime_falls_through_to_next_tag(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Invalid DateTimeOriginal (ValueError) → falls through to DateTimeDigitized."""
     _, img_id = _make_indexed_image(tmp_path, session_factory, "dt_fallback.jpg")
@@ -413,7 +417,7 @@ def test_exif_invalid_datetime_falls_through_to_next_tag(
         "EXIF DateTimeOriginal": _MockTag("not-a-date"),
         "EXIF DateTimeDigitized": _MockTag("2021:03:01 09:00:00"),
     }
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -426,7 +430,7 @@ def test_exif_invalid_datetime_falls_through_to_next_tag(
 
 
 def test_exif_gps_coordinates(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """GPS lat/lon are extracted and stored when GPS tags are present."""
     _, img_id = _make_indexed_image(tmp_path, session_factory, "gps.jpg")
@@ -436,7 +440,7 @@ def test_exif_gps_coordinates(
         "GPS GPSLongitude": _MockTag([_Ratio(2, 1), _Ratio(21, 1), _Ratio(0, 1)]),
         "GPS GPSLongitudeRef": _MockTag("E"),
     }
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -450,7 +454,7 @@ def test_exif_gps_coordinates(
 
 
 def test_exif_gps_altitude_above_sea_level(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Altitude ref 0 (above sea level) → positive gps_altitude."""
     _, img_id = _make_indexed_image(tmp_path, session_factory, "alt_above.jpg")
@@ -458,7 +462,7 @@ def test_exif_gps_altitude_above_sea_level(
         "GPS GPSAltitude": _MockTag([_Ratio(1000, 1)]),
         "GPS GPSAltitudeRef": _MockTag("0"),
     }
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -469,7 +473,7 @@ def test_exif_gps_altitude_above_sea_level(
 
 
 def test_exif_gps_altitude_below_sea_level(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Altitude ref 1 (below sea level) → negated gps_altitude."""
     _, img_id = _make_indexed_image(tmp_path, session_factory, "alt_below.jpg")
@@ -477,7 +481,7 @@ def test_exif_gps_altitude_below_sea_level(
         "GPS GPSAltitude": _MockTag([_Ratio(50, 1)]),
         "GPS GPSAltitudeRef": _MockTag("1"),
     }
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -488,7 +492,7 @@ def test_exif_gps_altitude_below_sea_level(
 
 
 def test_exif_gps_altitude_exception_silenced(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Malformed altitude tag is silently ignored; gps_altitude stays None."""
 
@@ -502,7 +506,7 @@ def test_exif_gps_altitude_exception_silenced(
 
     _, img_id = _make_indexed_image(tmp_path, session_factory, "alt_err.jpg")
     fake_tags = {"GPS GPSAltitude": _BadAltTag()}
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -513,12 +517,12 @@ def test_exif_gps_altitude_exception_silenced(
 
 
 def test_exif_orientation_stored(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Orientation from EXIF is stored correctly."""
     _, img_id = _make_indexed_image(tmp_path, session_factory, "orient.jpg")
     fake_tags = {"Image Orientation": _MockTag([6])}
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(
@@ -529,7 +533,7 @@ def test_exif_orientation_stored(
 
 
 def test_exif_orientation_invalid_falls_back_to_1(
-    tmp_path, session_factory, db_engine, vector_store, tmp_paths
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Non-integer orientation value falls back to default (1)."""
 
@@ -541,7 +545,7 @@ def test_exif_orientation_invalid_falls_back_to_1(
 
     _, img_id = _make_indexed_image(tmp_path, session_factory, "orient_inv.jpg")
     fake_tags = {"Image Orientation": _BadOrientTag()}
-    _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags)
+    _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
     with Session(db_engine) as session:
         meta = session.execute(

@@ -1,3 +1,5 @@
+from typing import Generator
+
 import pytest
 
 from photoaident.db.database import get_engine
@@ -5,24 +7,28 @@ from photoaident.db.migrate import apply_migrations
 from photoaident.paths import AppPaths
 
 
-@pytest.fixture(scope="session")
-def tmp_paths(tmp_path_factory) -> AppPaths:
-    """Isolated XDG paths for the test session — never touches real user data."""
+@pytest.fixture
+def tmp_app_paths(tmp_path_factory) -> Generator[AppPaths, None, None]:
+    """Isolated XDG paths per test — never touches real user data."""
     base = tmp_path_factory.mktemp("photoaident")
-    paths = AppPaths(
-        base_data=base / "data",
-        base_cache=base / "cache",
-        base_config=base / "config",
-    )
-    paths.ensure_dirs()
-    return paths
+    try:
+        AppPaths._data_override = base / "data"
+        AppPaths._cache_override = base / "cache"
+        AppPaths._config_override = base / "config"
+        paths = AppPaths()
+        paths.ensure_dirs()
+        yield paths
+    finally:
+        AppPaths._data_override = None
+        AppPaths._cache_override = None
+        AppPaths._config_override = None
 
 
-@pytest.fixture(scope="session")
-def db_engine(tmp_paths):
+@pytest.fixture
+def db_engine(tmp_app_paths):
     """SQLite engine with all Alembic migrations applied."""
-    engine = get_engine(str(tmp_paths.db_path))
-    apply_migrations(f"sqlite:///{tmp_paths.db_path}")
+    engine = get_engine(str(tmp_app_paths.db_path))
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
     return engine
 
 

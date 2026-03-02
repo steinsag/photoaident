@@ -15,7 +15,6 @@ from photoaident.db.database import (
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
-from photoaident.paths import AppPaths
 from photoaident.ui.pages.library import LibraryPage
 
 
@@ -25,17 +24,6 @@ def session_factory(tmp_path):
     engine = get_engine(str(db_path))
     apply_migrations(f"sqlite:///{db_path}")
     return get_session_factory(engine)
-
-
-@pytest.fixture
-def test_paths(tmp_path):
-    paths = AppPaths(
-        base_data=tmp_path / "data",
-        base_cache=tmp_path / "cache",
-        base_config=tmp_path / "config",
-    )
-    paths.ensure_dirs()
-    return paths
 
 
 @pytest.fixture
@@ -94,8 +82,8 @@ def _add_person_with_face(session_factory, vs, name, file_path):
 # --- Filter panel always visible ---
 
 
-def test_filter_panel_always_visible(qtbot, session_factory, test_paths):
-    page = LibraryPage(session_factory, test_paths)
+def test_filter_panel_always_visible(qtbot, session_factory, tmp_app_paths):
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
     assert not page.filter_panel.isHidden()
 
@@ -103,12 +91,12 @@ def test_filter_panel_always_visible(qtbot, session_factory, test_paths):
 # --- Person list structure ---
 
 
-def test_person_list_items_are_selectable(qtbot, session_factory, test_paths):
+def test_person_list_items_are_selectable(qtbot, session_factory, tmp_app_paths):
     with session_factory() as session:
         session.add(Person(name="Bob"))
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     assert page.person_list_widget.count() == 1
@@ -121,13 +109,13 @@ def test_person_list_items_are_selectable(qtbot, session_factory, test_paths):
 # --- Search filter ---
 
 
-def test_search_filter_hides_non_matching_items(qtbot, session_factory, test_paths):
+def test_search_filter_hides_non_matching_items(qtbot, session_factory, tmp_app_paths):
     with session_factory() as session:
         session.add(Person(name="Alice"))
         session.add(Person(name="Bob"))
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     page.search_edit.setText("ali")
@@ -141,12 +129,12 @@ def test_search_filter_hides_non_matching_items(qtbot, session_factory, test_pat
     assert bob_item.isHidden()
 
 
-def test_search_filter_case_insensitive(qtbot, session_factory, test_paths):
+def test_search_filter_case_insensitive(qtbot, session_factory, tmp_app_paths):
     with session_factory() as session:
         session.add(Person(name="Alice"))
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     page.search_edit.setText("ALICE")
@@ -159,54 +147,54 @@ def test_search_filter_case_insensitive(qtbot, session_factory, test_paths):
 # --- load_images: no selection → empty grid ---
 
 
-def test_no_person_selected_shows_empty_grid(qtbot, session_factory, test_paths):
+def test_no_person_selected_shows_empty_grid(qtbot, session_factory, tmp_app_paths):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
     _add_image(session_factory, "/img2.jpg", file_hash="h2")
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 0
 
 
-def test_no_person_checked_shows_all_images(qtbot, session_factory, test_paths):
+def test_no_person_checked_shows_all_images(qtbot, session_factory, tmp_app_paths):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
     _add_image(session_factory, "/img2.jpg", file_hash="h2")
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 0
 
 
-def test_no_person_checked_with_images_in_db(qtbot, session_factory, test_paths):
+def test_no_person_checked_with_images_in_db(qtbot, session_factory, tmp_app_paths):
     for i in range(5):
         _add_image(session_factory, f"/img{i}.jpg", file_hash=f"hash{i}")
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 0
 
 
-def test_image_without_hash_uses_unknown_thumb(qtbot, session_factory, test_paths):
+def test_image_without_hash_uses_unknown_thumb(qtbot, session_factory, tmp_app_paths):
     with session_factory() as session:
         img = Image(file_path="/no_hash.jpg", file_size=500, file_hash=None)
         session.add(img)
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths)
+    page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
     # No person selected → empty grid
     assert len(page.grid.thumbnails) == 0
 
 
-def test_image_with_metadata_appears_in_grid(qtbot, session_factory, test_paths, vs):
+def test_image_with_metadata_appears_in_grid(qtbot, session_factory, tmp_app_paths, vs):
     """An image containing a selected person appears in the grid."""
     _add_person_with_face(session_factory, vs, "Meta", "/meta.jpg")
 
-    page = LibraryPage(session_factory, test_paths, vs)
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
     qtbot.addWidget(page)
 
     item = page.person_list_widget.item(0)
@@ -220,10 +208,12 @@ def test_image_with_metadata_appears_in_grid(qtbot, session_factory, test_paths,
 # --- load_images: person filter ---
 
 
-def test_select_one_person_shows_matched_images(qtbot, session_factory, test_paths, vs):
+def test_select_one_person_shows_matched_images(
+    qtbot, session_factory, tmp_app_paths, vs
+):
     _, _ = _add_person_with_face(session_factory, vs, "Eve", "/eve.jpg")
 
-    page = LibraryPage(session_factory, test_paths, vs)
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
     qtbot.addWidget(page)
 
     item = page.person_list_widget.item(0)
@@ -234,7 +224,7 @@ def test_select_one_person_shows_matched_images(qtbot, session_factory, test_pat
 
 
 def test_select_person_with_no_faces_shows_empty(
-    qtbot, session_factory, test_paths, vs
+    qtbot, session_factory, tmp_app_paths, vs
 ):
     with session_factory() as session:
         p = Person(name="Nobody")
@@ -243,7 +233,7 @@ def test_select_person_with_no_faces_shows_empty(
         session.add(EmbeddingCluster(person_id=p.id))
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths, vs)
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
     qtbot.addWidget(page)
 
     item = page.person_list_widget.item(0)
@@ -254,7 +244,7 @@ def test_select_person_with_no_faces_shows_empty(
 
 
 def test_select_multiple_persons_intersects_results(
-    qtbot, session_factory, test_paths, vs
+    qtbot, session_factory, tmp_app_paths, vs
 ):
     """Selecting two persons shows only images where BOTH appear (AND, not OR)."""
     # Use orthogonal embeddings so Alice's search won't match Bob's face and vice versa
@@ -314,7 +304,7 @@ def test_select_multiple_persons_intersects_results(
         )
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths, vs)
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
     qtbot.addWidget(page)
 
     page.person_list_widget.blockSignals(True)
@@ -330,7 +320,7 @@ def test_select_multiple_persons_intersects_results(
 
 
 def test_select_multiple_persons_shows_shared_image(
-    qtbot, session_factory, test_paths, vs
+    qtbot, session_factory, tmp_app_paths, vs
 ):
     """An image containing all selected persons is included in AND results."""
     with session_factory() as session:
@@ -390,7 +380,7 @@ def test_select_multiple_persons_shows_shared_image(
         session.commit()
         shared_img_id = img.id
 
-    page = LibraryPage(session_factory, test_paths, vs)
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
     qtbot.addWidget(page)
 
     page.person_list_widget.blockSignals(True)
@@ -407,7 +397,7 @@ def test_select_multiple_persons_shows_shared_image(
 
 
 def test_person_filter_without_vector_store_falls_back_to_all(
-    qtbot, session_factory, test_paths
+    qtbot, session_factory, tmp_app_paths
 ):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
     _add_image(session_factory, "/img2.jpg", file_hash="h2")
@@ -416,7 +406,7 @@ def test_person_filter_without_vector_store_falls_back_to_all(
         session.add(p)
         session.commit()
 
-    page = LibraryPage(session_factory, test_paths, vector_store=None)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=None)
     qtbot.addWidget(page)
 
     item = page.person_list_widget.item(0)
