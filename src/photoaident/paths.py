@@ -30,9 +30,9 @@ class AppPaths:
             Path(xdg_config_home) if xdg_config_home else Path.home() / ".config"
         )
 
-        self.data = self._data_override or default_data / "photoaident"
-        self.cache = self._cache_override or default_cache / "photoaident"
-        self.config = self._config_override or default_config / "photoaident"
+        self.data = type(self)._data_override or default_data / "photoaident"
+        self.cache = type(self)._cache_override or default_cache / "photoaident"
+        self.config = type(self)._config_override or default_config / "photoaident"
 
     @property
     def db_path(self) -> Path:
