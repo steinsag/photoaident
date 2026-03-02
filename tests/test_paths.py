@@ -34,16 +34,23 @@ def test_app_paths_overrides(tmp_path):
     base_cache = tmp_path / "cache"
     base_config = tmp_path / "config"
 
-    paths = AppPaths(
-        base_data=base_data, base_cache=base_cache, base_config=base_config
-    )
+    try:
+        AppPaths._data_override = base_data
+        AppPaths._cache_override = base_cache
+        AppPaths._config_override = base_config
 
-    assert paths.data == base_data
-    assert paths.cache == base_cache
-    assert paths.config == base_config
+        paths = AppPaths()
 
-    assert paths.db_path == base_data / "db" / "photoaident.db"
-    assert paths.face_crops_dir == base_cache / "faces"
+        assert paths.data == base_data
+        assert paths.cache == base_cache
+        assert paths.config == base_config
+
+        assert paths.db_path == base_data / "db" / "photoaident.db"
+        assert paths.face_crops_dir == base_cache / "faces"
+    finally:
+        AppPaths._data_override = None
+        AppPaths._cache_override = None
+        AppPaths._config_override = None
 
 
 def test_tmp_paths_fixture(tmp_app_paths):

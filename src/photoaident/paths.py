@@ -6,16 +6,14 @@ class AppPaths:
     """Central XDG path resolver for PhotoAIdent.
 
     Follows XDG Base Directory Specification for config, data, and cache.
-    Paths can be overridden by passing base_data, base_cache, and base_config
-    to the constructor, which is useful for tests.
+    Class-level overrides can be set for testing.
     """
 
-    def __init__(
-        self,
-        base_data: Path | None = None,
-        base_cache: Path | None = None,
-        base_config: Path | None = None,
-    ):
+    _data_override: Path | None = None
+    _cache_override: Path | None = None
+    _config_override: Path | None = None
+
+    def __init__(self) -> None:
         # Use XDG environment variables if available,
         # otherwise default to ~/.local/share, ~/.cache, ~/.config
         xdg_data_home = os.environ.get("XDG_DATA_HOME")
@@ -32,9 +30,9 @@ class AppPaths:
             Path(xdg_config_home) if xdg_config_home else Path.home() / ".config"
         )
 
-        self.data = base_data or default_data / "photoaident"
-        self.cache = base_cache or default_cache / "photoaident"
-        self.config = base_config or default_config / "photoaident"
+        self.data = self._data_override or default_data / "photoaident"
+        self.cache = self._cache_override or default_cache / "photoaident"
+        self.config = self._config_override or default_config / "photoaident"
 
     @property
     def db_path(self) -> Path:

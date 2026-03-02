@@ -1,3 +1,5 @@
+from typing import Generator
+
 import pytest
 
 from photoaident.db.database import get_engine
@@ -6,16 +8,18 @@ from photoaident.paths import AppPaths
 
 
 @pytest.fixture
-def tmp_app_paths(tmp_path_factory) -> AppPaths:
+def tmp_app_paths(tmp_path_factory) -> Generator[AppPaths, None, None]:
     """Isolated XDG paths per test — never touches real user data."""
     base = tmp_path_factory.mktemp("photoaident")
-    paths = AppPaths(
-        base_data=base / "data",
-        base_cache=base / "cache",
-        base_config=base / "config",
-    )
+    AppPaths._data_override = base / "data"
+    AppPaths._cache_override = base / "cache"
+    AppPaths._config_override = base / "config"
+    paths = AppPaths()
     paths.ensure_dirs()
-    return paths
+    yield paths
+    AppPaths._data_override = None
+    AppPaths._cache_override = None
+    AppPaths._config_override = None
 
 
 @pytest.fixture
