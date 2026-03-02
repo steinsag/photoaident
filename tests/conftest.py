@@ -7,7 +7,7 @@ from photoaident.paths import AppPaths
 
 @pytest.fixture
 def tmp_app_paths(tmp_path_factory) -> AppPaths:
-    """Isolated XDG paths for the test session — never touches real user data."""
+    """Isolated XDG paths per test — never touches real user data."""
     base = tmp_path_factory.mktemp("photoaident")
     paths = AppPaths(
         base_data=base / "data",
