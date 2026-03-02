@@ -85,7 +85,7 @@ Canonical key list: `AGE_CLUSTERS` in `db/database.py`. A face matches a person 
 | Schema migrations          | Alembic                           | Auto-applied at startup    |
 | Package manager            | uv                                |                            |
 | Linter/formatter           | ruff, black                       |                            |
-| Type checker               | ty                                |                            |
+| Type checker               | pyright, ty                       |                            |
 | Testing                    | pytest, pytest-qt, pytest-alembic | In-memory SQLite for tests |
 | Distribution               | PyInstaller + linuxdeploy         | AppImage                   |
 
@@ -180,7 +180,8 @@ uv run pytest                        # Tests only
 uv run pytest -m gpu                 # GPU integration tests only
 uv run ruff check --fix --quiet      # Lint (auto-fix)
 uv run black --quiet .               # Format
-uv run ty check                      # Type check
+uv run pyright --pythonversion 3.12 src/ tests/           # Type check (pyright)
+uv run ty check                      # Type check (ty)
 uv run alembic revision --autogenerate -m "description"  # New migration
 uv run alembic upgrade head          # Apply migrations manually (dev use)
 ./scripts/build_pyinstaller.sh       # PyInstaller bundle

@@ -24,6 +24,11 @@ run_black_check() {
   uv run black --check .
 }
 
+run_pyright_check() {
+  echo "[pre-commit] Running static type checks with pyright..."
+  uv run pyright --pythonversion 3.12 src/ tests/
+}
+
 run_ty_check() {
   echo "[pre-commit] Running static type checks with ty..."
   uv run ty check
@@ -64,6 +69,13 @@ if ! run_ruff_check; then
   echo
   echo "[pre-commit] Ruff linting failed. Please fix the reported issues and try again."
   echo "You can run locally with: uv run ruff check ."
+  exit 1
+fi
+
+if ! run_pyright_check; then
+  echo
+  echo "[pre-commit] pyright check failed. Please fix type errors and try again."
+  echo "You can run locally with: uv run --pythonversion 3.12 pyright src/ tests/"
   exit 1
 fi
 

@@ -32,7 +32,7 @@ One command to auto-fix formatting/lints, run type checks, and tests:
 
       uv run scripts/verify.py
 
-This runs, in order: `black .`, `ruff check --fix .`, `ty check`, `pytest`.
+This runs, in order: `black .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`, `pytest`.
 
 ## Translations (i18n)
 
@@ -79,6 +79,14 @@ Optionally, to auto-fix what Ruff can fix:
 
     uv run ruff check . --fix
 
+## Static type checking (pyright)
+
+[Pyright](https://github.com/microsoft/pyright) is used for static type checking.
+
+Run pyright for the whole project:
+
+    uv run pyright --pythonversion 3.12 src/ tests/
+
 ## Static type checking (ty)
 
 [ty](https://docs.astral.sh/ty/) is used for static type checking.
@@ -109,6 +117,7 @@ Enable the repository-managed pre-commit hook so that linters and formatters run
 
 What it does:
 
+- Runs pyright: `uv run pyright src/ tests/`
 - Runs ty: `uv run ty check`
 - Runs Ruff lint: `uv run ruff check .`
 - Runs Black in check mode: `uv run black --check .`
