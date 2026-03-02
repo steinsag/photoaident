@@ -125,8 +125,6 @@ What it does:
 
 To bypass the hook: `git commit --no-verify`
 
-## Database Schema
-
 ## Standing on shoulders
 
 ### Open Source Libraries
