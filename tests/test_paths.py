@@ -51,4 +51,6 @@ def test_tmp_paths_fixture(tmp_app_paths):
     assert tmp_app_paths.data.exists()
     assert tmp_app_paths.cache.exists()
     assert tmp_app_paths.config.exists()
+    assert tmp_app_paths.face_crops_dir.exists()
+    assert tmp_app_paths.thumbs_dir.exists()
     assert tmp_app_paths.db_path.parent.exists()
