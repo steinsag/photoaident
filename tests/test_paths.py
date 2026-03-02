@@ -53,7 +53,7 @@ def test_app_paths_overrides(tmp_path):
         AppPaths._config_override = None
 
 
-def test_tmp_paths_fixture(tmp_app_paths):
+def test_tmp_app_paths_fixture(tmp_app_paths):
     assert "photoaident" in str(tmp_app_paths.data)
     assert tmp_app_paths.data.exists()
     assert tmp_app_paths.cache.exists()
