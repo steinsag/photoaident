@@ -28,7 +28,7 @@ class GpuChecker(QtCore.QObject):
             label = self.tr("GPU ready") if has_cuda else self.tr("CPU only")
             msg = f"{prefix} {label} — {', '.join(providers)}"
 
-        except (ImportError, Exception) as e:
+        except Exception as e:
             prefix = (
                 self.tr("Import failed")
                 if isinstance(e, ImportError)
