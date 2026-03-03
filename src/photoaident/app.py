@@ -203,7 +203,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.indexing_controller = IndexingController(
             self.session_factory, self.vector_store, self.paths, parent=self
         )
-        self.indexing_controller.inventory_status.connect(self._on_inventory_status)
         self.indexing_controller.inventory_progress.connect(self._on_inventory_progress)
         self.indexing_controller.inventory_finished.connect(self._on_inventory_finished)
         self.indexing_controller.indexing_progress.connect(self._update_indexing_status)
@@ -240,10 +239,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.indexing_label.setText(self.tr("Scanning for new photos..."))
         self.indexing_controller.start_pipeline(collection_path)
 
-    def _update_indexing_status(self, indexed: int, total: int, faces: int) -> None:
-        msg = self.tr("Indexed: {indexed}/{total} | Faces: {faces}").format(
-            indexed=indexed, total=total, faces=faces
-        )
+    def _update_indexing_status(
+        self, indexed: int, total: int, faces: int, status: str | None = None
+    ) -> None:
+        if status:
+            msg = self.tr(
+                "{status} | Indexed: {indexed}/{total} | Faces: {faces}"
+            ).format(status=status, indexed=indexed, total=total, faces=faces)
+        else:
+            msg = self.tr("Indexed: {indexed}/{total} | Faces: {faces}").format(
+                indexed=indexed, total=total, faces=faces
+            )
         self.indexing_label.setText(msg)
         # Reload library view periodically or when indexing finishes
         # Increased frequency to every 50 images to reduce UI lag
@@ -259,12 +265,9 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         )
 
-    def _on_inventory_status(self, status: str) -> None:
+    def _on_inventory_progress(self, current: int, total: int, status: str) -> None:
         if hasattr(self, "_inventory_dialog"):
             self._inventory_dialog.update_status(status)
-
-    def _on_inventory_progress(self, current: int, total: int) -> None:
-        if hasattr(self, "_inventory_dialog"):
             self._inventory_dialog.update_progress(current, total)
 
     def _on_inventory_finished(self, _: int) -> None:

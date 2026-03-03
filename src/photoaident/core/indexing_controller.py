@@ -23,10 +23,9 @@ class IndexingController(QtCore.QObject):
     task or thread objects directly.
     """
 
-    inventory_status = QtCore.Signal(str)
-    inventory_progress = QtCore.Signal(int, int)
+    inventory_progress = QtCore.Signal(int, int, str)
     inventory_finished = QtCore.Signal(int)
-    indexing_progress = QtCore.Signal(int, int, int)
+    indexing_progress = QtCore.Signal(int, int, int, str)
     indexing_finished = QtCore.Signal()
 
     def __init__(
@@ -80,7 +79,6 @@ class IndexingController(QtCore.QObject):
         self._inventory_thread = QtCore.QThread()
         self._inventory_task.moveToThread(self._inventory_thread)
 
-        self._inventory_task.status.connect(self.inventory_status)
         self._inventory_task.progress.connect(self.inventory_progress)
         self._inventory_task.finished.connect(
             self._on_inventory_finished_with_reporting

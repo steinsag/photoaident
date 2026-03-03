@@ -9,7 +9,8 @@
     </message>
     <message>
         <source>Local, privacy-first desktop app for AI-powered face recognition and photo search.</source>
-        <translation>Lokale Desktop-App mit Datenschutzfokus für KI-gestützte Gesichtserkennung und Fotosuche.</translation>
+        <translation>Lokale Desktop-App mit Datenschutzfokus für KI-gestützte Gesichtserkennung und Fotosuche.
+            </translation>
     </message>
     <message>
         <source>Author:</source>
@@ -133,9 +134,11 @@
     </message>
     <message>
         <source>Date: {taken_at}
-Confidence: {confidence}%</source>
+                Confidence: {confidence}%
+            </source>
         <translation type="vanished">Datum: {taken_at}
-Konfidenz: {confidence}%</translation>
+                Konfidenz: {confidence}%
+            </translation>
     </message>
 </context>
 <context>
@@ -225,7 +228,22 @@ Konfidenz: {confidence}%</translation>
     </message>
 </context>
 <context>
+    <name>IndexingTask</name>
+    <message>
+        <source>Indexing photos...</source>
+        <translation>Indiziere Fotos</translation>
+    </message>
+</context>
+<context>
     <name>InstanceLock</name>
+    <message>
+        <source>Another instance of PhotoAIdent is already running.
+                Please close it before starting a new one.
+            </source>
+        <translation type="vanished">Eine weitere Instanz von PhotoAIdent läuft bereits.
+                Bitte schließen Sie diese, bevor Sie eine neue starten.
+            </translation>
+    </message>
     <message>
         <source>Another instance of PhotoAIdent is already running.
 Please close it before starting a new one.</source>
@@ -336,7 +354,9 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
     <message>
         <source>All remaining faces skipped this session. Restart the app to review them again.</source>
-        <translation>Alle verbleibenden Gesichter wurden in dieser Sitzung übersprungen. Starten Sie die App neu, um sie erneut zu überprüfen.</translation>
+        <translation>Alle verbleibenden Gesichter wurden in dieser Sitzung übersprungen. Starten Sie die App neu, um
+                sie erneut zu überprüfen.
+            </translation>
     </message>
 </context>
 <context>
@@ -403,10 +423,12 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <message>
         <source>Welcome to PhotoAIdent!
 
-To get started, please select your photo collection folder.</source>
+                To get started, please select your photo collection folder.
+            </source>
         <translation type="vanished">Willkommen bei PhotoAIdent!
 
-Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
+                Bitte wähle zunächst den Ordner deiner Fotosammlung aus.
+            </translation>
     </message>
     <message>
         <source>No folder selected</source>
@@ -427,6 +449,10 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
     <message>
         <source>Scanning for new photos...</source>
         <translation>Suche nach neuen Fotos...</translation>
+    </message>
+    <message>
+        <source>{status} | Indexed: {indexed}/{total} | Faces: {faces}</source>
+        <translation>{status} | Fotos: {indexed}/{total} | Gesichter: {faces}</translation>
     </message>
     <message>
         <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
@@ -477,6 +503,24 @@ Aktuell indiziert:
 Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
+        <source>Changing the photo collection path will cause all existing detected faces to be lost.
+
+                Currently indexed:
+                - {images} images
+                - {faces} faces
+
+                Do you really want to proceed?
+            </source>
+        <translation type="vanished">Das Ändern des Fotosammlungspfads löscht alle bisher erkannten Gesichter.
+
+                Aktuell indiziert:
+                - {images} Bilder
+                - {faces} Gesichter
+
+                Möchten Sie wirklich fortfahren?
+            </translation>
+    </message>
+    <message>
         <source>Confirm Collection Change</source>
         <translation>Pfadänderung bestätigen</translation>
     </message>
@@ -521,6 +565,16 @@ Möchten Sie wirklich fortfahren?</translation>
     <message>
         <source>Welcome to PhotoAIdent</source>
         <translation>Willkommen bei PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Welcome to PhotoAIdent!
+
+                To get started, please select your photo collection folder.
+            </source>
+        <translation type="vanished">Willkommen bei PhotoAIdent!
+
+                Bitte wähle zunächst den Ordner deiner Fotosammlung aus.
+            </translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent!

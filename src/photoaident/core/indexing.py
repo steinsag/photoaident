@@ -38,9 +38,10 @@ class IndexingTask(QtCore.QObject):
     Updates the database and FAISS index continuously.
     """
 
-    progress = QtCore.Signal(int, int, int)  # indexed_images, total_images, total_faces
+    progress = QtCore.Signal(
+        int, int, int, str
+    )  # indexed_images, total_images, total_faces, status
     finished = QtCore.Signal()
-    status = QtCore.Signal(str)
 
     def __init__(
         self,
@@ -262,7 +263,12 @@ class IndexingTask(QtCore.QObject):
                         )
                         indexed_count += 1
                         total_faces += new_face_count
-                        self.progress.emit(indexed_count, total_images, total_faces)
+                        status_msg = QtCore.QCoreApplication.translate(
+                            "IndexingTask", "Indexing photos..."
+                        )
+                        self.progress.emit(
+                            indexed_count, total_images, total_faces, status_msg
+                        )
                     except Exception:
                         logger.warning(
                             "Error indexing %s", img.file_path, exc_info=True

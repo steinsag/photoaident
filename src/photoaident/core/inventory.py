@@ -18,9 +18,8 @@ class InventoryTask(QtCore.QObject):
     Does not open image files, just inventories paths and sizes.
     """
 
-    progress = QtCore.Signal(int, int)  # current, total
+    progress = QtCore.Signal(int, int, str)  # current, total, status message
     finished = QtCore.Signal(int)  # total added
-    status = QtCore.Signal(str)  # status message
 
     def __init__(self, root_path: str, session_factory: sessionmaker):
         super().__init__()
@@ -65,11 +64,10 @@ class InventoryTask(QtCore.QObject):
             self.finished.emit(0)
             return
 
-        self.status.emit(
-            QtCore.QCoreApplication.translate(
-                "InventoryTask", "Searching for photos..."
-            )
+        status_searching = QtCore.QCoreApplication.translate(
+            "InventoryTask", "Searching for photos..."
         )
+        self.progress.emit(0, 0, status_searching)
 
         image_paths = self._scan_image_files({".jpg", ".jpeg"})
         if image_paths is None:
@@ -81,9 +79,10 @@ class InventoryTask(QtCore.QObject):
             self.finished.emit(0)
             return
 
-        self.status.emit(
-            QtCore.QCoreApplication.translate("InventoryTask", "Adding to database...")
+        status_adding = QtCore.QCoreApplication.translate(
+            "InventoryTask", "Adding to database..."
         )
+        self.progress.emit(0, total, status_adding)
 
         added_count = 0
         batch_size = 100
@@ -107,6 +106,6 @@ class InventoryTask(QtCore.QObject):
                         continue
 
                 session.commit()
-                self.progress.emit(added_count, total)
+                self.progress.emit(added_count, total, status_adding)
 
         self.finished.emit(added_count)
