@@ -9,7 +9,8 @@
     </message>
     <message>
         <source>Local, privacy-first desktop app for AI-powered face recognition and photo search.</source>
-        <translation>Local, privacy-first desktop app for AI-powered face recognition and photo search.</translation>
+        <translation>Local, privacy-first desktop app for AI-powered face recognition and photo search.
+            </translation>
     </message>
     <message>
         <source>Author:</source>
@@ -133,9 +134,11 @@
     </message>
     <message>
         <source>Date: {taken_at}
-Confidence: {confidence}%</source>
+                Confidence: {confidence}%
+            </source>
         <translation type="vanished">Date: {taken_at}
-Confidence: {confidence}%</translation>
+                Confidence: {confidence}%
+            </translation>
     </message>
 </context>
 <context>
@@ -225,7 +228,22 @@ Confidence: {confidence}%</translation>
     </message>
 </context>
 <context>
+    <name>IndexingTask</name>
+    <message>
+        <source>Indexing photos...</source>
+        <translation>Indexing photos...</translation>
+    </message>
+</context>
+<context>
     <name>InstanceLock</name>
+    <message>
+        <source>Another instance of PhotoAIdent is already running.
+                Please close it before starting a new one.
+            </source>
+        <translation type="vanished">Another instance of PhotoAIdent is already running.
+                Please close it before starting a new one.
+            </translation>
+    </message>
     <message>
         <source>Another instance of PhotoAIdent is already running.
 Please close it before starting a new one.</source>
@@ -403,10 +421,12 @@ Please close it before starting a new one.</translation>
     <message>
         <source>Welcome to PhotoAIdent!
 
-To get started, please select your photo collection folder.</source>
+                To get started, please select your photo collection folder.
+            </source>
         <translation type="vanished">Welcome to PhotoAIdent!
 
-To get started, please select your photo collection folder.</translation>
+                To get started, please select your photo collection folder.
+            </translation>
     </message>
     <message>
         <source>No folder selected</source>
@@ -427,6 +447,10 @@ To get started, please select your photo collection folder.</translation>
     <message>
         <source>Scanning for new photos...</source>
         <translation>Scanning for new photos...</translation>
+    </message>
+    <message>
+        <source>{status} | Indexed: {indexed}/{total} | Faces: {faces}</source>
+        <translation>{status} | Indexed: {indexed}/{total} | Faces: {faces}</translation>
     </message>
     <message>
         <source>Indexed: {indexed}/{total} | Faces: {faces}</source>
@@ -477,6 +501,24 @@ Currently indexed:
 Do you really want to proceed?</translation>
     </message>
     <message>
+        <source>Changing the photo collection path will cause all existing detected faces to be lost.
+
+                Currently indexed:
+                - {images} images
+                - {faces} faces
+
+                Do you really want to proceed?
+            </source>
+        <translation type="vanished">Changing the photo collection path will cause all existing detected faces to be lost.
+
+                Currently indexed:
+                - {images} images
+                - {faces} faces
+
+                Do you really want to proceed?
+            </translation>
+    </message>
+    <message>
         <source>Confirm Collection Change</source>
         <translation>Confirm Collection Change</translation>
     </message>
@@ -521,6 +563,16 @@ Do you really want to proceed?</translation>
     <message>
         <source>Welcome to PhotoAIdent</source>
         <translation>Welcome to PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Welcome to PhotoAIdent!
+
+                To get started, please select your photo collection folder.
+            </source>
+        <translation type="vanished">Welcome to PhotoAIdent!
+
+                To get started, please select your photo collection folder.
+            </translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent!

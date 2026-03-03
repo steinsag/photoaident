@@ -73,32 +73,14 @@ def test_startup_triggers_inventory_scan_when_collection_path_set(qtbot, tmp_app
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
     ctrl = window.indexing_controller
     # Ensure any auto-timer-started task is cleaned up first
-    if ctrl._inventory_task is not None:
-        ctrl._inventory_task.cancel()
-        if ctrl._inventory_thread:
-            ctrl._inventory_thread.quit()
-            ctrl._inventory_thread.wait(3000)
-        ctrl._inventory_task = None
-        ctrl._inventory_thread = None
-    if ctrl._indexing_task is not None:
-        ctrl._indexing_task.cancel()
-        if ctrl._indexing_thread:
-            ctrl._indexing_thread.quit()
-            ctrl._indexing_thread.wait(3000)
-        ctrl._indexing_task = None
-        ctrl._indexing_thread = None
+    _reset_indexing_controller(ctrl)
 
     window._maybe_start_indexing()
 
     assert ctrl._inventory_task is not None
 
     # Cleanup
-    ctrl._inventory_task.cancel()
-    if ctrl._inventory_thread:
-        ctrl._inventory_thread.quit()
-        ctrl._inventory_thread.wait(3000)
-    ctrl._inventory_task = None
-    ctrl._inventory_thread = None
+    _reset_indexing_controller(ctrl)
 
 
 def test_startup_skips_scan_when_no_collection_path(qtbot, tmp_app_paths):
@@ -106,20 +88,7 @@ def test_startup_skips_scan_when_no_collection_path(qtbot, tmp_app_paths):
     window = _make_window(tmp_app_paths, qtbot, collection_path="")
     ctrl = window.indexing_controller
     # Reset any task started by the timer
-    if ctrl._inventory_task is not None:
-        ctrl._inventory_task.cancel()
-        if ctrl._inventory_thread:
-            ctrl._inventory_thread.quit()
-            ctrl._inventory_thread.wait(3000)
-        ctrl._inventory_task = None
-        ctrl._inventory_thread = None
-    if ctrl._indexing_task is not None:
-        ctrl._indexing_task.cancel()
-        if ctrl._indexing_thread:
-            ctrl._indexing_thread.quit()
-            ctrl._indexing_thread.wait(3000)
-        ctrl._indexing_task = None
-        ctrl._indexing_thread = None
+    _reset_indexing_controller(ctrl)
 
     window._maybe_start_indexing()
 
@@ -134,20 +103,7 @@ def test_startup_scan_idempotent_when_already_running(qtbot, tmp_app_paths):
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
     ctrl = window.indexing_controller
     # Reset any timer-started tasks
-    if ctrl._inventory_task is not None:
-        ctrl._inventory_task.cancel()
-        if ctrl._inventory_thread:
-            ctrl._inventory_thread.quit()
-            ctrl._inventory_thread.wait(3000)
-        ctrl._inventory_task = None
-        ctrl._inventory_thread = None
-    if ctrl._indexing_task is not None:
-        ctrl._indexing_task.cancel()
-        if ctrl._indexing_thread:
-            ctrl._indexing_thread.quit()
-            ctrl._indexing_thread.wait(3000)
-        ctrl._indexing_task = None
-        ctrl._indexing_thread = None
+    _reset_indexing_controller(ctrl)
 
     window._maybe_start_indexing()
     first_task = ctrl._inventory_task
@@ -158,12 +114,7 @@ def test_startup_scan_idempotent_when_already_running(qtbot, tmp_app_paths):
     assert ctrl._inventory_task is first_task
 
     # Cleanup
-    first_task.cancel()
-    if ctrl._inventory_thread:
-        ctrl._inventory_thread.quit()
-        ctrl._inventory_thread.wait(3000)
-    ctrl._inventory_task = None
-    ctrl._inventory_thread = None
+    _reset_indexing_controller(ctrl)
 
 
 def test_counts_label_shows_zeros_on_empty_db(qtbot, tmp_app_paths):
@@ -257,16 +208,7 @@ def test_onboarding_not_triggered_when_path_set(qtbot, tmp_app_paths, monkeypatc
     ctrl = window.indexing_controller
 
     # Ensure no background tasks from constructor timer interfere
-    for attr in ("_inventory_task", "_indexing_task"):
-        task = getattr(ctrl, attr)
-        if task is not None:
-            task.cancel()
-            thread = getattr(ctrl, attr.replace("task", "thread"))
-            if thread:
-                thread.quit()
-                thread.wait(3000)
-            setattr(ctrl, attr, None)
-            setattr(ctrl, attr.replace("task", "thread"), None)
+    _reset_indexing_controller(ctrl)
 
     onboarding_called: list[bool] = []
     monkeypatch.setattr(
@@ -465,7 +407,8 @@ def test_update_indexing_status_formats_label_and_reloads(
         window.library_page, "load_images", lambda: reloads.append(True)
     )
 
-    window._update_indexing_status(50, 100, 7)
+    window._update_indexing_status(50, 100, 7, "Testing")
+    assert "Testing" in window.indexing_label.text()
     assert "50" in window.indexing_label.text()
     assert "100" in window.indexing_label.text()
     assert "7" in window.indexing_label.text()
@@ -719,3 +662,21 @@ def _make_collection_dir(tmp_app_paths: AppPaths) -> Path:
     collection_dir = tmp_app_paths.thumbs_dir / "photos"
     collection_dir.mkdir(exist_ok=True)
     return collection_dir
+
+
+def _reset_indexing_controller(ctrl) -> None:
+    """Helper: cancel and clear any background tasks/threads on the controller."""
+    if ctrl._inventory_task is not None:
+        ctrl._inventory_task.cancel()
+        if ctrl._inventory_thread:
+            ctrl._inventory_thread.quit()
+            ctrl._inventory_thread.wait(3000)
+        ctrl._inventory_task = None
+        ctrl._inventory_thread = None
+    if ctrl._indexing_task is not None:
+        ctrl._indexing_task.cancel()
+        if ctrl._indexing_thread:
+            ctrl._indexing_thread.quit()
+            ctrl._indexing_thread.wait(3000)
+        ctrl._indexing_task = None
+        ctrl._indexing_thread = None
