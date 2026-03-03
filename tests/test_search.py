@@ -310,7 +310,7 @@ def test_search_images_gps_only(search_db, tmp_path):
     bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
     # vs is empty, but we don't pass person_ids
     vs = VectorStore()
-    results = search_images(tmp_path, search_db, vs, gps_bbox=bbox)
+    results = search_images(tmp_path, search_db, vs, person_ids=[], gps_bbox=bbox)
 
     assert len(results) == 1
     assert results[0][0] == img1_id
@@ -322,7 +322,9 @@ def test_search_images_person_only(search_db, vs, tmp_path):
     emb = _rand_norm_emb()
     img_id, _ = _add_identified_face(search_db, vs, person_id, cluster_id, emb)
 
-    results = search_images(tmp_path, search_db, vs, person_ids=[person_id])
+    results = search_images(
+        tmp_path, search_db, vs, person_ids=[person_id], gps_bbox=None
+    )
 
     assert len(results) == 1
     assert results[0][0] == img_id
@@ -419,21 +421,27 @@ def test_search_images_multiple_persons(search_db, vs, tmp_path):
     _add_identified_face(search_db, vs, p1_id, c1_id, emb1)
 
     # Empty person_ids list
-    results_empty = search_images(tmp_path, search_db, vs, person_ids=[])
+    results_empty = search_images(tmp_path, search_db, vs, person_ids=[], gps_bbox=None)
     assert results_empty == []
 
     # One person (p1)
-    results_p1 = search_images(tmp_path, search_db, vs, person_ids=[p1_id])
+    results_p1 = search_images(
+        tmp_path, search_db, vs, person_ids=[p1_id], gps_bbox=None
+    )
     assert len(results_p1) == 2  # both.jpg and img1.jpg
 
     # Intersection of p1 and p2
-    results_both = search_images(tmp_path, search_db, vs, person_ids=[p1_id, p2_id])
+    results_both = search_images(
+        tmp_path, search_db, vs, person_ids=[p1_id, p2_id], gps_bbox=None
+    )
     assert len(results_both) == 1
     assert results_both[0][0] == both_id
 
     # Intersection with no common images
     p3_id, c3_id = _add_person_cluster(search_db)
-    results_none = search_images(tmp_path, search_db, vs, person_ids=[p1_id, p3_id])
+    results_none = search_images(
+        tmp_path, search_db, vs, person_ids=[p1_id, p3_id], gps_bbox=None
+    )
     assert results_none == []
 
 
@@ -531,7 +539,9 @@ def test_search_images_ranking(search_db, vs, tmp_path):
         session.commit()
         img1_id, img2_id = img1.id, img2.id
 
-    results = search_images(tmp_path, search_db, vs, person_ids=[p1_id, p2_id])
+    results = search_images(
+        tmp_path, search_db, vs, person_ids=[p1_id, p2_id], gps_bbox=None
+    )
     assert len(results) == 2
     assert results[0][0] == img1_id
     assert results[1][0] == img2_id

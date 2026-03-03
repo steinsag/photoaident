@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 from sqlalchemy import select, and_
@@ -27,8 +27,8 @@ def search_images(
     thumbs_dir: "Path",
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
-    person_ids: list[int] = [],
-    gps_bbox: GpsBoundingBox | None = None,
+    person_ids: list[int],
+    gps_bbox: Optional[GpsBoundingBox],
 ) -> list[tuple[int, str, "Path"]]:
     """Search for images based on person and/or GPS filters.
 
