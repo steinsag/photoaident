@@ -139,6 +139,25 @@ Konfidenz: {confidence}%</translation>
     </message>
 </context>
 <context>
+    <name>GpuChecker</name>
+    <message>
+        <source>✅ GPU ready — {providers}</source>
+        <translation>✅ GPU bereit — {providers}</translation>
+    </message>
+    <message>
+        <source>⚠️ CPU only — {providers}</source>
+        <translation>⚠️ Nur CPU — {providers}</translation>
+    </message>
+    <message>
+        <source>❌ Import failed: {error}</source>
+        <translation>❌ Import fehlgeschlagen: {error}</translation>
+    </message>
+    <message>
+        <source>❌ Error: {error}</source>
+        <translation>❌ Fehler: {error}</translation>
+    </message>
+</context>
+<context>
     <name>ImageDetailDialog</name>
     <message>
         <source>Image Details</source>
@@ -363,31 +382,31 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent</source>
-        <translation>Willkommen bei PhotoAIdent</translation>
+        <translation type="vanished">Willkommen bei PhotoAIdent</translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent!
 
 To get started, please select your photo collection folder.</source>
-        <translation>Willkommen bei PhotoAIdent!
+        <translation type="vanished">Willkommen bei PhotoAIdent!
 
 Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
     </message>
     <message>
         <source>No folder selected</source>
-        <translation>Kein Ordner ausgewählt</translation>
+        <translation type="vanished">Kein Ordner ausgewählt</translation>
     </message>
     <message>
         <source>Browse...</source>
-        <translation>Durchsuchen...</translation>
+        <translation type="vanished">Durchsuchen...</translation>
     </message>
     <message>
         <source>Start Indexing</source>
-        <translation>Indexierung starten</translation>
+        <translation type="vanished">Indexierung starten</translation>
     </message>
     <message>
         <source>Select Photo Collection Folder</source>
-        <translation>Fotosammlungsordner auswählen</translation>
+        <translation type="vanished">Fotosammlungsordner auswählen</translation>
     </message>
     <message>
         <source>Scanning for new photos...</source>
@@ -455,19 +474,19 @@ Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
         <source>✅ GPU ready — {providers}</source>
-        <translation>✅ GPU bereit — {providers}</translation>
+        <translation type="vanished">✅ GPU bereit — {providers}</translation>
     </message>
     <message>
         <source>⚠️ CPU only — {providers}</source>
-        <translation>⚠️ Nur CPU — {providers}</translation>
+        <translation type="vanished">⚠️ Nur CPU — {providers}</translation>
     </message>
     <message>
         <source>❌ Import failed: {error}</source>
-        <translation>❌ Import fehlgeschlagen: {error}</translation>
+        <translation type="vanished">❌ Import fehlgeschlagen: {error}</translation>
     </message>
     <message>
         <source>❌ Error: {error}</source>
-        <translation>❌ Fehler: {error}</translation>
+        <translation type="vanished">❌ Fehler: {error}</translation>
     </message>
 </context>
 <context>
@@ -479,6 +498,37 @@ Möchten Sie wirklich fortfahren?</translation>
     <message>
         <source>Name:</source>
         <translation>Name:</translation>
+    </message>
+</context>
+<context>
+    <name>OnboardingDialog</name>
+    <message>
+        <source>Welcome to PhotoAIdent</source>
+        <translation>Willkommen bei PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Welcome to PhotoAIdent!
+
+To get started, please select your photo collection folder.</source>
+        <translation>Willkommen bei PhotoAIdent!
+
+Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
+    </message>
+    <message>
+        <source>No folder selected</source>
+        <translation>Kein Ordner ausgewählt</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation>Durchsuchen...</translation>
+    </message>
+    <message>
+        <source>Start Indexing</source>
+        <translation>Indexierung starten</translation>
+    </message>
+    <message>
+        <source>Select Photo Collection Folder</source>
+        <translation>Fotosammlungsordner auswählen</translation>
     </message>
 </context>
 <context>
