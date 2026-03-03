@@ -152,10 +152,11 @@ class LibraryPage(QtWidgets.QWidget):
 
     def _open_map_dialog(self) -> None:
         dialog = MapLocationDialog(initial_bbox=self._gps_bbox, parent=self)
-        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+        result = dialog.exec()
+        if result == QtWidgets.QDialog.DialogCode.Accepted:
             self._gps_bbox = dialog.selected_bbox()
-            self._update_map_button()
             self.load_images()
+        self._update_map_button()
 
     def _on_location_cleared(self) -> None:
         self._gps_bbox = None
