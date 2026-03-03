@@ -91,7 +91,7 @@ class MainWindow(QtWidgets.QMainWindow):
             self.vector_store.load(self.paths.faiss_path)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
-        self.resize(1024, 768)
+        self.showMaximized()
         self._set_app_icon()
 
         # Status bar

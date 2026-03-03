@@ -26,7 +26,7 @@ class MapLocationDialog(QtWidgets.QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Select Location"))
-        self.resize(800, 600)
+        self.resize(1024, 768)
 
         self._selected_bbox: Optional[GpsBoundingBox] = None
         self._paths = AppPaths()
@@ -35,7 +35,11 @@ class MapLocationDialog(QtWidgets.QDialog):
 
     def _setup_ui(self, initial_bbox: Optional[GpsBoundingBox] = None) -> None:
         layout = QtWidgets.QVBoxLayout(self)
+        self._setup_instruction_label(layout)
+        self._setup_map_widget(layout, initial_bbox)
+        self._setup_button_box(layout)
 
+    def _setup_instruction_label(self, layout: QtWidgets.QVBoxLayout) -> None:
         instruction = QtWidgets.QLabel(
             self.tr(
                 "Pan and zoom the map. The highlighted area defines the search region."
@@ -44,6 +48,9 @@ class MapLocationDialog(QtWidgets.QDialog):
         instruction.setWordWrap(True)
         layout.addWidget(instruction)
 
+    def _setup_map_widget(
+        self, layout: QtWidgets.QVBoxLayout, initial_bbox: Optional[GpsBoundingBox]
+    ) -> None:
         # Setup QQuickWidget for the QML map
         self._quick_widget = QtQuickWidgets.QQuickWidget()
         self._quick_widget.setResizeMode(
@@ -51,6 +58,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         )
         # Strong focus so the widget receives mouse-wheel events from the host.
         self._quick_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+
         # Expanding policy + stretch so the map fills all available vertical space.
         self._quick_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -87,6 +95,7 @@ class MapLocationDialog(QtWidgets.QDialog):
 
         layout.addWidget(self._quick_widget, stretch=1)
 
+    def _setup_button_box(self, layout: QtWidgets.QVBoxLayout) -> None:
         self._button_box = QtWidgets.QDialogButtonBox(
             QtWidgets.QDialogButtonBox.StandardButton.Ok
             | QtWidgets.QDialogButtonBox.StandardButton.Cancel

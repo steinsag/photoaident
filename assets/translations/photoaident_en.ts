@@ -385,15 +385,15 @@ Please close it before starting a new one.</translation>
     </message>
     <message>
         <source>Select a person or location to start searching.</source>
-        <translation type="unfinished"></translation>
+        <translation>Select a person or location to start searching.</translation>
     </message>
     <message>
         <source>Click to set location</source>
-        <translation type="unfinished"></translation>
+        <translation>Click to set location</translation>
     </message>
     <message>
         <source>Clear Location</source>
-        <translation type="unfinished"></translation>
+        <translation>Clear Location</translation>
     </message>
     <message>
         <source>Person</source>
@@ -563,11 +563,11 @@ Do you really want to proceed?</translation>
     <name>MapLocationDialog</name>
     <message>
         <source>Select Location</source>
-        <translation type="unfinished"></translation>
+        <translation>Select Location</translation>
     </message>
     <message>
         <source>Pan and zoom the map. The highlighted area defines the search region.</source>
-        <translation type="unfinished"></translation>
+        <translation>Pan and zoom the map. The highlighted area defines the search region.</translation>
     </message>
 </context>
 <context>
