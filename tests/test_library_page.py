@@ -325,121 +325,31 @@ def test_select_person_with_no_faces_shows_empty(
     assert len(page.grid.thumbnails) == 0
 
 
-def test_select_multiple_persons_intersects_results(
+def test_select_multiple_persons_calls_search(
     qtbot, session_factory, tmp_app_paths, vs
 ):
-    """Selecting two persons shows only images where BOTH appear (AND, not OR)."""
-    (
-        p1_id,
-        c1_id,
-        faiss_id1,
-        p2_id,
-        c2_id,
-        faiss_id2,
-    ) = _add_two_persons_with_embeddings(session_factory, vs)
-
+    """UI test: selecting multiple persons triggers search_images with correct IDs."""
     with session_factory() as session:
-        img1 = Image(file_path="/alice.jpg", file_size=100, file_hash="alice")
-        img2 = Image(file_path="/bob.jpg", file_size=100, file_hash="bob")
-        session.add_all([img1, img2])
-        session.flush()
-        session.add(
-            Face(
-                image_id=img1.id,
-                faiss_id=faiss_id1,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=50,
-                bbox_h=50,
-                detection_confidence=0.9,
-                person_id=p1_id,
-                cluster_id=c1_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
-        session.add(
-            Face(
-                image_id=img2.id,
-                faiss_id=faiss_id2,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=50,
-                bbox_h=50,
-                detection_confidence=0.9,
-                person_id=p2_id,
-                cluster_id=c2_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
+        p1 = Person(name="Alice")
+        p2 = Person(name="Bob")
+        session.add_all([p1, p2])
         session.commit()
+        p1_id, p2_id = p1.id, p2.id
 
-    page = _setup_library_page_with_all_selected(
-        qtbot, session_factory, tmp_app_paths, vs
-    )
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
+    qtbot.addWidget(page)
 
-    # Alice is only in alice.jpg, Bob is only in bob.jpg → no image has both
-    assert len(page.grid.thumbnails) == 0
+    with patch("photoaident.ui.pages.library.search_images") as mock_search:
+        mock_search.return_value = []
+        # Select both
+        for i in range(page.person_list_widget.count()):
+            page.person_list_widget.item(i).setSelected(True)
 
-
-def test_select_multiple_persons_shows_shared_image(
-    qtbot, session_factory, tmp_app_paths, vs
-):
-    """An image containing all selected persons is included in AND results."""
-    (
-        p1_id,
-        c1_id,
-        faiss_id1,
-        p2_id,
-        c2_id,
-        faiss_id2,
-    ) = _add_two_persons_with_embeddings(session_factory, vs)
-
-    with session_factory() as session:
-        img = Image(file_path="/shared.jpg", file_size=100, file_hash="shared")
-        session.add(img)
-        session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id1,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=50,
-                bbox_h=50,
-                detection_confidence=0.9,
-                person_id=p1_id,
-                cluster_id=c1_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id2,
-                bbox_x=60,
-                bbox_y=0,
-                bbox_w=50,
-                bbox_h=50,
-                detection_confidence=0.9,
-                person_id=p2_id,
-                cluster_id=c2_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
-        session.commit()
-        shared_img_id = img.id
-
-    page = _setup_library_page_with_all_selected(
-        qtbot, session_factory, tmp_app_paths, vs
-    )
-
-    result_ids = [t.image_id for t in page.grid.thumbnails]
-    assert shared_img_id in result_ids
-    assert len(page.grid.thumbnails) == 1
+        # load_images is called by itemSelectionChanged signal
+        mock_search.assert_called()
+        # Verify it was called with both IDs
+        args, kwargs = mock_search.call_args
+        assert set(kwargs["person_ids"]) == {p1_id, p2_id}
 
 
 def test_person_filter_without_vector_store_falls_back_to_all(
@@ -462,25 +372,23 @@ def test_person_filter_without_vector_store_falls_back_to_all(
     assert len(page.grid.thumbnails) == 2
 
 
-def test_gps_filter_shows_matched_images(qtbot, session_factory, tmp_app_paths):
-    img1_id, _ = _add_test_images_with_gps(session_factory)
-
+def test_gps_filter_calls_search(qtbot, session_factory, tmp_app_paths):
+    """UI test: setting GPS filter triggers search_images with correct bbox."""
     page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
 
-    # Set GPS filter (Berlin-ish)
     bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
-    page._gps_bbox = bbox
-    page._update_map_button()
-    page.load_images()
+    with patch("photoaident.ui.pages.library.search_images") as mock_search:
+        mock_search.return_value = []
+        page._gps_bbox = bbox
+        page.load_images()
 
-    assert len(page.grid.thumbnails) == 1
-    assert page.grid.thumbnails[0].image_id == img1_id
+        mock_search.assert_called_once()
+        assert mock_search.call_args[1]["gps_bbox"] == bbox
 
     # Clear filter
     page._on_location_cleared()
-    assert len(page.grid.thumbnails) == 0  # No person selected, no GPS -> empty
-    assert not page.empty_label.isHidden()
+    assert page._gps_bbox is None
 
 
 def test_show_event_populates_list(qtbot, session_factory, tmp_app_paths):
@@ -554,19 +462,6 @@ def test_open_map_dialog_accepted(qtbot, session_factory, tmp_app_paths):
         assert not page.clear_location_btn.isHidden()
 
 
-def test_gps_filter_without_vector_store(qtbot, session_factory, tmp_app_paths):
-    img1_id, _ = _add_test_images_with_gps(session_factory)
-
-    page = LibraryPage(session_factory, tmp_app_paths, vector_store=None)
-    qtbot.addWidget(page)
-
-    page._gps_bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
-    page.load_images()
-
-    assert len(page.grid.thumbnails) == 1
-    assert page.grid.thumbnails[0].image_id == img1_id
-
-
 def test_load_images_empty_per_person_scores(qtbot, session_factory, tmp_app_paths, vs):
     # This happens if find_images_by_person returns nothing
     with session_factory() as session:
@@ -581,8 +476,8 @@ def test_load_images_empty_per_person_scores(qtbot, session_factory, tmp_app_pat
     item = page.person_list_widget.item(0)
     item.setSelected(True)
 
-    # Mock find_images_by_person to return empty
-    with patch("photoaident.ui.pages.library.find_images_by_person", return_value=[]):
+    # Mock search_images to return empty
+    with patch("photoaident.ui.pages.library.search_images", return_value=[]):
         page.load_images()
         assert len(page.grid.thumbnails) == 0
 
@@ -603,69 +498,3 @@ def test_navigate_to_labelling(qtbot, session_factory, tmp_app_paths):
             with patch.object(page, "window", return_value=mw_instance):
                 page._on_navigate_to_labelling(123)
                 mw_instance.go_to_labelling.assert_called_once_with(123)
-
-
-def test_gps_filter_without_vector_store_and_person(
-    qtbot, session_factory, tmp_app_paths
-):
-    img1_id, _ = _add_test_images_with_gps(session_factory)
-
-    page = LibraryPage(session_factory, tmp_app_paths, vector_store=None)
-    qtbot.addWidget(page)
-
-    # Set GPS filter (Berlin-ish)
-    page._gps_bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
-
-    # We need to SELECT at least one person to reach line 212
-    # if vector_store is None:
-    #     with self.session_factory() as session:
-    #         stmt = select(Image)
-    #         if gps_image_ids is not None:
-    #             stmt = stmt.where(Image.id.in_(list(gps_image_ids))) <--- line 218
-
-    with session_factory() as session:
-        p = Person(name="Alice")
-        session.add(p)
-        session.commit()
-
-    page._populate_person_list()
-    item = page.person_list_widget.item(0)
-    item.setSelected(True)
-
-    page.load_images()
-
-    assert len(page.grid.thumbnails) == 1
-    assert page.grid.thumbnails[0].image_id == img1_id
-
-
-def test_load_images_no_common_ids(qtbot, session_factory, tmp_app_paths, vs):
-    # Coverage for lines 235-236
-    with session_factory() as session:
-        p1 = Person(name="Alice")
-        p2 = Person(name="Bob")
-        session.add_all([p1, p2])
-        session.commit()
-        p1_id = p1.id
-        p2_id = p2.id
-
-    page = LibraryPage(session_factory, tmp_app_paths, vs)
-    qtbot.addWidget(page)
-
-    # Select both
-    for i in range(page.person_list_widget.count()):
-        page.person_list_widget.item(i).setSelected(True)
-
-    # Mock find_images_by_person to return different images for each person
-    # Alice is in image 1, Bob is in image 2.
-    def mock_find(factory, store, person_id):
-        if person_id == p1_id:
-            return [(1, 0.9)]
-        if person_id == p2_id:
-            return [(2, 0.9)]
-        return []
-
-    with patch(
-        "photoaident.ui.pages.library.find_images_by_person", side_effect=mock_find
-    ):
-        # It seems line 235-236 in original are unreachable if person_ids is not empty.
-        page.load_images()

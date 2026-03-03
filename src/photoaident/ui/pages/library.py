@@ -4,8 +4,8 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
 from photoaident.core.geo import GpsBoundingBox
-from photoaident.core.search import find_images_by_person, find_images_by_gps_bbox
-from photoaident.db.database import Image, Person
+from photoaident.core.search import search_images
+from photoaident.db.database import Person
 from photoaident.ui.widgets.map_dialog import MapLocationDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
@@ -150,6 +150,10 @@ class LibraryPage(QtWidgets.QWidget):
             for item in self.person_list_widget.selectedItems()
         ]
 
+    def _has_filters(self) -> bool:
+        """Check if any filters (person or location) are active."""
+        return bool(self._selected_person_ids()) or self._gps_bbox is not None
+
     def _open_map_dialog(self) -> None:
         dialog = MapLocationDialog(initial_bbox=self._gps_bbox, parent=self)
         result = dialog.exec()
@@ -171,93 +175,33 @@ class LibraryPage(QtWidgets.QWidget):
             self.clear_location_btn.setVisible(True)
             self.map_location_btn.setChecked(True)
 
-    def _build_images_data(self, images: list) -> list:
-        result = []
-        for img in images:
-            thumb_path = (
-                self.paths.thumbs_dir / f"{img.file_hash}.jpg"
-                if img.file_hash
-                else self.paths.thumbs_dir / "unknown.jpg"
-            )
-            result.append((img.id, img.file_path, thumb_path))
-        return result
-
     def load_images(self) -> None:
-        person_ids = self._selected_person_ids()
-        gps_image_ids: set[int] | None = None
-
-        if self._gps_bbox:
-            gps_image_ids = set(
-                find_images_by_gps_bbox(self.session_factory, self._gps_bbox)
-            )
-
-        if not person_ids and gps_image_ids is None:
+        """Fetch search results and update the UI accordingly."""
+        if not self._has_filters():
             self.grid.clear()
             self.grid.setVisible(False)
             self.empty_label.setVisible(True)
             self.empty_label.show()  # Explicit show
             return
 
-        # Ensure grid is visible and empty label is hidden if we have any filters
+        person_ids = self._selected_person_ids()
+        results = search_images(
+            thumbs_dir=self.paths.thumbs_dir,
+            session_factory=self.session_factory,
+            vector_store=self.vector_store,
+            person_ids=person_ids,
+            gps_bbox=self._gps_bbox,
+        )
+
+        # Update visibility after retrieving results
+        if not results:
+            self.grid.clear()
+        else:
+            self.grid.set_results(results)
         self.empty_label.setVisible(False)
         self.empty_label.hide()  # Explicit hide
         self.grid.setVisible(True)
         self.grid.show()  # Explicit show
-
-        if not person_ids and gps_image_ids is not None:
-            # GPS filter only
-            with self.session_factory() as session:
-                stmt = select(Image).where(Image.id.in_(list(gps_image_ids)))
-                images = session.execute(stmt).unique().scalars().all()
-                self.grid.set_results(self._build_images_data(images))
-            return
-
-        if self.vector_store is None:
-            with self.session_factory() as session:
-                stmt = select(Image)
-                if gps_image_ids is not None:
-                    stmt = stmt.where(Image.id.in_(list(gps_image_ids)))
-                images = session.execute(stmt).unique().scalars().all()
-                self.grid.set_results(self._build_images_data(images))
-            return
-
-        # Intersect FAISS results: only images where ALL selected persons appear
-        per_person_scores: list[dict[int, float]] = []
-        for person_id in person_ids:
-            scores: dict[int, float] = {}
-            for img_id, score in find_images_by_person(
-                self.session_factory, self.vector_store, person_id
-            ):
-                if gps_image_ids is None or img_id in gps_image_ids:
-                    scores[img_id] = score
-            per_person_scores.append(scores)
-
-        if not per_person_scores:
-            self.grid.set_results([])
-            return
-
-        common_ids = set(per_person_scores[0].keys())
-        for scores in per_person_scores[1:]:
-            common_ids &= scores.keys()
-
-        # Rank by minimum score across persons (weakest match determines relevance)
-        image_scores: dict[int, float] = {
-            img_id: min(s[img_id] for s in per_person_scores) for img_id in common_ids
-        }
-
-        if not image_scores:
-            self.grid.clear()
-            return
-
-        sorted_pairs = sorted(image_scores.items(), key=lambda kv: kv[1], reverse=True)
-        ordered_ids = [img_id for img_id, _ in sorted_pairs]
-
-        with self.session_factory() as session:
-            stmt = select(Image).where(Image.id.in_(ordered_ids))
-            images = session.execute(stmt).unique().scalars().all()
-            image_map = {img.id: img for img in images}
-            ordered_images = [image_map[i] for i in ordered_ids if i in image_map]
-            self.grid.set_results(self._build_images_data(ordered_images))
 
     def _on_navigate_to_labelling(self, image_id: int) -> None:
         from photoaident.app import MainWindow  # local import breaks circular dep

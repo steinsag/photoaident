@@ -1,7 +1,7 @@
 import pytest
 
 from photoaident.core.geo import GpsBoundingBox
-from photoaident.core.search import find_images_by_gps_bbox
+from photoaident.core.search import _find_images_by_gps_bbox
 from photoaident.db.database import (
     Image,
     ImageMetadata,
@@ -66,7 +66,7 @@ def test_find_images_by_gps_bbox(session_factory):
 
         # Bbox covering Germany
         bbox = GpsBoundingBox(south=47.0, west=5.0, north=55.0, east=15.0)
-        results = find_images_by_gps_bbox(session_factory, bbox)
+        results = _find_images_by_gps_bbox(session_factory, bbox)
 
         assert len(results) == 1
         assert results[0] == img1.id
@@ -120,7 +120,7 @@ def test_find_images_by_gps_bbox_antimeridian(session_factory):
 
         # Bbox crossing antimeridian
         bbox = GpsBoundingBox(south=-20.0, west=170.0, north=-10.0, east=-170.0)
-        results = find_images_by_gps_bbox(session_factory, bbox)
+        results = _find_images_by_gps_bbox(session_factory, bbox)
 
         assert len(results) == 2
         assert set(results) == {img1.id, img2.id}
