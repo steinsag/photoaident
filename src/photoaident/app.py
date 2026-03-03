@@ -1,14 +1,12 @@
 import logging
 import os
 import sys
-import threading
 from typing import TYPE_CHECKING
 
-import onnxruntime as ort
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from photoaident.core.indexing import IndexingTask
-from photoaident.core.inventory import InventoryTask
+from photoaident.core.gpu_checker import GpuChecker
+from photoaident.core.indexing_controller import IndexingController
 from photoaident.db.database import (
     get_counts,
     clear_database,
@@ -19,6 +17,7 @@ from photoaident.db.database import (
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
 from photoaident.ui.about_dialog import AboutDialog
+from photoaident.ui.onboarding_dialog import OnboardingDialog
 from photoaident.ui.pages.browse import BrowsePage
 from photoaident.ui.pages.labelling import LabellingPage
 from photoaident.ui.pages.library import LibraryPage
@@ -68,10 +67,6 @@ def load_translations(app: QtWidgets.QApplication):
             # Keep a reference to prevent garbage collection
             app._translator = translator  # type: ignore[attr-defined]
             break
-
-
-class _GPUStatusSignal(QtCore.QObject):
-    status_ready = QtCore.Signal(str)
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -198,72 +193,31 @@ class MainWindow(QtWidgets.QMainWindow):
         # Create menu bar
         self._create_menus()
 
-        # Update GPU status
-        self._gpu_status_signal = _GPUStatusSignal()
-        self._gpu_status_signal.status_ready.connect(self._on_gpu_status_ready)
+        # GPU checker
+        self.gpu_checker = GpuChecker(self)
+        self.gpu_checker.status_ready.connect(self._on_gpu_status_ready)
         if check_gpu:
-            threading.Thread(target=self._check_gpu, daemon=True).start()
+            self.gpu_checker.start()
 
-        # Start inventory then indexing at startup
-        self._inventory_task: InventoryTask | None = None
-        self._inventory_thread: QtCore.QThread | None = None
-        self._indexing_task: IndexingTask | None = None
-        self._indexing_thread: QtCore.QThread | None = None
+        # Indexing controller
+        self.indexing_controller = IndexingController(
+            self.session_factory, self.vector_store, self.paths, parent=self
+        )
+        self.indexing_controller.inventory_status.connect(self._on_inventory_status)
+        self.indexing_controller.inventory_progress.connect(self._on_inventory_progress)
+        self.indexing_controller.inventory_finished.connect(self._on_inventory_finished)
+        self.indexing_controller.indexing_progress.connect(self._update_indexing_status)
+        self.indexing_controller.indexing_finished.connect(self._on_indexing_finished)
+
         self._update_db_counts()
         QtCore.QTimer.singleShot(1000, self._maybe_start_indexing)
 
     def _show_onboarding(self) -> None:
         """Show the first-run dialog to select the photo collection folder."""
-        dialog = QtWidgets.QDialog(self)
-        dialog.setWindowTitle(self.tr("Welcome to PhotoAIdent"))
-        dialog.setMinimumWidth(500)
-
-        layout = QtWidgets.QVBoxLayout(dialog)
-
-        welcome_label = QtWidgets.QLabel(
-            self.tr(
-                "Welcome to PhotoAIdent!\n\n"
-                "To get started, please select your photo collection folder."
-            )
-        )
-        welcome_label.setWordWrap(True)
-        layout.addWidget(welcome_label)
-        layout.addSpacing(12)
-
-        path_layout = QtWidgets.QHBoxLayout()
-        path_edit = QtWidgets.QLineEdit()
-        path_edit.setReadOnly(True)
-        path_edit.setPlaceholderText(self.tr("No folder selected"))
-        browse_btn = QtWidgets.QPushButton(self.tr("Browse..."))
-        path_layout.addWidget(path_edit)
-        path_layout.addWidget(browse_btn)
-        layout.addLayout(path_layout)
-        layout.addSpacing(12)
-
-        button_box = QtWidgets.QDialogButtonBox()
-        start_btn = button_box.addButton(
-            self.tr("Start Indexing"),
-            QtWidgets.QDialogButtonBox.ButtonRole.AcceptRole,
-        )
-        start_btn.setEnabled(False)
-        button_box.accepted.connect(dialog.accept)
-        layout.addWidget(button_box)
-
-        def browse() -> None:
-            folder = QtWidgets.QFileDialog.getExistingDirectory(
-                dialog, self.tr("Select Photo Collection Folder"), ""
-            )
-            if folder:
-                path_edit.setText(folder)
-                start_btn.setEnabled(True)
-
-        browse_btn.clicked.connect(browse)
-
+        dialog = OnboardingDialog(self)
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
-
-        path = path_edit.text()
-        if path:
+        if path := dialog.selected_path():
             self._on_onboarding_accepted(path)
 
     def _on_onboarding_accepted(self, path: str) -> None:
@@ -274,7 +228,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _maybe_start_indexing(self) -> None:
         """Run a silent inventory scan then start indexing."""
-        if self._indexing_task is not None or self._inventory_task is not None:
+        if self.indexing_controller.is_busy:
             return
 
         collection_path = self.settings.collection_path
@@ -284,41 +238,9 @@ class MainWindow(QtWidgets.QMainWindow):
             return
 
         self.indexing_label.setText(self.tr("Scanning for new photos..."))
+        self.indexing_controller.start_pipeline(collection_path)
 
-        self._inventory_task = InventoryTask(collection_path, self.session_factory)
-        self._inventory_thread = QtCore.QThread()
-        self._inventory_task.moveToThread(self._inventory_thread)
-        self._inventory_task.finished.connect(self._on_startup_inventory_finished)
-        self._inventory_thread.started.connect(self._inventory_task.run)
-        self._inventory_thread.start()
-
-    def _on_startup_inventory_finished(self, _added: int) -> None:
-        """Called when the silent startup inventory scan completes."""
-        if self._inventory_thread:
-            self._inventory_thread.quit()
-            self._inventory_thread.wait()
-            self._inventory_thread = None
-        self._inventory_task = None
-        self._start_indexing_task()
-
-    def _start_indexing_task(self) -> None:
-        """Create and start the background indexing task."""
-        if self._indexing_task is not None:
-            return
-
-        self._indexing_task = IndexingTask(
-            self.session_factory, self.vector_store, self.paths
-        )
-        self._indexing_thread = QtCore.QThread()
-        self._indexing_task.moveToThread(self._indexing_thread)
-
-        self._indexing_task.progress.connect(self._update_indexing_status)
-        self._indexing_task.finished.connect(self._on_indexing_finished)
-        self._indexing_thread.started.connect(self._indexing_task.run)
-
-        self._indexing_thread.start()
-
-    def _update_indexing_status(self, indexed, total, faces):
+    def _update_indexing_status(self, indexed: int, total: int, faces: int) -> None:
         msg = self.tr("Indexed: {indexed}/{total} | Faces: {faces}").format(
             indexed=indexed, total=total, faces=faces
         )
@@ -337,13 +259,22 @@ class MainWindow(QtWidgets.QMainWindow):
             )
         )
 
-    def _on_indexing_finished(self):
+    def _on_inventory_status(self, status: str) -> None:
+        if hasattr(self, "_inventory_dialog"):
+            self._inventory_dialog.update_status(status)
+
+    def _on_inventory_progress(self, current: int, total: int) -> None:
+        if hasattr(self, "_inventory_dialog"):
+            self._inventory_dialog.update_progress(current, total)
+
+    def _on_inventory_finished(self, _: int) -> None:
+        if hasattr(self, "_inventory_dialog"):
+            self._inventory_dialog.accept()
+            del self._inventory_dialog
+        self.indexing_controller.start_indexing_only()
+
+    def _on_indexing_finished(self) -> None:
         self.indexing_label.setText(self.tr("Indexing complete"))
-        if self._indexing_thread:
-            self._indexing_thread.quit()
-            self._indexing_thread.wait()
-            self._indexing_thread = None
-        self._indexing_task = None
         self._update_db_counts()
         self.library_page.load_images()
 
@@ -465,89 +396,24 @@ class MainWindow(QtWidgets.QMainWindow):
                 # (in case other settings added later)
                 self.settings.save(self.paths.config_file)
 
-    def _run_inventory_scan(self, path: str):
+    def _run_inventory_scan(self, path: str) -> None:
         """Run the initial inventory scan for a new collection path."""
-        dialog = ProgressDialog(
+        self._inventory_dialog = ProgressDialog(
             self.tr("Indexing"), self.tr("Searching for photos..."), self
         )
+        self.indexing_controller.start_inventory(path)
 
-        task = InventoryTask(path, self.session_factory)
-        thread = QtCore.QThread()
-        task.moveToThread(thread)
-
-        task.status.connect(dialog.update_status)
-        task.progress.connect(dialog.update_progress)
-        task.finished.connect(dialog.accept)
-        task.finished.connect(thread.quit)
-        task.finished.connect(self._start_indexing_task)
-        thread.started.connect(task.run)
-        thread.finished.connect(thread.deleteLater)
-
-        # Ensure task is deleted when thread finishes
-        task.finished.connect(task.deleteLater)
-
-        # Start thread before exec to avoid blocking if finished signal comes early
-        thread.start()
         try:
-            dialog.exec()
+            self._inventory_dialog.exec()
         finally:
-            if thread.isRunning():
-                task.cancel()
-                thread.quit()
-                thread.wait()
+            if self.indexing_controller.is_busy:
+                self.indexing_controller.cancel_inventory()
 
-    def _check_gpu(self):
-        try:
-            import insightface  # noqa: F401
-
-            providers = ort.get_available_providers()  # type: ignore[attr-defined]
-            has_cuda = "CUDAExecutionProvider" in providers
-
-            if has_cuda:
-                msg = self.tr("✅ GPU ready — {providers}").format(
-                    providers=", ".join(providers)
-                )
-            else:
-                msg = self.tr("⚠️ CPU only — {providers}").format(
-                    providers=", ".join(providers)
-                )
-
-        except ImportError as e:
-            msg = self.tr("❌ Import failed: {error}").format(error=str(e))
-        except Exception as e:
-            msg = self.tr("❌ Error: {error}").format(error=str(e))
-
-        # Update status bar via signal
-        self._gpu_status_signal.status_ready.emit(msg)
-
-    def _on_gpu_status_ready(self, msg: str):
+    def _on_gpu_status_ready(self, msg: str) -> None:
         self.status_bar.showMessage(msg, 5000)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        # Graceful shutdown: cancel any running inventory/indexing tasks
-        if self._inventory_task is not None and self._inventory_thread is not None:
-            try:
-                self._inventory_task.cancel()
-                self._inventory_thread.quit()
-                self._inventory_thread.wait(3000)
-            except Exception:
-                logger.debug("Error stopping inventory thread", exc_info=True)
-        if self._indexing_task is not None and self._indexing_thread is not None:
-            try:
-                self._indexing_task.cancel()
-                # Ask the worker thread to stop and wait a bit
-                self._indexing_thread.quit()
-                self._indexing_thread.wait(5000)
-            except Exception:
-                logger.debug("Error stopping indexing thread", exc_info=True)
-            finally:
-                # Ensure FAISS index is persisted
-                try:
-                    self.vector_store.save(self.paths.faiss_path)
-                except Exception:
-                    logger.warning(
-                        "Failed to save FAISS index on shutdown", exc_info=True
-                    )
+        self.indexing_controller.shutdown(self.paths.faiss_path)
         event.accept()
 
     def _set_app_icon(self):

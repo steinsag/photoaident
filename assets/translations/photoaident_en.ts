@@ -139,6 +139,25 @@ Confidence: {confidence}%</translation>
     </message>
 </context>
 <context>
+    <name>GpuChecker</name>
+    <message>
+        <source>✅ GPU ready — {providers}</source>
+        <translation type="unfinished">✅ GPU ready — {providers}</translation>
+    </message>
+    <message>
+        <source>⚠️ CPU only — {providers}</source>
+        <translation type="unfinished">⚠️ CPU only — {providers}</translation>
+    </message>
+    <message>
+        <source>❌ Import failed: {error}</source>
+        <translation type="unfinished">❌ Import failed: {error}</translation>
+    </message>
+    <message>
+        <source>❌ Error: {error}</source>
+        <translation type="unfinished">❌ Error: {error}</translation>
+    </message>
+</context>
+<context>
     <name>ImageDetailDialog</name>
     <message>
         <source>Image Details</source>
@@ -363,31 +382,31 @@ Please close it before starting a new one.</translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent</source>
-        <translation>Welcome to PhotoAIdent</translation>
+        <translation type="vanished">Welcome to PhotoAIdent</translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent!
 
 To get started, please select your photo collection folder.</source>
-        <translation>Welcome to PhotoAIdent!
+        <translation type="vanished">Welcome to PhotoAIdent!
 
 To get started, please select your photo collection folder.</translation>
     </message>
     <message>
         <source>No folder selected</source>
-        <translation>No folder selected</translation>
+        <translation type="vanished">No folder selected</translation>
     </message>
     <message>
         <source>Browse...</source>
-        <translation>Browse...</translation>
+        <translation type="vanished">Browse...</translation>
     </message>
     <message>
         <source>Start Indexing</source>
-        <translation>Start Indexing</translation>
+        <translation type="vanished">Start Indexing</translation>
     </message>
     <message>
         <source>Select Photo Collection Folder</source>
-        <translation>Select Photo Collection Folder</translation>
+        <translation type="vanished">Select Photo Collection Folder</translation>
     </message>
     <message>
         <source>Scanning for new photos...</source>
@@ -455,19 +474,19 @@ Do you really want to proceed?</translation>
     </message>
     <message>
         <source>✅ GPU ready — {providers}</source>
-        <translation>✅ GPU ready — {providers}</translation>
+        <translation type="vanished">✅ GPU ready — {providers}</translation>
     </message>
     <message>
         <source>⚠️ CPU only — {providers}</source>
-        <translation>⚠️ CPU only — {providers}</translation>
+        <translation type="vanished">⚠️ CPU only — {providers}</translation>
     </message>
     <message>
         <source>❌ Import failed: {error}</source>
-        <translation>❌ Import failed: {error}</translation>
+        <translation type="vanished">❌ Import failed: {error}</translation>
     </message>
     <message>
         <source>❌ Error: {error}</source>
-        <translation>❌ Error: {error}</translation>
+        <translation type="vanished">❌ Error: {error}</translation>
     </message>
 </context>
 <context>
@@ -479,6 +498,37 @@ Do you really want to proceed?</translation>
     <message>
         <source>Name:</source>
         <translation>Name:</translation>
+    </message>
+</context>
+<context>
+    <name>OnboardingDialog</name>
+    <message>
+        <source>Welcome to PhotoAIdent</source>
+        <translation type="unfinished">Welcome to PhotoAIdent</translation>
+    </message>
+    <message>
+        <source>Welcome to PhotoAIdent!
+
+To get started, please select your photo collection folder.</source>
+        <translation type="unfinished">Welcome to PhotoAIdent!
+
+To get started, please select your photo collection folder.</translation>
+    </message>
+    <message>
+        <source>No folder selected</source>
+        <translation type="unfinished">No folder selected</translation>
+    </message>
+    <message>
+        <source>Browse...</source>
+        <translation type="unfinished">Browse...</translation>
+    </message>
+    <message>
+        <source>Start Indexing</source>
+        <translation type="unfinished">Start Indexing</translation>
+    </message>
+    <message>
+        <source>Select Photo Collection Folder</source>
+        <translation type="unfinished">Select Photo Collection Folder</translation>
     </message>
 </context>
 <context>

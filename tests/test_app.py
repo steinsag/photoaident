@@ -11,11 +11,13 @@ from PySide6 import QtGui, QtWidgets
 
 import photoaident.app as app_module
 from photoaident.app import MainWindow, get_resource_path, load_translations
+from photoaident.core.gpu_checker import GpuChecker
 from photoaident.db.database import Face, Image
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 from photoaident.settings import Settings
+from photoaident.ui.onboarding_dialog import OnboardingDialog
 
 
 def test_navigation_shortcuts(qtbot, tmp_app_paths):
@@ -69,58 +71,60 @@ def test_startup_triggers_inventory_scan_when_collection_path_set(qtbot, tmp_app
     collection_dir.mkdir()
 
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
+    ctrl = window.indexing_controller
     # Ensure any auto-timer-started task is cleaned up first
-    if window._inventory_task is not None:
-        window._inventory_task.cancel()
-        if window._inventory_thread:
-            window._inventory_thread.quit()
-            window._inventory_thread.wait(3000)
-        window._inventory_task = None
-        window._inventory_thread = None
-    if window._indexing_task is not None:
-        window._indexing_task.cancel()
-        if window._indexing_thread:
-            window._indexing_thread.quit()
-            window._indexing_thread.wait(3000)
-        window._indexing_task = None
-        window._indexing_thread = None
+    if ctrl._inventory_task is not None:
+        ctrl._inventory_task.cancel()
+        if ctrl._inventory_thread:
+            ctrl._inventory_thread.quit()
+            ctrl._inventory_thread.wait(3000)
+        ctrl._inventory_task = None
+        ctrl._inventory_thread = None
+    if ctrl._indexing_task is not None:
+        ctrl._indexing_task.cancel()
+        if ctrl._indexing_thread:
+            ctrl._indexing_thread.quit()
+            ctrl._indexing_thread.wait(3000)
+        ctrl._indexing_task = None
+        ctrl._indexing_thread = None
 
     window._maybe_start_indexing()
 
-    assert window._inventory_task is not None
+    assert ctrl._inventory_task is not None
 
     # Cleanup
-    window._inventory_task.cancel()
-    if window._inventory_thread:
-        window._inventory_thread.quit()
-        window._inventory_thread.wait(3000)
-    window._inventory_task = None
-    window._inventory_thread = None
+    ctrl._inventory_task.cancel()
+    if ctrl._inventory_thread:
+        ctrl._inventory_thread.quit()
+        ctrl._inventory_thread.wait(3000)
+    ctrl._inventory_task = None
+    ctrl._inventory_thread = None
 
 
 def test_startup_skips_scan_when_no_collection_path(qtbot, tmp_app_paths):
     """_maybe_start_indexing does nothing when collection_path is empty."""
     window = _make_window(tmp_app_paths, qtbot, collection_path="")
+    ctrl = window.indexing_controller
     # Reset any task started by the timer
-    if window._inventory_task is not None:
-        window._inventory_task.cancel()
-        if window._inventory_thread:
-            window._inventory_thread.quit()
-            window._inventory_thread.wait(3000)
-        window._inventory_task = None
-        window._inventory_thread = None
-    if window._indexing_task is not None:
-        window._indexing_task.cancel()
-        if window._indexing_thread:
-            window._indexing_thread.quit()
-            window._indexing_thread.wait(3000)
-        window._indexing_task = None
-        window._indexing_thread = None
+    if ctrl._inventory_task is not None:
+        ctrl._inventory_task.cancel()
+        if ctrl._inventory_thread:
+            ctrl._inventory_thread.quit()
+            ctrl._inventory_thread.wait(3000)
+        ctrl._inventory_task = None
+        ctrl._inventory_thread = None
+    if ctrl._indexing_task is not None:
+        ctrl._indexing_task.cancel()
+        if ctrl._indexing_thread:
+            ctrl._indexing_thread.quit()
+            ctrl._indexing_thread.wait(3000)
+        ctrl._indexing_task = None
+        ctrl._indexing_thread = None
 
     window._maybe_start_indexing()
 
-    assert window._inventory_task is None
-    assert window._indexing_task is None
+    assert ctrl._inventory_task is None
+    assert ctrl._indexing_task is None
 
 
 def test_startup_scan_idempotent_when_already_running(qtbot, tmp_app_paths):
@@ -128,37 +132,38 @@ def test_startup_scan_idempotent_when_already_running(qtbot, tmp_app_paths):
     collection_dir = _make_collection_dir(tmp_app_paths)
 
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
+    ctrl = window.indexing_controller
     # Reset any timer-started tasks
-    if window._inventory_task is not None:
-        window._inventory_task.cancel()
-        if window._inventory_thread:
-            window._inventory_thread.quit()
-            window._inventory_thread.wait(3000)
-        window._inventory_task = None
-        window._inventory_thread = None
-    if window._indexing_task is not None:
-        window._indexing_task.cancel()
-        if window._indexing_thread:
-            window._indexing_thread.quit()
-            window._indexing_thread.wait(3000)
-        window._indexing_task = None
-        window._indexing_thread = None
+    if ctrl._inventory_task is not None:
+        ctrl._inventory_task.cancel()
+        if ctrl._inventory_thread:
+            ctrl._inventory_thread.quit()
+            ctrl._inventory_thread.wait(3000)
+        ctrl._inventory_task = None
+        ctrl._inventory_thread = None
+    if ctrl._indexing_task is not None:
+        ctrl._indexing_task.cancel()
+        if ctrl._indexing_thread:
+            ctrl._indexing_thread.quit()
+            ctrl._indexing_thread.wait(3000)
+        ctrl._indexing_task = None
+        ctrl._indexing_thread = None
 
     window._maybe_start_indexing()
-    first_task = window._inventory_task
+    first_task = ctrl._inventory_task
     assert first_task is not None
 
     # Second call must be a no-op
     window._maybe_start_indexing()
-    assert window._inventory_task is first_task
+    assert ctrl._inventory_task is first_task
 
     # Cleanup
     first_task.cancel()
-    if window._inventory_thread:
-        window._inventory_thread.quit()
-        window._inventory_thread.wait(3000)
-    window._inventory_task = None
-    window._inventory_thread = None
+    if ctrl._inventory_thread:
+        ctrl._inventory_thread.quit()
+        ctrl._inventory_thread.wait(3000)
+    ctrl._inventory_task = None
+    ctrl._inventory_thread = None
 
 
 def test_counts_label_shows_zeros_on_empty_db(qtbot, tmp_app_paths):
@@ -239,8 +244,8 @@ def test_onboarding_triggered_when_no_path(qtbot, tmp_app_paths, monkeypatch):
     window._maybe_start_indexing()
 
     assert len(onboarding_called) == 1
-    assert window._inventory_task is None
-    assert window._indexing_task is None
+    assert window.indexing_controller._inventory_task is None
+    assert window.indexing_controller._indexing_task is None
 
 
 def test_onboarding_not_triggered_when_path_set(qtbot, tmp_app_paths, monkeypatch):
@@ -249,18 +254,19 @@ def test_onboarding_not_triggered_when_path_set(qtbot, tmp_app_paths, monkeypatc
 
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
     monkeypatch.setattr(window, "_onboarding_enabled", True)
+    ctrl = window.indexing_controller
 
     # Ensure no background tasks from constructor timer interfere
     for attr in ("_inventory_task", "_indexing_task"):
-        task = getattr(window, attr)
+        task = getattr(ctrl, attr)
         if task is not None:
             task.cancel()
-            thread = getattr(window, attr.replace("task", "thread"))
+            thread = getattr(ctrl, attr.replace("task", "thread"))
             if thread:
                 thread.quit()
                 thread.wait(3000)
-            setattr(window, attr, None)
-            setattr(window, attr.replace("task", "thread"), None)
+            setattr(ctrl, attr, None)
+            setattr(ctrl, attr.replace("task", "thread"), None)
 
     onboarding_called: list[bool] = []
     monkeypatch.setattr(
@@ -365,28 +371,28 @@ def test_vector_store_loaded_when_faiss_file_exists(tmp_app_paths, qtbot):
 
 
 # ---------------------------------------------------------------------------
-# GPU check thread (line 163)
+# GPU check thread
 # ---------------------------------------------------------------------------
 
 
 def test_gpu_check_thread_started_when_enabled(
     tmp_app_paths: AppPaths, qtbot, monkeypatch
 ):
-    """check_gpu=True starts a background thread that calls _check_gpu."""
+    """check_gpu=True starts a background thread that calls GpuChecker._probe."""
     event = threading.Event()
 
-    monkeypatch.setattr(MainWindow, "_check_gpu", lambda self: event.set())
+    monkeypatch.setattr(GpuChecker, "_probe", lambda _: event.set())
 
     apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
 
     window = MainWindow(tmp_app_paths, check_gpu=True, enable_onboarding=False)
     qtbot.addWidget(window)
 
-    assert event.wait(timeout=2.0), "_check_gpu was not called within 2 s"
+    assert event.wait(timeout=2.0), "GpuChecker._probe was not called within 2 s"
 
 
 # ---------------------------------------------------------------------------
-# _show_onboarding dialog (lines 175-225)
+# _show_onboarding dialog
 # ---------------------------------------------------------------------------
 
 
@@ -395,7 +401,7 @@ def test_show_onboarding_cancelled_does_nothing(tmp_app_paths, qtbot, monkeypatc
     window = _make_window(tmp_app_paths, qtbot)
 
     monkeypatch.setattr(
-        QtWidgets.QDialog,
+        OnboardingDialog,
         "exec",
         lambda _self: QtWidgets.QDialog.DialogCode.Rejected,
     )
@@ -413,13 +419,11 @@ def test_show_onboarding_accepted_calls_handler(tmp_app_paths, qtbot, monkeypatc
 
     window = _make_window(tmp_app_paths, qtbot)
 
-    def fake_exec(dialog_self: QtWidgets.QDialog) -> int:
-        line_edit = dialog_self.findChild(QtWidgets.QLineEdit)
-        if line_edit:
-            line_edit.setText(str(collection_dir))
+    def fake_exec(dialog_self: OnboardingDialog) -> int:
+        dialog_self._selected_path = str(collection_dir)
         return QtWidgets.QDialog.DialogCode.Accepted
 
-    monkeypatch.setattr(QtWidgets.QDialog, "exec", fake_exec)
+    monkeypatch.setattr(OnboardingDialog, "exec", fake_exec)
     called: list[str] = []
     monkeypatch.setattr(window, "_on_onboarding_accepted", lambda p: called.append(p))
 
@@ -429,25 +433,25 @@ def test_show_onboarding_accepted_calls_handler(tmp_app_paths, qtbot, monkeypatc
 
 
 # ---------------------------------------------------------------------------
-# _start_indexing_task guard clause (line 265)
+# start_indexing_only guard clause
 # ---------------------------------------------------------------------------
 
 
-def test_start_indexing_task_idempotent(tmp_app_paths, qtbot):
-    """_start_indexing_task is a no-op when a task is already running."""
+def test_start_indexing_only_idempotent(tmp_app_paths, qtbot):
+    """start_indexing_only is a no-op when a task is already running."""
     window = _make_window(tmp_app_paths, qtbot)
 
     mock_task = MagicMock()
-    window._indexing_task = mock_task
+    window.indexing_controller._indexing_task = mock_task
 
-    window._start_indexing_task()
+    window.indexing_controller.start_indexing_only()
 
     # Task object must not have been replaced
-    assert window._indexing_task is mock_task
+    assert window.indexing_controller._indexing_task is mock_task
 
 
 # ---------------------------------------------------------------------------
-# _update_indexing_status (lines 280-287)
+# _update_indexing_status
 # ---------------------------------------------------------------------------
 
 
@@ -475,7 +479,7 @@ def test_update_indexing_status_formats_label_and_reloads(
 
 
 # ---------------------------------------------------------------------------
-# _switch_page labelling branch (line 317)
+# _switch_page labelling branch
 # ---------------------------------------------------------------------------
 
 
@@ -496,7 +500,7 @@ def test_switch_page_to_label_refreshes_labelling_page(
 
 
 # ---------------------------------------------------------------------------
-# go_to_labelling (lines 323-329)
+# go_to_labelling
 # ---------------------------------------------------------------------------
 
 
@@ -520,7 +524,7 @@ def test_go_to_labelling_navigates_and_passes_priority(
 
 
 # ---------------------------------------------------------------------------
-# _show_about (lines 358-359)
+# _show_about
 # ---------------------------------------------------------------------------
 
 
@@ -532,7 +536,7 @@ def test_show_about_opens_dialog(tmp_app_paths, qtbot, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# _show_preferences — path unchanged branch (line 409)
+# _show_preferences — path unchanged branch
 # ---------------------------------------------------------------------------
 
 
@@ -563,12 +567,12 @@ def test_show_preferences_saves_settings_when_path_unchanged(
 
 
 # ---------------------------------------------------------------------------
-# _check_gpu (lines 443-464)
+# _check_gpu → now GpuChecker._probe
 # ---------------------------------------------------------------------------
 
 
 def test_check_gpu_cuda_available(tmp_app_paths, qtbot, monkeypatch):
-    """_check_gpu emits a GPU-ready message when CUDAExecutionProvider is present."""
+    """GpuChecker._probe emits a GPU-ready message when CUDA is present."""
     window = _make_window(tmp_app_paths, qtbot)
 
     monkeypatch.setattr(
@@ -581,15 +585,15 @@ def test_check_gpu_cuda_available(tmp_app_paths, qtbot, monkeypatch):
         monkeypatch.setitem(sys.modules, "insightface", MagicMock())
 
     captured: list[str] = []
-    window._gpu_status_signal.status_ready.connect(lambda msg: captured.append(msg))
-    window._check_gpu()
+    window.gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
+    window.gpu_checker._probe()
 
     assert captured
     assert "GPU" in captured[0] or "✅" in captured[0]
 
 
 def test_check_gpu_cpu_only(tmp_app_paths, qtbot, monkeypatch):
-    """_check_gpu emits a CPU-only warning when CUDA is not available."""
+    """GpuChecker._probe emits a CPU-only warning when CUDA is not available."""
     window = _make_window(tmp_app_paths, qtbot)
 
     monkeypatch.setattr(
@@ -599,15 +603,15 @@ def test_check_gpu_cpu_only(tmp_app_paths, qtbot, monkeypatch):
         monkeypatch.setitem(sys.modules, "insightface", MagicMock())
 
     captured: list[str] = []
-    window._gpu_status_signal.status_ready.connect(lambda msg: captured.append(msg))
-    window._check_gpu()
+    window.gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
+    window.gpu_checker._probe()
 
     assert captured
     assert "CPU" in captured[0] or "⚠️" in captured[0]
 
 
 def test_check_gpu_import_error(tmp_app_paths, qtbot, monkeypatch):
-    """_check_gpu emits an error message when insightface cannot be imported."""
+    """GpuChecker._probe emits an error message when insightface cannot be imported."""
     window = _make_window(tmp_app_paths, qtbot)
 
     real_import = builtins.__import__
@@ -622,15 +626,15 @@ def test_check_gpu_import_error(tmp_app_paths, qtbot, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", mock_import)
 
     captured: list[str] = []
-    window._gpu_status_signal.status_ready.connect(lambda msg: captured.append(msg))
-    window._check_gpu()
+    window.gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
+    window.gpu_checker._probe()
 
     assert captured
     assert "❌" in captured[0]
 
 
 # ---------------------------------------------------------------------------
-# _on_gpu_status_ready (line 467)
+# _on_gpu_status_ready
 # ---------------------------------------------------------------------------
 
 
@@ -642,7 +646,7 @@ def test_on_gpu_status_ready_shows_message(tmp_app_paths, qtbot):
 
 
 # ---------------------------------------------------------------------------
-# closeEvent cleanup (lines 472-477, 484-485, 490-491)
+# closeEvent cleanup
 # ---------------------------------------------------------------------------
 
 
@@ -652,8 +656,8 @@ def test_close_event_cancels_inventory_task(tmp_app_paths, qtbot):
 
     mock_task = MagicMock()
     mock_thread = MagicMock()
-    window._inventory_task = mock_task
-    window._inventory_thread = mock_thread
+    window.indexing_controller._inventory_task = mock_task
+    window.indexing_controller._inventory_thread = mock_thread
 
     event = MagicMock(spec=QtGui.QCloseEvent)
     window.closeEvent(event)
@@ -669,8 +673,8 @@ def test_close_event_cancels_indexing_task_and_saves_vector_store(tmp_app_paths,
 
     mock_task = MagicMock()
     mock_thread = MagicMock()
-    window._indexing_task = mock_task
-    window._indexing_thread = mock_thread
+    window.indexing_controller._indexing_task = mock_task
+    window.indexing_controller._indexing_thread = mock_thread
 
     event = MagicMock(spec=QtGui.QCloseEvent)
     window.closeEvent(event)
@@ -688,8 +692,8 @@ def test_close_event_handles_exceptions_gracefully(tmp_app_paths, qtbot, monkeyp
     mock_task = MagicMock()
     mock_task.cancel.side_effect = RuntimeError("already done")
     mock_thread = MagicMock()
-    window._indexing_task = mock_task
-    window._indexing_thread = mock_thread
+    window.indexing_controller._indexing_task = mock_task
+    window.indexing_controller._indexing_thread = mock_thread
     monkeypatch.setattr(
         window.vector_store, "save", MagicMock(side_effect=OSError("disk full"))
     )
