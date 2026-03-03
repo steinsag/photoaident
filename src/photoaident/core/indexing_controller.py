@@ -113,19 +113,25 @@ class IndexingController(QtCore.QObject):
             if self._indexing_thread is not None:
                 self._indexing_thread.quit()
 
-            # Wait briefly for threads to stop, but don't block indefinitely
+            # Wait for threads to stop.
             if self._inventory_thread is not None:
-                self._inventory_thread.wait(500)
+                self._inventory_thread.wait(1000)
+
+            indexing_stopped = True
             if self._indexing_thread is not None:
-                self._indexing_thread.wait(1000)
+                # Give it a bit more time than inventory
+                indexing_stopped = self._indexing_thread.wait(2000)
         except Exception:
             logger.debug("Error during task cancellation", exc_info=True)
+            indexing_stopped = False
 
-        if self._indexing_task is not None:
+        if self._indexing_task is not None and indexing_stopped:
             try:
                 self._vector_store.save(faiss_path)
             except Exception:
                 logger.warning("Failed to save FAISS index on shutdown", exc_info=True)
+        elif self._indexing_task is not None:
+            logger.warning("Indexing thread did not stop in time; skipping FAISS save")
 
     # ------------------------------------------------------------------
     # Private — inventory
