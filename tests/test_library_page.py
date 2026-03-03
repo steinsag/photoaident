@@ -667,6 +667,5 @@ def test_load_images_no_common_ids(qtbot, session_factory, tmp_app_paths, vs):
     with patch(
         "photoaident.ui.pages.library.find_images_by_person", side_effect=mock_find
     ):
-        page.load_images()
         # It seems line 235-236 in original are unreachable if person_ids is not empty.
-        pass
+        page.load_images()
