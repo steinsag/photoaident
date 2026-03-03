@@ -26,8 +26,8 @@ if TYPE_CHECKING:
 def search_images(
     thumbs_dir: "Path",
     session_factory: "sessionmaker",
-    vector_store: "VectorStore | None",
-    person_ids: list[int] | None = None,
+    vector_store: "VectorStore",
+    person_ids: list[int] = [],
     gps_bbox: GpsBoundingBox | None = None,
 ) -> list[tuple[int, str, "Path"]]:
     """Search for images based on person and/or GPS filters.
@@ -35,7 +35,7 @@ def search_images(
     Args:
         thumbs_dir: Directory where thumbnails are stored.
         session_factory: SQLAlchemy session factory.
-        vector_store: FAISS vector store. If None, person search is ignored.
+        vector_store: FAISS vector store.
         person_ids: List of person IDs to filter by.
         gps_bbox: GPS bounding box to filter by.
 
@@ -56,24 +56,9 @@ def search_images(
             images = session.execute(stmt).unique().scalars().all()
             return __format_results(images, thumbs_dir)
 
-    # Case: Person search (possibly intersected with GPS)
-    if not vector_store and person_ids:
-        # Without vector store, we can't do person search.
-        # Original code in library.py fell back to showing all images
-        # but only if person_ids was not empty?
-        # Actually, LibraryPage tests show it expects all images
-        # if VS is None and person is selected.
-        with session_factory() as session:
-            stmt = select(Image)
-            if gps_image_ids is not None:
-                stmt = stmt.where(Image.id.in_(list(gps_image_ids)))
-            images = session.execute(stmt).unique().scalars().all()
-            return __format_results(images, thumbs_dir)
-
     per_person_scores: list[dict[int, float]] = []
-    for person_id in person_ids or []:
+    for person_id in person_ids:
         scores: dict[int, float] = {}
-        assert vector_store is not None  # Hint for type checker
         for img_id, score in _find_images_by_person(
             session_factory, vector_store, person_id
         ):

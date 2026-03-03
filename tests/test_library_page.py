@@ -145,7 +145,7 @@ def _add_two_persons_with_embeddings(session_factory, vs):
 
 
 def _setup_library_page_with_all_selected(
-    qtbot, session_factory, tmp_app_paths, vs=None
+    qtbot, session_factory, tmp_app_paths, vs
 ) -> LibraryPage:
     """Helper to create LibraryPage and select all persons in the list."""
     page = LibraryPage(session_factory, tmp_app_paths, vs)
@@ -164,8 +164,8 @@ def _setup_library_page_with_all_selected(
 # --- Filter panel always visible ---
 
 
-def test_filter_panel_always_visible(qtbot, session_factory, tmp_app_paths):
-    page = LibraryPage(session_factory, tmp_app_paths)
+def test_filter_panel_always_visible(qtbot, session_factory, tmp_app_paths, vs):
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
     assert not page.filter_panel.isHidden()
 
@@ -173,12 +173,12 @@ def test_filter_panel_always_visible(qtbot, session_factory, tmp_app_paths):
 # --- Person list structure ---
 
 
-def test_person_list_items_are_selectable(qtbot, session_factory, tmp_app_paths):
+def test_person_list_items_are_selectable(qtbot, session_factory, tmp_app_paths, vs):
     with session_factory() as session:
         session.add(Person(name="Bob"))
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     assert page.person_list_widget.count() == 1
@@ -191,13 +191,15 @@ def test_person_list_items_are_selectable(qtbot, session_factory, tmp_app_paths)
 # --- Search filter ---
 
 
-def test_search_filter_hides_non_matching_items(qtbot, session_factory, tmp_app_paths):
+def test_search_filter_hides_non_matching_items(
+    qtbot, session_factory, tmp_app_paths, vs
+):
     with session_factory() as session:
         session.add(Person(name="Alice"))
         session.add(Person(name="Bob"))
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     page.search_edit.setText("ali")
@@ -211,12 +213,12 @@ def test_search_filter_hides_non_matching_items(qtbot, session_factory, tmp_app_
     assert bob_item.isHidden()
 
 
-def test_search_filter_case_insensitive(qtbot, session_factory, tmp_app_paths):
+def test_search_filter_case_insensitive(qtbot, session_factory, tmp_app_paths, vs):
     with session_factory() as session:
         session.add(Person(name="Alice"))
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     page.search_edit.setText("ALICE")
@@ -229,43 +231,45 @@ def test_search_filter_case_insensitive(qtbot, session_factory, tmp_app_paths):
 # --- load_images: no selection → empty grid ---
 
 
-def test_no_person_selected_shows_empty_grid(qtbot, session_factory, tmp_app_paths):
+def test_no_person_selected_shows_empty_grid(qtbot, session_factory, tmp_app_paths, vs):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
     _add_image(session_factory, "/img2.jpg", file_hash="h2")
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 0
 
 
-def test_no_person_checked_shows_all_images(qtbot, session_factory, tmp_app_paths):
+def test_no_person_checked_shows_all_images(qtbot, session_factory, tmp_app_paths, vs):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
     _add_image(session_factory, "/img2.jpg", file_hash="h2")
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 0
 
 
-def test_no_person_checked_with_images_in_db(qtbot, session_factory, tmp_app_paths):
+def test_no_person_checked_with_images_in_db(qtbot, session_factory, tmp_app_paths, vs):
     for i in range(5):
         _add_image(session_factory, f"/img{i}.jpg", file_hash=f"hash{i}")
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     assert len(page.grid.thumbnails) == 0
 
 
-def test_image_without_hash_uses_unknown_thumb(qtbot, session_factory, tmp_app_paths):
+def test_image_without_hash_uses_unknown_thumb(
+    qtbot, session_factory, tmp_app_paths, vs
+):
     with session_factory() as session:
         img = Image(file_path="/no_hash.jpg", file_size=500, file_hash=None)
         session.add(img)
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     # No person selected → empty grid
@@ -352,8 +356,8 @@ def test_select_multiple_persons_calls_search(
         assert set(kwargs["person_ids"]) == {p1_id, p2_id}
 
 
-def test_person_filter_without_vector_store_falls_back_to_all(
-    qtbot, session_factory, tmp_app_paths
+def test_person_filter_without_vector_store_fails_with_person_selected(
+    qtbot, session_factory, tmp_app_paths, vs
 ):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
     _add_image(session_factory, "/img2.jpg", file_hash="h2")
@@ -362,19 +366,22 @@ def test_person_filter_without_vector_store_falls_back_to_all(
         session.add(p)
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths, vector_store=None)
+    # We now REQUIRE vector_store in LibraryPage and search_images.
+    # If we pass a vector_store, it works.
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     item = page.person_list_widget.item(0)
     assert item is not None
     item.setSelected(True)
 
-    assert len(page.grid.thumbnails) == 2
+    # Since there are no faces for Alice, it should show 0 images, NOT fall back to all.
+    assert len(page.grid.thumbnails) == 0
 
 
-def test_gps_filter_calls_search(qtbot, session_factory, tmp_app_paths):
+def test_gps_filter_calls_search(qtbot, session_factory, tmp_app_paths, vs):
     """UI test: setting GPS filter triggers search_images with correct bbox."""
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
@@ -391,12 +398,12 @@ def test_gps_filter_calls_search(qtbot, session_factory, tmp_app_paths):
     assert page._gps_bbox is None
 
 
-def test_show_event_populates_list(qtbot, session_factory, tmp_app_paths):
+def test_show_event_populates_list(qtbot, session_factory, tmp_app_paths, vs):
     with session_factory() as session:
         session.add(Person(name="Alice"))
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     # Clear the list to ensure showEvent repopulates it
@@ -411,7 +418,7 @@ def test_show_event_populates_list(qtbot, session_factory, tmp_app_paths):
 
 
 def test_populate_person_list_preserves_selection(
-    qtbot, session_factory, tmp_app_paths
+    qtbot, session_factory, tmp_app_paths, vs
 ):
     with session_factory() as session:
         p1 = Person(name="Alice")
@@ -419,7 +426,7 @@ def test_populate_person_list_preserves_selection(
         session.commit()
         p1_id = p1.id
 
-    page = LibraryPage(session_factory, tmp_app_paths)
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     item = page.person_list_widget.item(0)
@@ -434,8 +441,10 @@ def test_populate_person_list_preserves_selection(
     assert p1_id in page._selected_person_ids()
 
 
-def test_apply_search_filter_handles_none_item(qtbot, session_factory, tmp_app_paths):
-    page = LibraryPage(session_factory, tmp_app_paths)
+def test_apply_search_filter_handles_none_item(
+    qtbot, session_factory, tmp_app_paths, vs
+):
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     # Mock item() to return None at some index
@@ -445,8 +454,8 @@ def test_apply_search_filter_handles_none_item(qtbot, session_factory, tmp_app_p
             page._apply_search_filter("test")
 
 
-def test_open_map_dialog_accepted(qtbot, session_factory, tmp_app_paths):
-    page = LibraryPage(session_factory, tmp_app_paths)
+def test_open_map_dialog_accepted(qtbot, session_factory, tmp_app_paths, vs):
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     bbox = GpsBoundingBox(south=10, west=10, north=20, east=20)
@@ -482,8 +491,8 @@ def test_load_images_empty_per_person_scores(qtbot, session_factory, tmp_app_pat
         assert len(page.grid.thumbnails) == 0
 
 
-def test_navigate_to_labelling(qtbot, session_factory, tmp_app_paths):
-    page = LibraryPage(session_factory, tmp_app_paths)
+def test_navigate_to_labelling(qtbot, session_factory, tmp_app_paths, vs):
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vs)
     qtbot.addWidget(page)
 
     mock_main_window = MagicMock()

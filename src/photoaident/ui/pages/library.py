@@ -23,7 +23,7 @@ class LibraryPage(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         paths: "AppPaths",
-        vector_store: "VectorStore | None" = None,
+        vector_store: "VectorStore",
         parent=None,
     ):
         super().__init__(parent)
