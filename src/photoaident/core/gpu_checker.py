@@ -20,22 +20,20 @@ class GpuChecker(QtCore.QObject):
     def _probe(self) -> None:
         """Check CUDA/ONNX providers and emit ``status_ready``."""
         try:
-            __import__("insightface")  # raises ImportError when not installed
-            providers = ort.get_available_providers()  # type: ignore[attr-defined]
+            __import__("insightface")
+            providers = ort.get_available_providers()  # type: ignore
             has_cuda = "CUDAExecutionProvider" in providers
 
-            if has_cuda:
-                msg = self.tr("✅ GPU ready — {providers}").format(
-                    providers=", ".join(providers)
-                )
-            else:
-                msg = self.tr("⚠️ CPU only — {providers}").format(
-                    providers=", ".join(providers)
-                )
+            prefix = "✅" if has_cuda else "⚠️"
+            label = self.tr("GPU ready") if has_cuda else self.tr("CPU only")
+            msg = f"{prefix} {label} — {', '.join(providers)}"
 
-        except ImportError as e:
-            msg = self.tr("❌ Import failed: {error}").format(error=str(e))
-        except Exception as e:
-            msg = self.tr("❌ Error: {error}").format(error=str(e))
+        except (ImportError, Exception) as e:
+            prefix = (
+                self.tr("Import failed")
+                if isinstance(e, ImportError)
+                else self.tr("Error")
+            )
+            msg = f"❌ {prefix}: {str(e)}"
 
         self.status_ready.emit(msg)
