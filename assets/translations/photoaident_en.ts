@@ -142,19 +142,35 @@ Confidence: {confidence}%</translation>
     <name>GpuChecker</name>
     <message>
         <source>✅ GPU ready — {providers}</source>
-        <translation type="unfinished">✅ GPU ready — {providers}</translation>
+        <translation type="obsolete">✅ GPU ready — {providers}</translation>
     </message>
     <message>
         <source>⚠️ CPU only — {providers}</source>
-        <translation type="unfinished">⚠️ CPU only — {providers}</translation>
+        <translation type="obsolete">⚠️ CPU only — {providers}</translation>
     </message>
     <message>
         <source>❌ Import failed: {error}</source>
-        <translation type="unfinished">❌ Import failed: {error}</translation>
+        <translation type="obsolete">❌ Import failed: {error}</translation>
     </message>
     <message>
         <source>❌ Error: {error}</source>
-        <translation type="unfinished">❌ Error: {error}</translation>
+        <translation type="obsolete">❌ Error: {error}</translation>
+    </message>
+    <message>
+        <source>GPU ready</source>
+        <translation>GPU ready</translation>
+    </message>
+    <message>
+        <source>CPU only</source>
+        <translation>CPU only</translation>
+    </message>
+    <message>
+        <source>Import failed</source>
+        <translation>Import failed</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation>Error</translation>
     </message>
 </context>
 <context>
@@ -504,31 +520,31 @@ Do you really want to proceed?</translation>
     <name>OnboardingDialog</name>
     <message>
         <source>Welcome to PhotoAIdent</source>
-        <translation type="unfinished">Welcome to PhotoAIdent</translation>
+        <translation>Welcome to PhotoAIdent</translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent!
 
 To get started, please select your photo collection folder.</source>
-        <translation type="unfinished">Welcome to PhotoAIdent!
+        <translation>Welcome to PhotoAIdent!
 
 To get started, please select your photo collection folder.</translation>
     </message>
     <message>
         <source>No folder selected</source>
-        <translation type="unfinished">No folder selected</translation>
+        <translation>No folder selected</translation>
     </message>
     <message>
         <source>Browse...</source>
-        <translation type="unfinished">Browse...</translation>
+        <translation>Browse...</translation>
     </message>
     <message>
         <source>Start Indexing</source>
-        <translation type="unfinished">Start Indexing</translation>
+        <translation>Start Indexing</translation>
     </message>
     <message>
         <source>Select Photo Collection Folder</source>
-        <translation type="unfinished">Select Photo Collection Folder</translation>
+        <translation>Select Photo Collection Folder</translation>
     </message>
 </context>
 <context>

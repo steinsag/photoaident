@@ -142,19 +142,35 @@ Konfidenz: {confidence}%</translation>
     <name>GpuChecker</name>
     <message>
         <source>✅ GPU ready — {providers}</source>
-        <translation>✅ GPU bereit — {providers}</translation>
+        <translation type="vanished">✅ GPU bereit — {providers}</translation>
     </message>
     <message>
         <source>⚠️ CPU only — {providers}</source>
-        <translation>⚠️ Nur CPU — {providers}</translation>
+        <translation type="vanished">⚠️ Nur CPU — {providers}</translation>
     </message>
     <message>
         <source>❌ Import failed: {error}</source>
-        <translation>❌ Import fehlgeschlagen: {error}</translation>
+        <translation type="vanished">❌ Import fehlgeschlagen: {error}</translation>
     </message>
     <message>
         <source>❌ Error: {error}</source>
-        <translation>❌ Fehler: {error}</translation>
+        <translation type="vanished">❌ Fehler: {error}</translation>
+    </message>
+    <message>
+        <source>GPU ready</source>
+        <translation>GPU bereit</translation>
+    </message>
+    <message>
+        <source>CPU only</source>
+        <translation>Nur CPU</translation>
+    </message>
+    <message>
+        <source>Import failed</source>
+        <translation>Import fehlgeschlagen</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation>Fehler</translation>
     </message>
 </context>
 <context>
