@@ -36,6 +36,38 @@ def vs():
     return VectorStore()
 
 
+def _add_test_images_with_gps(session_factory):
+    """Add two images with GPS metadata. Return (img1_id, img2_id)."""
+    with session_factory() as session:
+        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
+        session.add(img1)
+        session.flush()
+        meta1 = ImageMetadata(
+            image_id=img1.id,
+            gps_lat=52.5,
+            gps_lon=13.4,
+            taken_at_source=TakenAtSource.FILESYSTEM,
+            width=100,
+            height=100,
+        )
+        session.add(meta1)
+
+        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
+        session.add(img2)
+        session.flush()
+        meta2 = ImageMetadata(
+            image_id=img2.id,
+            gps_lat=40.0,
+            gps_lon=10.0,
+            taken_at_source=TakenAtSource.FILESYSTEM,
+            width=100,
+            height=100,
+        )
+        session.add(meta2)
+        session.commit()
+        return img1.id, img2.id
+
+
 def _add_image(
     session_factory, file_path="/img.jpg", file_hash="abc123", file_size=1000
 ):
@@ -82,6 +114,51 @@ def _add_person_with_face(session_factory, vs, name, file_path):
         session.add(face)
         session.commit()
         return person_id, img.id
+
+
+def _add_two_persons_with_embeddings(session_factory, vs):
+    """
+    Add two persons with orthogonal embeddings.
+    Return (p1_id, c1_id, faiss_id1, p2_id, c2_id, faiss_id2).
+    """
+    with session_factory() as session:
+        p1 = Person(name="Alice")
+        p2 = Person(name="Bob")
+        session.add_all([p1, p2])
+        session.flush()
+        c1 = EmbeddingCluster(person_id=p1.id)
+        c2 = EmbeddingCluster(person_id=p2.id)
+        session.add_all([c1, c2])
+        session.commit()
+        p1_id, c1_id = p1.id, c1.id
+        p2_id, c2_id = p2.id, c2.id
+
+    # Two orthogonal embeddings so they won't match each other
+    emb1 = np.zeros(512, dtype=np.float32)
+    emb1[0] = 1.0
+    emb2 = np.zeros(512, dtype=np.float32)
+    emb2[1] = 1.0
+    faiss_id1 = vs.add(emb1)
+    faiss_id2 = vs.add(emb2)
+
+    return p1_id, c1_id, faiss_id1, p2_id, c2_id, faiss_id2
+
+
+def _setup_library_page_with_all_selected(
+    qtbot, session_factory, tmp_app_paths, vs=None
+) -> LibraryPage:
+    """Helper to create LibraryPage and select all persons in the list."""
+    page = LibraryPage(session_factory, tmp_app_paths, vs)
+    qtbot.addWidget(page)
+
+    page.person_list_widget.blockSignals(True)
+    for i in range(page.person_list_widget.count()):
+        item = page.person_list_widget.item(i)
+        assert item is not None
+        item.setSelected(True)
+    page.person_list_widget.blockSignals(False)
+    page.load_images()
+    return page
 
 
 # --- Filter panel always visible ---
@@ -252,25 +329,14 @@ def test_select_multiple_persons_intersects_results(
     qtbot, session_factory, tmp_app_paths, vs
 ):
     """Selecting two persons shows only images where BOTH appear (AND, not OR)."""
-    # Use orthogonal embeddings so Alice's search won't match Bob's face and vice versa
-    with session_factory() as session:
-        p1 = Person(name="Alice")
-        p2 = Person(name="Bob")
-        session.add_all([p1, p2])
-        session.flush()
-        c1 = EmbeddingCluster(person_id=p1.id)
-        c2 = EmbeddingCluster(person_id=p2.id)
-        session.add_all([c1, c2])
-        session.commit()
-        p1_id, c1_id = p1.id, c1.id
-        p2_id, c2_id = p2.id, c2.id
-
-    emb1 = np.zeros(512, dtype=np.float32)
-    emb1[0] = 1.0
-    emb2 = np.zeros(512, dtype=np.float32)
-    emb2[1] = 1.0
-    faiss_id1 = vs.add(emb1)
-    faiss_id2 = vs.add(emb2)
+    (
+        p1_id,
+        c1_id,
+        faiss_id1,
+        p2_id,
+        c2_id,
+        faiss_id2,
+    ) = _add_two_persons_with_embeddings(session_factory, vs)
 
     with session_factory() as session:
         img1 = Image(file_path="/alice.jpg", file_size=100, file_hash="alice")
@@ -309,16 +375,9 @@ def test_select_multiple_persons_intersects_results(
         )
         session.commit()
 
-    page = LibraryPage(session_factory, tmp_app_paths, vs)
-    qtbot.addWidget(page)
-
-    page.person_list_widget.blockSignals(True)
-    for i in range(page.person_list_widget.count()):
-        item = page.person_list_widget.item(i)
-        assert item is not None
-        item.setSelected(True)
-    page.person_list_widget.blockSignals(False)
-    page.load_images()
+    page = _setup_library_page_with_all_selected(
+        qtbot, session_factory, tmp_app_paths, vs
+    )
 
     # Alice is only in alice.jpg, Bob is only in bob.jpg → no image has both
     assert len(page.grid.thumbnails) == 0
@@ -328,25 +387,14 @@ def test_select_multiple_persons_shows_shared_image(
     qtbot, session_factory, tmp_app_paths, vs
 ):
     """An image containing all selected persons is included in AND results."""
-    with session_factory() as session:
-        p1 = Person(name="Alice")
-        p2 = Person(name="Bob")
-        session.add_all([p1, p2])
-        session.flush()
-        c1 = EmbeddingCluster(person_id=p1.id)
-        c2 = EmbeddingCluster(person_id=p2.id)
-        session.add_all([c1, c2])
-        session.commit()
-        p1_id, c1_id = p1.id, c1.id
-        p2_id, c2_id = p2.id, c2.id
-
-    # Two orthogonal embeddings so they won't match each other
-    emb1 = np.zeros(512, dtype=np.float32)
-    emb1[0] = 1.0
-    emb2 = np.zeros(512, dtype=np.float32)
-    emb2[1] = 1.0
-    faiss_id1 = vs.add(emb1)
-    faiss_id2 = vs.add(emb2)
+    (
+        p1_id,
+        c1_id,
+        faiss_id1,
+        p2_id,
+        c2_id,
+        faiss_id2,
+    ) = _add_two_persons_with_embeddings(session_factory, vs)
 
     with session_factory() as session:
         img = Image(file_path="/shared.jpg", file_size=100, file_hash="shared")
@@ -385,16 +433,9 @@ def test_select_multiple_persons_shows_shared_image(
         session.commit()
         shared_img_id = img.id
 
-    page = LibraryPage(session_factory, tmp_app_paths, vs)
-    qtbot.addWidget(page)
-
-    page.person_list_widget.blockSignals(True)
-    for i in range(page.person_list_widget.count()):
-        item = page.person_list_widget.item(i)
-        assert item is not None
-        item.setSelected(True)
-    page.person_list_widget.blockSignals(False)
-    page.load_images()
+    page = _setup_library_page_with_all_selected(
+        qtbot, session_factory, tmp_app_paths, vs
+    )
 
     result_ids = [t.image_id for t in page.grid.thumbnails]
     assert shared_img_id in result_ids
@@ -422,34 +463,7 @@ def test_person_filter_without_vector_store_falls_back_to_all(
 
 
 def test_gps_filter_shows_matched_images(qtbot, session_factory, tmp_app_paths):
-    with session_factory() as session:
-        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
-        session.add(img1)
-        session.flush()
-        meta1 = ImageMetadata(
-            image_id=img1.id,
-            gps_lat=52.5,
-            gps_lon=13.4,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta1)
-
-        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
-        session.add(img2)
-        session.flush()
-        meta2 = ImageMetadata(
-            image_id=img2.id,
-            gps_lat=40.0,
-            gps_lon=10.0,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta2)
-        session.commit()
-        img1_id = img1.id
+    img1_id, _ = _add_test_images_with_gps(session_factory)
 
     page = LibraryPage(session_factory, tmp_app_paths)
     qtbot.addWidget(page)
@@ -541,21 +555,7 @@ def test_open_map_dialog_accepted(qtbot, session_factory, tmp_app_paths):
 
 
 def test_gps_filter_without_vector_store(qtbot, session_factory, tmp_app_paths):
-    with session_factory() as session:
-        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
-        session.add(img1)
-        session.flush()
-        meta1 = ImageMetadata(
-            image_id=img1.id,
-            gps_lat=52.5,
-            gps_lon=13.4,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta1)
-        session.commit()
-        img1_id = img1.id
+    img1_id, _ = _add_test_images_with_gps(session_factory)
 
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=None)
     qtbot.addWidget(page)
@@ -608,36 +608,7 @@ def test_navigate_to_labelling(qtbot, session_factory, tmp_app_paths):
 def test_gps_filter_without_vector_store_and_person(
     qtbot, session_factory, tmp_app_paths
 ):
-    with session_factory() as session:
-        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
-        session.add(img1)
-        session.flush()
-        meta1 = ImageMetadata(
-            image_id=img1.id,
-            gps_lat=52.5,
-            gps_lon=13.4,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta1)
-
-        # Add a second image OUTSIDE the bbox
-        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
-        session.add(img2)
-        session.flush()
-        meta2 = ImageMetadata(
-            image_id=img2.id,
-            gps_lat=40.0,
-            gps_lon=10.0,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta2)
-
-        session.commit()
-        img1_id = img1.id
+    img1_id, _ = _add_test_images_with_gps(session_factory)
 
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=None)
     qtbot.addWidget(page)
