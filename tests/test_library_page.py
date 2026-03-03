@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 from PySide6 import QtWidgets
 
+from photoaident.core.geo import GpsBoundingBox
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -12,6 +13,8 @@ from photoaident.db.database import (
     Person,
     get_engine,
     get_session_factory,
+    ImageMetadata,
+    TakenAtSource,
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
@@ -414,3 +417,51 @@ def test_person_filter_without_vector_store_falls_back_to_all(
     item.setSelected(True)
 
     assert len(page.grid.thumbnails) == 2
+
+
+def test_gps_filter_shows_matched_images(qtbot, session_factory, tmp_app_paths):
+    with session_factory() as session:
+        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
+        session.add(img1)
+        session.flush()
+        meta1 = ImageMetadata(
+            image_id=img1.id,
+            gps_lat=52.5,
+            gps_lon=13.4,
+            taken_at_source=TakenAtSource.FILESYSTEM,
+            width=100,
+            height=100,
+        )
+        session.add(meta1)
+
+        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
+        session.add(img2)
+        session.flush()
+        meta2 = ImageMetadata(
+            image_id=img2.id,
+            gps_lat=40.0,
+            gps_lon=10.0,
+            taken_at_source=TakenAtSource.FILESYSTEM,
+            width=100,
+            height=100,
+        )
+        session.add(meta2)
+        session.commit()
+        img1_id = img1.id
+
+    page = LibraryPage(session_factory, tmp_app_paths)
+    qtbot.addWidget(page)
+
+    # Set GPS filter (Berlin-ish)
+    bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
+    page._gps_bbox = bbox
+    page.map_preview.set_bbox(bbox)
+    page.load_images()
+
+    assert len(page.grid.thumbnails) == 1
+    assert page.grid.thumbnails[0].image_id == img1_id
+
+    # Clear filter
+    page._on_location_cleared()
+    assert len(page.grid.thumbnails) == 0  # No person selected, no GPS -> empty
+    assert not page.empty_label.isHidden()

@@ -3,8 +3,11 @@ from typing import TYPE_CHECKING
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
-from photoaident.core.search import find_images_by_person
+from photoaident.core.geo import GpsBoundingBox
+from photoaident.core.search import find_images_by_person, find_images_by_gps_bbox
 from photoaident.db.database import Image, Person
+from photoaident.ui.widgets.map_dialog import MapLocationDialog
+from photoaident.ui.widgets.map_preview import MapPreviewWidget
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
 if TYPE_CHECKING:
@@ -28,6 +31,7 @@ class LibraryPage(QtWidgets.QWidget):
         self.session_factory = session_factory
         self.paths = paths
         self.vector_store = vector_store
+        self._gps_bbox: GpsBoundingBox | None = None
 
         # Top-level horizontal layout: center area + right filter panel
         layout = QtWidgets.QHBoxLayout(self)
@@ -51,7 +55,7 @@ class LibraryPage(QtWidgets.QWidget):
 
         # Placeholder shown when no person is selected
         self.empty_label = QtWidgets.QLabel(
-            self.tr("Select a person to start searching.")
+            self.tr("Select a person or location to start searching.")
         )
         self.empty_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setVisible(False)
@@ -65,6 +69,11 @@ class LibraryPage(QtWidgets.QWidget):
         self.filter_panel.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.filter_panel.setFixedWidth(220)
         panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
+
+        self.map_preview = MapPreviewWidget()
+        self.map_preview.clicked.connect(self._open_map_dialog)
+        self.map_preview.cleared.connect(self._on_location_cleared)
+        panel_layout.addWidget(self.map_preview)
 
         person_header = QtWidgets.QLabel(self.tr("Person"))
         font = person_header.font()
@@ -126,6 +135,18 @@ class LibraryPage(QtWidgets.QWidget):
             for item in self.person_list_widget.selectedItems()
         ]
 
+    def _open_map_dialog(self) -> None:
+        dialog = MapLocationDialog(initial_bbox=self._gps_bbox, parent=self)
+        if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
+            self._gps_bbox = dialog.selected_bbox()
+            self.map_preview.set_bbox(self._gps_bbox)
+            self.load_images()
+
+    def _on_location_cleared(self) -> None:
+        self._gps_bbox = None
+        self.map_preview.set_bbox(None)
+        self.load_images()
+
     def _build_images_data(self, images: list) -> list:
         result = []
         for img in images:
@@ -139,19 +160,39 @@ class LibraryPage(QtWidgets.QWidget):
 
     def load_images(self) -> None:
         person_ids = self._selected_person_ids()
+        gps_image_ids: set[int] | None = None
 
-        if not person_ids:
-            self.grid.set_results([])
+        if self._gps_bbox:
+            gps_image_ids = set(
+                find_images_by_gps_bbox(self.session_factory, self._gps_bbox)
+            )
+
+        if not person_ids and gps_image_ids is None:
+            self.grid.clear()
             self.grid.setVisible(False)
             self.empty_label.setVisible(True)
+            self.empty_label.show()  # Explicit show
             return
 
+        # Ensure grid is visible and empty label is hidden if we have any filters
         self.empty_label.setVisible(False)
+        self.empty_label.hide()  # Explicit hide
         self.grid.setVisible(True)
+        self.grid.show()  # Explicit show
+
+        if not person_ids and gps_image_ids is not None:
+            # GPS filter only
+            with self.session_factory() as session:
+                stmt = select(Image).where(Image.id.in_(list(gps_image_ids)))
+                images = session.execute(stmt).unique().scalars().all()
+                self.grid.set_results(self._build_images_data(images))
+            return
 
         if self.vector_store is None:
             with self.session_factory() as session:
                 stmt = select(Image)
+                if gps_image_ids is not None:
+                    stmt = stmt.where(Image.id.in_(list(gps_image_ids)))
                 images = session.execute(stmt).unique().scalars().all()
                 self.grid.set_results(self._build_images_data(images))
             return
@@ -163,8 +204,13 @@ class LibraryPage(QtWidgets.QWidget):
             for img_id, score in find_images_by_person(
                 self.session_factory, self.vector_store, person_id
             ):
-                scores[img_id] = score
+                if gps_image_ids is None or img_id in gps_image_ids:
+                    scores[img_id] = score
             per_person_scores.append(scores)
+
+        if not per_person_scores:
+            self.grid.set_results([])
+            return
 
         common_ids = set(per_person_scores[0].keys())
         for scores in per_person_scores[1:]:
@@ -176,7 +222,7 @@ class LibraryPage(QtWidgets.QWidget):
         }
 
         if not image_scores:
-            self.grid.set_results([])
+            self.grid.clear()
             return
 
         sorted_pairs = sorted(image_scores.items(), key=lambda kv: kv[1], reverse=True)

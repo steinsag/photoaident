@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
-from photoaident.db.database import EmbeddingCluster, Face, FaceState
+from photoaident.core.geo import GpsBoundingBox
+from photoaident.db.database import EmbeddingCluster, Face, FaceState, ImageMetadata
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -141,3 +142,42 @@ def find_images_by_person(
 
     sorted_pairs = sorted(image_scores.items(), key=lambda x: x[1], reverse=True)
     return sorted_pairs[:limit]
+
+
+def find_images_by_gps_bbox(
+    session_factory: "sessionmaker",
+    bbox: GpsBoundingBox,
+) -> list[int]:
+    """Return image IDs within the given GPS bounding box.
+
+    Args:
+        session_factory: SQLAlchemy session factory.
+        bbox: The GPS bounding box to search in.
+
+    Returns:
+        List of image IDs.
+    """
+    with session_factory() as session:
+        if bbox.west <= bbox.east:
+            # Simple case
+            stmt = select(ImageMetadata.image_id).where(
+                and_(
+                    ImageMetadata.gps_lat >= bbox.south,
+                    ImageMetadata.gps_lat <= bbox.north,
+                    ImageMetadata.gps_lon >= bbox.west,
+                    ImageMetadata.gps_lon <= bbox.east,
+                )
+            )
+        else:
+            # Crosses antimeridian
+            stmt = select(ImageMetadata.image_id).where(
+                and_(
+                    ImageMetadata.gps_lat >= bbox.south,
+                    ImageMetadata.gps_lat <= bbox.north,
+                    (
+                        (ImageMetadata.gps_lon >= bbox.west)
+                        | (ImageMetadata.gps_lon <= bbox.east)
+                    ),
+                )
+            )
+        return list(session.scalars(stmt).all())

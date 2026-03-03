@@ -383,7 +383,11 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
     <message>
         <source>Select a person to start searching.</source>
-        <translation>Person auswählen, um die Suche zu starten.</translation>
+        <translation type="vanished">Person auswählen, um die Suche zu starten.</translation>
+    </message>
+    <message>
+        <source>Select a person or location to start searching.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Person</source>
@@ -547,6 +551,32 @@ Möchten Sie wirklich fortfahren?</translation>
     <message>
         <source>❌ Error: {error}</source>
         <translation type="vanished">❌ Fehler: {error}</translation>
+    </message>
+</context>
+<context>
+    <name>MapLocationDialog</name>
+    <message>
+        <source>Select Location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pan and zoom the map. The highlighted area defines the search region.</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>MapPreviewWidget</name>
+    <message>
+        <source>Location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear Location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Click to set location</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
