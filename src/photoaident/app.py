@@ -294,8 +294,8 @@ class MainWindow(QtWidgets.QMainWindow):
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         icon_path = get_resource_path(f"assets/icons/{icon_name}")
-        if os.path.exists(icon_path):
-            btn.setIcon(QtGui.QIcon(icon_path))
+        btn.setIcon(QtGui.QIcon(icon_path))
+
         return btn
 
     def _switch_page(self, index: int) -> None:

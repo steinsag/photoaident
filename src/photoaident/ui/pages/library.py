@@ -7,7 +7,6 @@ from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import find_images_by_person, find_images_by_gps_bbox
 from photoaident.db.database import Image, Person
 from photoaident.ui.widgets.map_dialog import MapLocationDialog
-from photoaident.ui.widgets.map_preview import MapPreviewWidget
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
 if TYPE_CHECKING:
@@ -69,11 +68,27 @@ class LibraryPage(QtWidgets.QWidget):
         self.filter_panel.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.filter_panel.setFixedWidth(220)
         panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
+        from photoaident.app import get_resource_path
 
-        self.map_preview = MapPreviewWidget()
-        self.map_preview.clicked.connect(self._open_map_dialog)
-        self.map_preview.cleared.connect(self._on_location_cleared)
-        panel_layout.addWidget(self.map_preview)
+        self.map_location_btn = QtWidgets.QToolButton()
+        self.map_location_btn.setText(self.tr("Click to set location"))
+        self.map_location_btn.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+        )
+        icon_path = get_resource_path("assets/icons/world_map.svg")
+        self.map_location_btn.setIcon(QtGui.QIcon(icon_path))
+        self.map_location_btn.setIconSize(QtCore.QSize(350, 90))
+        self.map_location_btn.setCheckable(True)
+        self.map_location_btn.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.map_location_btn.clicked.connect(self._open_map_dialog)
+        panel_layout.addWidget(self.map_location_btn)
+
+        self.clear_location_btn = QtWidgets.QPushButton(self.tr("Clear Location"))
+        self.clear_location_btn.clicked.connect(self._on_location_cleared)
+        self.clear_location_btn.setVisible(False)
+        panel_layout.addWidget(self.clear_location_btn)
 
         person_header = QtWidgets.QLabel(self.tr("Person"))
         font = person_header.font()
@@ -139,13 +154,19 @@ class LibraryPage(QtWidgets.QWidget):
         dialog = MapLocationDialog(initial_bbox=self._gps_bbox, parent=self)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             self._gps_bbox = dialog.selected_bbox()
-            self.map_preview.set_bbox(self._gps_bbox)
+            self._update_map_button()
             self.load_images()
 
     def _on_location_cleared(self) -> None:
         self._gps_bbox = None
-        self.map_preview.set_bbox(None)
+        self._update_map_button()
         self.load_images()
+
+    def _update_map_button(self) -> None:
+        if self._gps_bbox is None:
+            self.clear_location_btn.setVisible(False)
+        else:
+            self.clear_location_btn.setVisible(True)
 
     def _build_images_data(self, images: list) -> list:
         result = []

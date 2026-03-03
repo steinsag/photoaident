@@ -388,6 +388,14 @@ Please close it before starting a new one.</translation>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Click to set location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear Location</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Person</source>
         <translation>Person</translation>
     </message>
@@ -559,21 +567,6 @@ Do you really want to proceed?</translation>
     </message>
     <message>
         <source>Pan and zoom the map. The highlighted area defines the search region.</source>
-        <translation type="unfinished"></translation>
-    </message>
-</context>
-<context>
-    <name>MapPreviewWidget</name>
-    <message>
-        <source>Location</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear Location</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Click to set location</source>
         <translation type="unfinished"></translation>
     </message>
 </context>

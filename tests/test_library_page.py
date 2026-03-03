@@ -455,7 +455,7 @@ def test_gps_filter_shows_matched_images(qtbot, session_factory, tmp_app_paths):
     # Set GPS filter (Berlin-ish)
     bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
     page._gps_bbox = bbox
-    page.map_preview.set_bbox(bbox)
+    page._update_map_button()
     page.load_images()
 
     assert len(page.grid.thumbnails) == 1
