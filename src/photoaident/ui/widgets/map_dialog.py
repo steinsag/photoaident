@@ -67,10 +67,7 @@ class MapLocationDialog(QtWidgets.QDialog):
 
         qml_path = Path(__file__).parent / "map_view.qml"
         self._quick_widget.setSource(QtCore.QUrl.fromLocalFile(str(qml_path)))
-
-        if self._quick_widget.status() == QtQuickWidgets.QQuickWidget.Status.Error:
-            for err in self._quick_widget.errors():
-                logger.error("QML error: %s", err)
+        self._log_qml_errors()
 
         root_obj = self._quick_widget.rootObject()
         if root_obj:
@@ -78,22 +75,34 @@ class MapLocationDialog(QtWidgets.QDialog):
             self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
             root_obj.setProperty("cachePath", str(self._paths.tiles_dir))
             if initial_bbox:
-                center_lat = (initial_bbox.south + initial_bbox.north) / 2
-                center_lon = (initial_bbox.west + initial_bbox.east) / 2
-                lat_span = initial_bbox.north - initial_bbox.south
-                lon_span = abs(initial_bbox.east - initial_bbox.west)
-                span = max(lat_span, lon_span)
-                if span > 0:
-                    # Derive zoom so that the 70% selection rect covers the bbox.
-                    # At zoom z the selection rect spans ~252/2^z degrees.
-                    zoom = int(max(2, min(15, round(math.log2(252.0 / span)))))
-                else:
-                    zoom = 14
-                root_obj.setProperty("initialLat", center_lat)
-                root_obj.setProperty("initialLon", center_lon)
-                root_obj.setProperty("initialZoom", zoom)
+                self._apply_initial_bbox(root_obj, initial_bbox)
 
         layout.addWidget(self._quick_widget, stretch=1)
+
+    def _log_qml_errors(self) -> None:
+        """Log any errors that occurred while loading the QML source."""
+        if self._quick_widget.status() == QtQuickWidgets.QQuickWidget.Status.Error:
+            for err in self._quick_widget.errors():
+                logger.error("QML error: %s", err)
+
+    def _apply_initial_bbox(
+        self, root_obj: object, initial_bbox: GpsBoundingBox
+    ) -> None:
+        """Set initial map centre and zoom level from a bounding box."""
+        center_lat = (initial_bbox.south + initial_bbox.north) / 2
+        center_lon = (initial_bbox.west + initial_bbox.east) / 2
+        lat_span = initial_bbox.north - initial_bbox.south
+        lon_span = abs(initial_bbox.east - initial_bbox.west)
+        span = max(lat_span, lon_span)
+        if span > 0:
+            # Derive zoom so that the 70% selection rect covers the bbox.
+            # At zoom z the selection rect spans ~252/2^z degrees.
+            zoom = int(max(2, min(15, round(math.log2(252.0 / span)))))
+        else:
+            zoom = 14
+        root_obj.setProperty("initialLat", center_lat)  # type: ignore[attr-defined]
+        root_obj.setProperty("initialLon", center_lon)  # type: ignore[attr-defined]
+        root_obj.setProperty("initialZoom", zoom)  # type: ignore[attr-defined]
 
     def _setup_button_box(self, layout: QtWidgets.QVBoxLayout) -> None:
         self._button_box = QtWidgets.QDialogButtonBox(

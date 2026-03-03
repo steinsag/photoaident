@@ -1,3 +1,7 @@
+import logging
+import math
+from unittest.mock import MagicMock, patch
+
 import pytest
 
 from photoaident.core.geo import GpsBoundingBox
@@ -34,3 +38,102 @@ def test_map_dialog_extract_bbox(qtbot):
 
     bbox = dialog._extract_bbox()
     assert bbox == GpsBoundingBox(south=10.0, west=20.0, north=30.0, east=40.0)
+
+
+# --- _log_qml_errors ---
+
+
+def test_log_qml_errors_when_status_error(qtbot, caplog):
+    """_log_qml_errors logs every error message when QML status is Error."""
+    from PySide6 import QtQuickWidgets
+
+    dialog = MapLocationDialog()
+    qtbot.addWidget(dialog)
+
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.status.return_value = QtQuickWidgets.QQuickWidget.Status.Error
+    dialog._quick_widget.errors.return_value = ["bad qml syntax"]
+
+    with caplog.at_level(logging.ERROR, logger="photoaident.ui.widgets.map_dialog"):
+        dialog._log_qml_errors()
+
+    assert len(caplog.records) == 1
+    assert "QML error" in caplog.records[0].message
+
+
+def test_log_qml_errors_when_status_ok(qtbot):
+    """_log_qml_errors does nothing and never calls errors() when status is Ready."""
+    from PySide6 import QtQuickWidgets
+
+    dialog = MapLocationDialog()
+    qtbot.addWidget(dialog)
+
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.status.return_value = QtQuickWidgets.QQuickWidget.Status.Ready
+
+    dialog._log_qml_errors()
+
+    dialog._quick_widget.errors.assert_not_called()
+
+
+# --- _apply_initial_bbox ---
+
+
+def test_apply_initial_bbox_sets_centre_and_zoom(qtbot):
+    """_apply_initial_bbox derives lat/lon centre and zoom from bbox."""
+    dialog = MapLocationDialog()
+    qtbot.addWidget(dialog)
+
+    mock_root = MagicMock()
+    bbox = GpsBoundingBox(south=48.0, north=52.0, west=10.0, east=14.0)
+    dialog._apply_initial_bbox(mock_root, bbox)
+
+    expected_zoom = int(max(2, min(15, round(math.log2(252.0 / 4.0)))))
+    mock_root.setProperty.assert_any_call("initialLat", 50.0)
+    mock_root.setProperty.assert_any_call("initialLon", 12.0)
+    mock_root.setProperty.assert_any_call("initialZoom", expected_zoom)
+
+
+def test_apply_initial_bbox_zero_span_uses_default_zoom(qtbot):
+    """_apply_initial_bbox falls back to zoom=14 when the bbox has zero span."""
+    dialog = MapLocationDialog()
+    qtbot.addWidget(dialog)
+
+    mock_root = MagicMock()
+    bbox = GpsBoundingBox(south=50.0, north=50.0, west=10.0, east=10.0)
+    dialog._apply_initial_bbox(mock_root, bbox)
+
+    mock_root.setProperty.assert_any_call("initialZoom", 14)
+
+
+# --- _extract_bbox ---
+
+
+def test_extract_bbox_returns_none_when_no_root_object(qtbot):
+    """_extract_bbox returns None when rootObject() is None."""
+    dialog = MapLocationDialog()
+    qtbot.addWidget(dialog)
+
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.rootObject.return_value = None
+
+    assert dialog._extract_bbox() is None
+
+
+# --- _on_accept ---
+
+
+def test_on_accept_stores_selected_bbox(qtbot):
+    """_on_accept stores the bbox returned by _extract_bbox."""
+    dialog = MapLocationDialog()
+    qtbot.addWidget(dialog)
+
+    expected = GpsBoundingBox(south=1.0, west=2.0, north=3.0, east=4.0)
+
+    with (
+        patch.object(dialog, "_extract_bbox", return_value=expected),
+        patch.object(MapLocationDialog, "accept"),
+    ):
+        dialog._on_accept()
+
+    assert dialog.selected_bbox() == expected
