@@ -165,8 +165,10 @@ class LibraryPage(QtWidgets.QWidget):
     def _update_map_button(self) -> None:
         if self._gps_bbox is None:
             self.clear_location_btn.setVisible(False)
+            self.map_location_btn.setChecked(False)
         else:
             self.clear_location_btn.setVisible(True)
+            self.map_location_btn.setChecked(True)
 
     def _build_images_data(self, images: list) -> list:
         result = []
