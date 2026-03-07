@@ -79,79 +79,81 @@ class MainWindow(QtWidgets.QMainWindow):
         enable_onboarding: bool = True,
     ):
         super().__init__()
-        self.paths = paths
-        self.settings = Settings.load(self.paths.config_file)
+        self._paths = paths
+        self._settings = Settings.load(self._paths.config_file)
         self._onboarding_enabled = enable_onboarding
 
         # Database and vector store
-        self.db_engine = get_engine(str(self.paths.db_path))
-        self.session_factory = get_session_factory(self.db_engine)
-        self.vector_store = VectorStore()
-        if self.paths.faiss_path.exists():
-            self.vector_store.load(self.paths.faiss_path)
+        self._db_engine = get_engine(str(self._paths.db_path))
+        self._session_factory = get_session_factory(self._db_engine)
+        self._vector_store = VectorStore()
+        if self._paths.faiss_path.exists():
+            self._vector_store.load(self._paths.faiss_path)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
         self.showMaximized()
         self._set_app_icon()
 
         # Status bar
-        self.status_bar = self.statusBar()
-        self.counts_label = QtWidgets.QLabel()
-        self.status_bar.addPermanentWidget(self.counts_label)
-        self.indexing_label = QtWidgets.QLabel()
-        self.status_bar.addPermanentWidget(self.indexing_label)
+        self._status_bar = self.statusBar()
+        self._counts_label = QtWidgets.QLabel()
+        self._status_bar.addPermanentWidget(self._counts_label)
+        self._indexing_label = QtWidgets.QLabel()
+        self._status_bar.addPermanentWidget(self._indexing_label)
 
         # Pages
-        self.library_page = LibraryPage(
-            self.session_factory, self.paths, self.vector_store
+        self._library_page = LibraryPage(
+            self._session_factory, self._paths, self._vector_store
         )
-        self.labelling_page = LabellingPage(
-            self.session_factory, self.paths, self.vector_store
+        self._labelling_page = LabellingPage(
+            self._session_factory, self._paths, self._vector_store
         )
-        self.persons_page = PersonsPage(self.session_factory, self.paths)
-        self.browse_page = BrowsePage(self.session_factory, self.paths, self.settings)
+        self._persons_page = PersonsPage(self._session_factory, self._paths)
+        self._browse_page = BrowsePage(
+            self._session_factory, self._paths, self._settings
+        )
 
         # Stacked widget holding the pages (Search=0, Browse=1, Persons=2, Labelling=3)
-        self.stacked = QtWidgets.QStackedWidget()
-        self.stacked.addWidget(self.library_page)  # index 0 (Search)
-        self.stacked.addWidget(self.browse_page)  # index 1
-        self.stacked.addWidget(self.persons_page)  # index 2
-        self.stacked.addWidget(self.labelling_page)  # index 3
+        self._stacked_pages = QtWidgets.QStackedWidget()
+        self._stacked_pages.addWidget(self._library_page)  # index 0 (Search)
+        self._stacked_pages.addWidget(self._browse_page)  # index 1
+        self._stacked_pages.addWidget(self._persons_page)  # index 2
+        self._stacked_pages.addWidget(self._labelling_page)  # index 3
 
         # Sidebar navigation buttons
-        self.btn_search = self._make_nav_button(self.tr("Search"), "search.svg")
-        self.btn_search.clicked.connect(lambda: self._switch_page(0))
-        self.btn_search.setShortcut(QtGui.QKeySequence("Alt+1"))
+        self._page_btn_search = self._make_nav_button(self.tr("Search"), "search.svg")
+        self._page_btn_search.clicked.connect(lambda: self._switch_page(0))
+        self._page_btn_search.setShortcut(QtGui.QKeySequence("Alt+1"))
 
-        self.btn_browse = self._make_nav_button(self.tr("Browse"), "browse.svg")
-        self.btn_browse.clicked.connect(lambda: self._switch_page(1))
-        self.btn_browse.setShortcut(QtGui.QKeySequence("Alt+2"))
+        self._page_btn_browse = self._make_nav_button(self.tr("Browse"), "browse.svg")
+        self._page_btn_browse.clicked.connect(lambda: self._switch_page(1))
+        self._page_btn_browse.setShortcut(QtGui.QKeySequence("Alt+2"))
 
-        self.btn_persons = self._make_nav_button(self.tr("Persons"), "person.svg")
-        self.btn_persons.clicked.connect(lambda: self._switch_page(2))
-        self.btn_persons.setShortcut(QtGui.QKeySequence("Alt+3"))
+        self._page_btn_persons = self._make_nav_button(self.tr("Persons"), "person.svg")
+        self._page_btn_persons.clicked.connect(lambda: self._switch_page(2))
+        self._page_btn_persons.setShortcut(QtGui.QKeySequence("Alt+3"))
 
-        self.btn_label = self._make_nav_button(self.tr("Labelling"), "label.svg")
-        self.btn_label.clicked.connect(lambda: self._switch_page(3))
-        self.btn_label.setShortcut(QtGui.QKeySequence("Alt+4"))
+        self._page_btn_label = self._make_nav_button(self.tr("Labelling"), "label.svg")
+        self._page_btn_label.clicked.connect(lambda: self._switch_page(3))
+        self._page_btn_label.setShortcut(QtGui.QKeySequence("Alt+4"))
 
         nav_group = QtWidgets.QButtonGroup(self)
         nav_group.setExclusive(True)
         for _btn in [
-            self.btn_search,
-            self.btn_browse,
-            self.btn_persons,
-            self.btn_label,
+            self._page_btn_search,
+            self._page_btn_browse,
+            self._page_btn_persons,
+            self._page_btn_label,
         ]:
             nav_group.addButton(_btn)
 
         sidebar_layout = QtWidgets.QVBoxLayout()
         sidebar_layout.setContentsMargins(4, 8, 4, 8)
         sidebar_layout.setSpacing(4)
-        sidebar_layout.addWidget(self.btn_search)
-        sidebar_layout.addWidget(self.btn_browse)
-        sidebar_layout.addWidget(self.btn_persons)
-        sidebar_layout.addWidget(self.btn_label)
+        sidebar_layout.addWidget(self._page_btn_search)
+        sidebar_layout.addWidget(self._page_btn_browse)
+        sidebar_layout.addWidget(self._page_btn_persons)
+        sidebar_layout.addWidget(self._page_btn_label)
         sidebar_layout.addStretch()
 
         sidebar = QtWidgets.QWidget()
@@ -184,7 +186,7 @@ class MainWindow(QtWidgets.QMainWindow):
         central_layout.setSpacing(0)
         central_layout.addWidget(sidebar)
         central_layout.addWidget(separator)
-        central_layout.addWidget(self.stacked)
+        central_layout.addWidget(self._stacked_pages)
         self.setCentralWidget(central)
 
         # Start on Search page
@@ -194,19 +196,25 @@ class MainWindow(QtWidgets.QMainWindow):
         self._create_menus()
 
         # GPU checker
-        self.gpu_checker = GpuChecker(self)
-        self.gpu_checker.status_ready.connect(self._on_gpu_status_ready)
+        self._gpu_checker = GpuChecker(self)
+        self._gpu_checker.status_ready.connect(self._on_gpu_status_ready)
         if check_gpu:
-            self.gpu_checker.start()
+            self._gpu_checker.start()
 
         # Indexing controller
-        self.indexing_controller = IndexingController(
-            self.session_factory, self.vector_store, self.paths, parent=self
+        self._indexing_controller = IndexingController(
+            self._session_factory, self._vector_store, self._paths, parent=self
         )
-        self.indexing_controller.inventory_progress.connect(self._on_inventory_progress)
-        self.indexing_controller.inventory_finished.connect(self._on_inventory_finished)
-        self.indexing_controller.indexing_progress.connect(self._update_indexing_status)
-        self.indexing_controller.indexing_finished.connect(self._on_indexing_finished)
+        self._indexing_controller.inventory_progress.connect(
+            self._on_inventory_progress
+        )
+        self._indexing_controller.inventory_finished.connect(
+            self._on_inventory_finished
+        )
+        self._indexing_controller.indexing_progress.connect(
+            self._update_indexing_status
+        )
+        self._indexing_controller.indexing_finished.connect(self._on_indexing_finished)
 
         self._update_db_counts()
         QtCore.QTimer.singleShot(1000, self._maybe_start_indexing)
@@ -221,23 +229,23 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _on_onboarding_accepted(self, path: str) -> None:
         """Save the selected collection path and start the initial inventory scan."""
-        self.settings.collection_path = path
-        self.settings.save(self.paths.config_file)
+        self._settings.collection_path = path
+        self._settings.save(self._paths.config_file)
         self._run_inventory_scan(path)
 
     def _maybe_start_indexing(self) -> None:
         """Run a silent inventory scan then start indexing."""
-        if self.indexing_controller.is_busy:
+        if self._indexing_controller.is_busy:
             return
 
-        collection_path = self.settings.collection_path
+        collection_path = self._settings.collection_path
         if not collection_path:
             if self._onboarding_enabled:
                 self._show_onboarding()
             return
 
-        self.indexing_label.setText(self.tr("Scanning for new photos..."))
-        self.indexing_controller.start_pipeline(collection_path)
+        self._indexing_label.setText(self.tr("Scanning for new photos..."))
+        self._indexing_controller.start_pipeline(collection_path)
 
     def _update_indexing_status(
         self, indexed: int, total: int, faces: int, status: str | None = None
@@ -250,16 +258,16 @@ class MainWindow(QtWidgets.QMainWindow):
             msg = self.tr("Indexed: {indexed}/{total} | Faces: {faces}").format(
                 indexed=indexed, total=total, faces=faces
             )
-        self.indexing_label.setText(msg)
+        self._indexing_label.setText(msg)
         # Reload library view periodically or when indexing finishes
         # Increased frequency to every 50 images to reduce UI lag
         if indexed % 50 == 0 or indexed == total:
-            self.library_page.load_images()
+            self._library_page.load_images()
 
     def _update_db_counts(self) -> None:
         """Refresh the images/faces totals shown in the status bar."""
-        image_count, face_count = get_counts(self.session_factory)
-        self.counts_label.setText(
+        image_count, face_count = get_counts(self._session_factory)
+        self._counts_label.setText(
             self.tr("Images: {images} | Faces: {faces}").format(
                 images=image_count, faces=face_count
             )
@@ -274,12 +282,12 @@ class MainWindow(QtWidgets.QMainWindow):
         if hasattr(self, "_inventory_dialog"):
             self._inventory_dialog.accept()
             del self._inventory_dialog
-        self.indexing_controller.start_indexing_only()
+        self._indexing_controller.start_indexing_only()
 
     def _on_indexing_finished(self) -> None:
-        self.indexing_label.setText(self.tr("Indexing complete"))
+        self._indexing_label.setText(self.tr("Indexing complete"))
         self._update_db_counts()
-        self.library_page.load_images()
+        self._library_page.load_images()
 
     @staticmethod
     def _make_nav_button(label: str, icon_name: str) -> QtWidgets.QToolButton:
@@ -300,24 +308,34 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _switch_page(self, index: int) -> None:
         """Switch to the given page index and highlight the active sidebar button."""
-        buttons = [self.btn_search, self.btn_browse, self.btn_persons, self.btn_label]
+        buttons = [
+            self._page_btn_search,
+            self._page_btn_browse,
+            self._page_btn_persons,
+            self._page_btn_label,
+        ]
         for i, btn in enumerate(buttons):
             btn.setChecked(i == index)
-        self.stacked.setCurrentIndex(index)
+        self._stacked_pages.setCurrentIndex(index)
         if index == 1:
-            self.browse_page.refresh()
+            self._browse_page.refresh()
         elif index == 2:
-            self.persons_page.refresh()
+            self._persons_page.refresh()
         elif index == 3:
-            self.labelling_page.refresh()
+            self._labelling_page.refresh()
 
     def go_to_labelling(self, priority_image_id: int) -> None:
         """Navigate to the Labelling page, prioritising faces from the given image."""
-        buttons = [self.btn_search, self.btn_browse, self.btn_persons, self.btn_label]
+        buttons = [
+            self._page_btn_search,
+            self._page_btn_browse,
+            self._page_btn_persons,
+            self._page_btn_label,
+        ]
         for i, btn in enumerate(buttons):
             btn.setChecked(i == 3)
-        self.stacked.setCurrentIndex(3)
-        self.labelling_page.refresh(priority_image_id=priority_image_id)
+        self._stacked_pages.setCurrentIndex(3)
+        self._labelling_page.refresh(priority_image_id=priority_image_id)
 
     def _create_menus(self):
         menubar = self.menuBar()
@@ -351,8 +369,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _show_preferences(self):
         """Show the preferences dialog and save changes if accepted."""
-        image_count, face_count = get_counts(self.session_factory)
-        old_path = self.settings.collection_path
+        image_count, face_count = get_counts(self._session_factory)
+        old_path = self._settings.collection_path
 
         dialog = PreferencesDialog(old_path, image_count, face_count, self)
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
@@ -380,43 +398,43 @@ class MainWindow(QtWidgets.QMainWindow):
                 if reply == QtWidgets.QMessageBox.StandardButton.Yes:
                     # Clear data — delete cache files before wiping the DB
                     delete_cache_files(
-                        self.session_factory,
-                        self.paths.face_crops_dir,
-                        self.paths.thumbs_dir,
+                        self._session_factory,
+                        self._paths.face_crops_dir,
+                        self._paths.thumbs_dir,
                     )
-                    clear_database(self.session_factory)
-                    self.vector_store.reset()
-                    self.vector_store.save(self.paths.faiss_path)
+                    clear_database(self._session_factory)
+                    self._vector_store.reset()
+                    self._vector_store.save(self._paths.faiss_path)
 
                     # Update settings
-                    self.settings.collection_path = new_path
-                    self.settings.save(self.paths.config_file)
+                    self._settings.collection_path = new_path
+                    self._settings.save(self._paths.config_file)
 
                     # Start inventory scan
                     self._run_inventory_scan(new_path)
             else:
                 # Path didn't change, just save settings
                 # (in case other settings added later)
-                self.settings.save(self.paths.config_file)
+                self._settings.save(self._paths.config_file)
 
     def _run_inventory_scan(self, path: str) -> None:
         """Run the initial inventory scan for a new collection path."""
         self._inventory_dialog = ProgressDialog(
             self.tr("Indexing"), self.tr("Searching for photos..."), self
         )
-        self.indexing_controller.start_inventory(path)
+        self._indexing_controller.start_inventory(path)
 
         try:
             self._inventory_dialog.exec()
         finally:
-            if self.indexing_controller.is_busy:
-                self.indexing_controller.cancel_inventory()
+            if self._indexing_controller.is_busy:
+                self._indexing_controller.cancel_inventory()
 
     def _on_gpu_status_ready(self, msg: str) -> None:
-        self.status_bar.showMessage(msg, 5000)
+        self._status_bar.showMessage(msg, 5000)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        self.indexing_controller.shutdown(self.paths.faiss_path)
+        self._indexing_controller.shutdown(self._paths.faiss_path)
         event.accept()
 
     def _set_app_icon(self):

@@ -28,7 +28,7 @@ class LibraryPage(QtWidgets.QWidget):
     ):
         super().__init__(parent)
         self.session_factory = session_factory
-        self.paths = paths
+        self._paths = paths
         self.vector_store = vector_store
         self._gps_bbox: GpsBoundingBox | None = None
 
@@ -155,7 +155,9 @@ class LibraryPage(QtWidgets.QWidget):
         return bool(self._selected_person_ids()) or self._gps_bbox is not None
 
     def _open_map_dialog(self) -> None:
-        dialog = MapLocationDialog(initial_bbox=self._gps_bbox, parent=self)
+        dialog = MapLocationDialog(
+            paths=self._paths, initial_bbox=self._gps_bbox, parent=self
+        )
         result = dialog.exec()
         if result == QtWidgets.QDialog.DialogCode.Accepted:
             self._gps_bbox = dialog.selected_bbox()
@@ -186,7 +188,7 @@ class LibraryPage(QtWidgets.QWidget):
 
         person_ids = self._selected_person_ids()
         results = search_images(
-            thumbs_dir=self.paths.thumbs_dir,
+            thumbs_dir=self._paths.thumbs_dir,
             session_factory=self.session_factory,
             vector_store=self.vector_store,
             person_ids=person_ids,

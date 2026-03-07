@@ -21,6 +21,7 @@ class MapLocationDialog(QtWidgets.QDialog):
 
     def __init__(
         self,
+        paths: AppPaths,
         initial_bbox: Optional[GpsBoundingBox] = None,
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
@@ -29,7 +30,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         self.resize(1024, 768)
 
         self._selected_bbox: Optional[GpsBoundingBox] = None
-        self._paths = AppPaths()
+        self._paths = paths
 
         self._setup_ui(initial_bbox)
 
@@ -85,10 +86,9 @@ class MapLocationDialog(QtWidgets.QDialog):
             for err in self._quick_widget.errors():
                 logger.error("QML error: %s", err)
 
-    def _apply_initial_bbox(
-        self, root_obj: object, initial_bbox: GpsBoundingBox
-    ) -> None:
-        """Set initial map centre and zoom level from a bounding box."""
+    @staticmethod
+    def _apply_initial_bbox(root_obj: object, initial_bbox: GpsBoundingBox) -> None:
+        """Set the initial map center and zoom level from a bounding box."""
         center_lat = (initial_bbox.south + initial_bbox.north) / 2
         center_lon = (initial_bbox.west + initial_bbox.east) / 2
         lat_span = initial_bbox.north - initial_bbox.south
@@ -145,5 +145,5 @@ class MapLocationDialog(QtWidgets.QDialog):
         self.accept()
 
     def selected_bbox(self) -> Optional[GpsBoundingBox]:
-        """Return the selected GpsBoundingBox, or None if cancelled."""
+        """Return the selected GpsBoundingBox, or None if canceled."""
         return self._selected_bbox

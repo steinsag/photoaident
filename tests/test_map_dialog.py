@@ -17,14 +17,14 @@ def test_build_bbox_invalid():
     assert MapLocationDialog._build_bbox(None, None, None, None) is None  # type: ignore[arg-type]
 
 
-def test_map_dialog_selected_bbox_initially_none(qtbot):
-    dialog = MapLocationDialog()
+def test_map_dialog_selected_bbox_initially_none(qtbot, tmp_app_paths):
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
     assert dialog.selected_bbox() is None
 
 
-def test_map_dialog_extract_bbox(qtbot):
-    dialog = MapLocationDialog()
+def test_map_dialog_extract_bbox(qtbot, tmp_app_paths):
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     root_obj = dialog._quick_widget.rootObject()
@@ -43,11 +43,11 @@ def test_map_dialog_extract_bbox(qtbot):
 # --- _log_qml_errors ---
 
 
-def test_log_qml_errors_when_status_error(qtbot, caplog):
+def test_log_qml_errors_when_status_error(qtbot, caplog, tmp_app_paths):
     """_log_qml_errors logs every error message when QML status is Error."""
     from PySide6 import QtQuickWidgets
 
-    dialog = MapLocationDialog()
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     dialog._quick_widget = MagicMock()
@@ -61,11 +61,11 @@ def test_log_qml_errors_when_status_error(qtbot, caplog):
     assert "QML error" in caplog.records[0].message
 
 
-def test_log_qml_errors_when_status_ok(qtbot):
+def test_log_qml_errors_when_status_ok(qtbot, tmp_app_paths):
     """_log_qml_errors does nothing and never calls errors() when status is Ready."""
     from PySide6 import QtQuickWidgets
 
-    dialog = MapLocationDialog()
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     dialog._quick_widget = MagicMock()
@@ -79,9 +79,9 @@ def test_log_qml_errors_when_status_ok(qtbot):
 # --- _apply_initial_bbox ---
 
 
-def test_apply_initial_bbox_sets_centre_and_zoom(qtbot):
-    """_apply_initial_bbox derives lat/lon centre and zoom from bbox."""
-    dialog = MapLocationDialog()
+def test_apply_initial_bbox_sets_centre_and_zoom(qtbot, tmp_app_paths):
+    """_apply_initial_bbox derives lat/lon center and zoom from bbox."""
+    dialog = MapLocationDialog(paths=tmp_app_paths)
     qtbot.addWidget(dialog)
 
     mock_root = MagicMock()
@@ -94,9 +94,9 @@ def test_apply_initial_bbox_sets_centre_and_zoom(qtbot):
     mock_root.setProperty.assert_any_call("initialZoom", expected_zoom)
 
 
-def test_apply_initial_bbox_zero_span_uses_default_zoom(qtbot):
+def test_apply_initial_bbox_zero_span_uses_default_zoom(qtbot, tmp_app_paths):
     """_apply_initial_bbox falls back to zoom=14 when the bbox has zero span."""
-    dialog = MapLocationDialog()
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     mock_root = MagicMock()
@@ -109,9 +109,9 @@ def test_apply_initial_bbox_zero_span_uses_default_zoom(qtbot):
 # --- _extract_bbox ---
 
 
-def test_extract_bbox_returns_none_when_no_root_object(qtbot):
+def test_extract_bbox_returns_none_when_no_root_object(qtbot, tmp_app_paths):
     """_extract_bbox returns None when rootObject() is None."""
-    dialog = MapLocationDialog()
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     dialog._quick_widget = MagicMock()
@@ -123,9 +123,9 @@ def test_extract_bbox_returns_none_when_no_root_object(qtbot):
 # --- _on_accept ---
 
 
-def test_on_accept_stores_selected_bbox(qtbot):
+def test_on_accept_stores_selected_bbox(qtbot, tmp_app_paths):
     """_on_accept stores the bbox returned by _extract_bbox."""
-    dialog = MapLocationDialog()
+    dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     expected = GpsBoundingBox(south=1.0, west=2.0, north=3.0, east=4.0)
