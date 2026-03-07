@@ -106,6 +106,45 @@ def test_apply_initial_bbox_zero_span_uses_default_zoom(qtbot, tmp_app_paths):
     mock_root.setProperty.assert_any_call("initialZoom", 14)
 
 
+def _apply_bbox(south: float, west: float, north: float, east: float) -> dict:
+    """Helper: call _apply_initial_bbox and return the properties dict."""
+    root = MagicMock()
+    props: dict = {}
+    root.setProperty.side_effect = lambda k, v: props.__setitem__(k, v)
+    bbox = GpsBoundingBox(south=south, west=west, north=north, east=east)
+    MapLocationDialog._apply_initial_bbox(root, bbox)
+    return props
+
+
+def test_apply_initial_bbox_antimeridian_span_is_short_arc():
+    """Bbox crossing antimeridian uses the short arc span, not 360 - short."""
+    # west=170, east=-170: crossing span = 20°, NOT 340°
+    props = _apply_bbox(south=30.0, west=170.0, north=50.0, east=-170.0)
+    expected_zoom = int(max(2, min(15, round(math.log2(252.0 / 20.0)))))
+    assert props["initialZoom"] == expected_zoom
+
+
+def test_apply_initial_bbox_antimeridian_center_lon_normalized():
+    """Center longitude is normalized to [-180, 180] for antimeridian-crossing bbox."""
+    # west=170, east=-170: center = 180° → normalized to -180 or 180
+    props = _apply_bbox(south=30.0, west=170.0, north=50.0, east=-170.0)
+    center = props["initialLon"]
+    assert center == pytest.approx(180.0) or center == pytest.approx(-180.0)
+
+
+def test_apply_initial_bbox_antimeridian_center_lon_pacific():
+    """Center longitude is correct for a typical Pacific antimeridian bbox."""
+    # west=160, east=-150: span=50°, center = 160 + 25 = 185 → -175
+    props = _apply_bbox(south=20.0, west=160.0, north=40.0, east=-150.0)
+    assert props["initialLon"] == pytest.approx(-175.0)
+
+
+def test_apply_initial_bbox_antimeridian_center_lat_unaffected():
+    """Latitude center is unaffected by antimeridian crossing."""
+    props = _apply_bbox(south=20.0, west=160.0, north=40.0, east=-150.0)
+    assert props["initialLat"] == pytest.approx(30.0)
+
+
 # --- _extract_bbox ---
 
 

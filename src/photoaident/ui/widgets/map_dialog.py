@@ -90,9 +90,15 @@ class MapLocationDialog(QtWidgets.QDialog):
     def _apply_initial_bbox(root_obj: object, initial_bbox: GpsBoundingBox) -> None:
         """Set the initial map center and zoom level from a bounding box."""
         center_lat = (initial_bbox.south + initial_bbox.north) / 2
-        center_lon = (initial_bbox.west + initial_bbox.east) / 2
         lat_span = initial_bbox.north - initial_bbox.south
-        lon_span = abs(initial_bbox.east - initial_bbox.west)
+        crosses_antimeridian = initial_bbox.east < initial_bbox.west
+        if crosses_antimeridian:
+            lon_span = 360.0 - (initial_bbox.west - initial_bbox.east)
+            raw_center = initial_bbox.west + lon_span / 2
+            center_lon = raw_center - 360.0 if raw_center > 180.0 else raw_center
+        else:
+            lon_span = initial_bbox.east - initial_bbox.west
+            center_lon = (initial_bbox.west + initial_bbox.east) / 2
         span = max(lat_span, lon_span)
         if span > 0:
             # Derive zoom so that the 70% selection rect covers the bbox.
