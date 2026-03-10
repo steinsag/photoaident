@@ -23,6 +23,14 @@ a = Analysis(
             "src/photoaident/db/migrations",
             "photoaident/db/migrations",
         ),
+        # QML source for the map dialog — not a Python file, so PyInstaller
+        # won't discover it automatically.  Destination mirrors the package
+        # layout so that Path(__file__).parent / "map_view.qml" resolves
+        # correctly when the app is frozen.
+        (
+            "src/photoaident/ui/widgets/map_view.qml",
+            "photoaident/ui/widgets/",
+        ),
     ],
     hiddenimports=[
         "insightface",
