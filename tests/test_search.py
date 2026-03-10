@@ -1,9 +1,12 @@
 """Tests for core.search.find_images_by_person."""
 
+from unittest.mock import patch
+
 import numpy as np
 import pytest
 from sqlalchemy import create_engine
 
+import photoaident.core.search as search_module
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import _find_images_by_person, search_images
 from photoaident.db.database import (
@@ -551,3 +554,25 @@ def test_search_images_empty_input_returns_empty(search_db, vs, tmp_path):
     """search_images returns empty if no filters are provided."""
     results = search_images(tmp_path, search_db, vs, person_ids=[], gps_bbox=None)
     assert results == []
+
+
+def test_search_images_chunks_large_id_list(search_db, vs, tmp_path):
+    """search_images chunks ordered_ids to stay within SQLite's parameter limit.
+
+    Patches _SQLITE_IN_LIMIT to 3 and creates 5 matching images, verifying that
+    all 5 results are returned correctly despite requiring multiple DB round-trips.
+    """
+    person_id, cluster_id = _add_person_cluster(search_db)
+    emb = _rand_norm_emb()
+
+    expected_ids = set()
+    for _ in range(5):
+        img_id, _ = _add_identified_face(search_db, vs, person_id, cluster_id, emb)
+        expected_ids.add(img_id)
+
+    with patch.object(search_module, "_SQLITE_IN_LIMIT", 3):
+        results = search_images(
+            tmp_path, search_db, vs, person_ids=[person_id], gps_bbox=None
+        )
+
+    assert {r.image_id for r in results} == expected_ids

@@ -18,6 +18,8 @@ from photoaident.db.database import (
     Image,
 )
 
+_SQLITE_IN_LIMIT = 900  # SQLite bound-parameter limit is 999; stay safely below it
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
@@ -103,9 +105,17 @@ def search_images(
     ordered_ids = [img_id for img_id, _ in sorted_pairs]
 
     with session_factory() as session:
-        stmt = select(Image).where(Image.id.in_(ordered_ids))
-        images = session.execute(stmt).unique().scalars().all()
-        image_map = {img.id: img for img in images}
+        image_map: dict[int, Image] = {}
+        for chunk_start in range(0, len(ordered_ids), _SQLITE_IN_LIMIT):
+            chunk = ordered_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
+            rows = (
+                session.execute(select(Image).where(Image.id.in_(chunk)))
+                .unique()
+                .scalars()
+                .all()
+            )
+            for img in rows:
+                image_map[img.id] = img
         ordered_images = [image_map[i] for i in ordered_ids if i in image_map]
         return __format_results(ordered_images, thumbs_dir)
 
