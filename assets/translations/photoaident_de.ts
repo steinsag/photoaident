@@ -38,53 +38,6 @@
     </message>
 </context>
 <context>
-    <name>AssignPersonDialog</name>
-    <message>
-        <source>Assign to Person</source>
-        <translation type="vanished">Person zuweisen</translation>
-    </message>
-    <message>
-        <source>Person</source>
-        <translation type="vanished">Person</translation>
-    </message>
-    <message>
-        <source>Search…</source>
-        <translation type="vanished">Suchen…</translation>
-    </message>
-    <message>
-        <source>New Person…</source>
-        <translation type="vanished">Neue Person…</translation>
-    </message>
-    <message>
-        <source>Age Group</source>
-        <translation type="vanished">Altersgruppe</translation>
-    </message>
-    <message>
-        <source>Similarity</source>
-        <translation type="vanished">Ähnlichkeit</translation>
-    </message>
-    <message>
-        <source>Infant (0–3)</source>
-        <translation type="vanished">Kleinkind (0–3)</translation>
-    </message>
-    <message>
-        <source>Youngster (4–12)</source>
-        <translation type="vanished">Kind (4–12)</translation>
-    </message>
-    <message>
-        <source>Teenager (13–19)</source>
-        <translation type="vanished">Teenager (13–19)</translation>
-    </message>
-    <message>
-        <source>Adult (20–75)</source>
-        <translation type="vanished">Erwachsener (20–75)</translation>
-    </message>
-    <message>
-        <source>Senior (75+)</source>
-        <translation type="vanished">Senior (75+)</translation>
-    </message>
-</context>
-<context>
     <name>BrowsePage</name>
     <message>
         <source>No photo collection configured.</source>
@@ -128,37 +81,9 @@
         <source>No image</source>
         <translation>Kein Bild</translation>
     </message>
-    <message>
-        <source>No thumbnail</source>
-        <translation type="vanished">Keine Miniaturansicht</translation>
-    </message>
-    <message>
-        <source>Date: {taken_at}
-                Confidence: {confidence}%
-            </source>
-        <translation type="vanished">Datum: {taken_at}
-                Konfidenz: {confidence}%
-            </translation>
-    </message>
 </context>
 <context>
     <name>GpuChecker</name>
-    <message>
-        <source>✅ GPU ready — {providers}</source>
-        <translation type="vanished">✅ GPU bereit — {providers}</translation>
-    </message>
-    <message>
-        <source>⚠️ CPU only — {providers}</source>
-        <translation type="vanished">⚠️ Nur CPU — {providers}</translation>
-    </message>
-    <message>
-        <source>❌ Import failed: {error}</source>
-        <translation type="vanished">❌ Import fehlgeschlagen: {error}</translation>
-    </message>
-    <message>
-        <source>❌ Error: {error}</source>
-        <translation type="vanished">❌ Fehler: {error}</translation>
-    </message>
     <message>
         <source>GPU ready</source>
         <translation>GPU bereit</translation>
@@ -238,14 +163,6 @@
     <name>InstanceLock</name>
     <message>
         <source>Another instance of PhotoAIdent is already running.
-                Please close it before starting a new one.
-            </source>
-        <translation type="vanished">Eine weitere Instanz von PhotoAIdent läuft bereits.
-                Bitte schließen Sie diese, bevor Sie eine neue starten.
-            </translation>
-    </message>
-    <message>
-        <source>Another instance of PhotoAIdent is already running.
 Please close it before starting a new one.</source>
         <translation>Eine weitere Instanz von PhotoAIdent läuft bereits.
 Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
@@ -265,16 +182,8 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
 <context>
     <name>LabellingPage</name>
     <message>
-        <source>Assign to Person…</source>
-        <translation type="vanished">Person zuweisen…</translation>
-    </message>
-    <message>
         <source>Mark Anonymous</source>
         <translation>Als anonym markieren</translation>
-    </message>
-    <message>
-        <source>Skip</source>
-        <translation type="vanished">Überspringen</translation>
     </message>
     <message>
         <source>Skip Image</source>
@@ -289,64 +198,12 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
         <translation>Person auswählen</translation>
     </message>
     <message>
-        <source>Type to filter</source>
-        <translation type="vanished">Zum Filtern tippen</translation>
-    </message>
-    <message>
-        <source>New Person…</source>
-        <translation type="vanished">Neue Person…</translation>
-    </message>
-    <message>
-        <source>Age Group</source>
-        <translation type="vanished">Altersgruppe</translation>
-    </message>
-    <message>
-        <source>Similarity</source>
-        <translation type="vanished">Ähnlichkeit</translation>
-    </message>
-    <message>
-        <source>Infant (0–3)</source>
-        <translation type="vanished">Kleinkind (0–3)</translation>
-    </message>
-    <message>
-        <source>Youngster (4–12)</source>
-        <translation type="vanished">Kind (4–12)</translation>
-    </message>
-    <message>
-        <source>Teenager (13–19)</source>
-        <translation type="vanished">Teenager (13–19)</translation>
-    </message>
-    <message>
-        <source>Adult (20–75)</source>
-        <translation type="vanished">Erwachsener (20–75)</translation>
-    </message>
-    <message>
-        <source>Senior (75+)</source>
-        <translation type="vanished">Senior (75+)</translation>
-    </message>
-    <message>
         <source>Cancel</source>
         <translation>Abbrechen</translation>
     </message>
     <message>
         <source>Confirm</source>
         <translation>Bestätigen</translation>
-    </message>
-    <message>
-        <source>No image</source>
-        <translation type="vanished">Kein Bild</translation>
-    </message>
-    <message>
-        <source>Unknown</source>
-        <translation type="vanished">Unbekannt</translation>
-    </message>
-    <message>
-        <source>{count} face(s) remaining</source>
-        <translation type="vanished">{count} Gesicht(er) verbleibend</translation>
-    </message>
-    <message>
-        <source>{count} face(s) remaining in this image</source>
-        <translation type="vanished">{count} Gesicht(er) in diesem Bild verbleibend</translation>
     </message>
     <message>
         <source>All done! No unidentified faces remain.</source>
@@ -362,28 +219,8 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
 <context>
     <name>LibraryPage</name>
     <message>
-        <source>Filter by Person</source>
-        <translation type="vanished">Nach Person filtern</translation>
-    </message>
-    <message>
-        <source>Search persons…</source>
-        <translation type="vanished">Personen suchen…</translation>
-    </message>
-    <message>
-        <source>Deselect All</source>
-        <translation type="vanished">Alle abwählen</translation>
-    </message>
-    <message>
-        <source>{n} person(s) selected</source>
-        <translation type="vanished">{n} Person(en) ausgewählt</translation>
-    </message>
-    <message>
         <source>Type to search by keyword. Use @… to search for person.</source>
         <translation>Stichwort eingeben. @… für Personensuche.</translation>
-    </message>
-    <message>
-        <source>Select a person to start searching.</source>
-        <translation type="vanished">Person auswählen, um die Suche zu starten.</translation>
     </message>
     <message>
         <source>Select a person or location to start searching.</source>
@@ -427,36 +264,6 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <message>
         <source>Browse</source>
         <translation>Durchsuchen</translation>
-    </message>
-    <message>
-        <source>Welcome to PhotoAIdent</source>
-        <translation type="vanished">Willkommen bei PhotoAIdent</translation>
-    </message>
-    <message>
-        <source>Welcome to PhotoAIdent!
-
-                To get started, please select your photo collection folder.
-            </source>
-        <translation type="vanished">Willkommen bei PhotoAIdent!
-
-                Bitte wähle zunächst den Ordner deiner Fotosammlung aus.
-            </translation>
-    </message>
-    <message>
-        <source>No folder selected</source>
-        <translation type="vanished">Kein Ordner ausgewählt</translation>
-    </message>
-    <message>
-        <source>Browse...</source>
-        <translation type="vanished">Durchsuchen...</translation>
-    </message>
-    <message>
-        <source>Start Indexing</source>
-        <translation type="vanished">Indexierung starten</translation>
-    </message>
-    <message>
-        <source>Select Photo Collection Folder</source>
-        <translation type="vanished">Fotosammlungsordner auswählen</translation>
     </message>
     <message>
         <source>Scanning for new photos...</source>
@@ -515,24 +322,6 @@ Aktuell indiziert:
 Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
-        <source>Changing the photo collection path will cause all existing detected faces to be lost.
-
-                Currently indexed:
-                - {images} images
-                - {faces} faces
-
-                Do you really want to proceed?
-            </source>
-        <translation type="vanished">Das Ändern des Fotosammlungspfads löscht alle bisher erkannten Gesichter.
-
-                Aktuell indiziert:
-                - {images} Bilder
-                - {faces} Gesichter
-
-                Möchten Sie wirklich fortfahren?
-            </translation>
-    </message>
-    <message>
         <source>Confirm Collection Change</source>
         <translation>Pfadänderung bestätigen</translation>
     </message>
@@ -543,22 +332,6 @@ Möchten Sie wirklich fortfahren?</translation>
     <message>
         <source>Indexing</source>
         <translation>Indexierung</translation>
-    </message>
-    <message>
-        <source>✅ GPU ready — {providers}</source>
-        <translation type="vanished">✅ GPU bereit — {providers}</translation>
-    </message>
-    <message>
-        <source>⚠️ CPU only — {providers}</source>
-        <translation type="vanished">⚠️ Nur CPU — {providers}</translation>
-    </message>
-    <message>
-        <source>❌ Import failed: {error}</source>
-        <translation type="vanished">❌ Import fehlgeschlagen: {error}</translation>
-    </message>
-    <message>
-        <source>❌ Error: {error}</source>
-        <translation type="vanished">❌ Fehler: {error}</translation>
     </message>
 </context>
 <context>
@@ -588,16 +361,6 @@ Möchten Sie wirklich fortfahren?</translation>
     <message>
         <source>Welcome to PhotoAIdent</source>
         <translation>Willkommen bei PhotoAIdent</translation>
-    </message>
-    <message>
-        <source>Welcome to PhotoAIdent!
-
-                To get started, please select your photo collection folder.
-            </source>
-        <translation type="vanished">Willkommen bei PhotoAIdent!
-
-                Bitte wähle zunächst den Ordner deiner Fotosammlung aus.
-            </translation>
     </message>
     <message>
         <source>Welcome to PhotoAIdent!
@@ -738,14 +501,6 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
 </context>
 <context>
     <name>ThumbnailGrid</name>
-    <message>
-        <source>No images found.</source>
-        <translation type="vanished">Keine Bilder gefunden.</translation>
-    </message>
-    <message>
-        <source>Showing first {limit} of {total} images.</source>
-        <translation type="vanished">Zeige die ersten {limit} von {total} Bildern.</translation>
-    </message>
     <message>
         <source>Scroll to load more… ({n} remaining)</source>
         <translation>Scrollen zum Nachladen… ({n} verbleibend)</translation>
