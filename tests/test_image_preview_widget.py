@@ -126,15 +126,14 @@ def test_exif_pixmap_transform_all_cases(qtbot, tmp_path):
     img_path = tmp_path / "exif.jpg"
     _make_jpeg(img_path)
 
-    T = QtGui.QImageIOHandler.Transformation
     cases = [
-        T.TransformationMirror,
-        T.TransformationFlip,
-        T.TransformationRotate180,
-        T.TransformationRotate90,
-        T.TransformationMirrorAndRotate90,
-        T.TransformationFlipAndRotate90,
-        T.TransformationRotate270,
+        QtGui.QImageIOHandler.Transformation.TransformationMirror,
+        QtGui.QImageIOHandler.Transformation.TransformationFlip,
+        QtGui.QImageIOHandler.Transformation.TransformationRotate180,
+        QtGui.QImageIOHandler.Transformation.TransformationRotate90,
+        QtGui.QImageIOHandler.Transformation.TransformationMirrorAndRotate90,
+        QtGui.QImageIOHandler.Transformation.TransformationFlipAndRotate90,
+        QtGui.QImageIOHandler.Transformation.TransformationRotate270,
     ]
 
     for transformation in cases:
@@ -143,7 +142,7 @@ def test_exif_pixmap_transform_all_cases(qtbot, tmp_path):
 
         with patch("PySide6.QtGui.QImageReader") as mock_reader_cls:
             mock_reader = mock_reader_cls.return_value
-            mock_reader.read.return_value = QtGui.QImage(img_path)
+            mock_reader.read.return_value = QtGui.QImage(str(img_path))
             mock_reader.transformation.return_value = transformation
 
             widget.load(img_path, (0, 0, 10, 10))
@@ -165,7 +164,7 @@ def test_exif_pixmap_transform_none(qtbot, tmp_path):
 
     with patch("PySide6.QtGui.QImageReader") as mock_reader_cls:
         mock_reader = mock_reader_cls.return_value
-        mock_reader.read.return_value = QtGui.QImage(img_path)
+        mock_reader.read.return_value = QtGui.QImage(str(img_path))
         mock_reader.transformation.return_value = (
             QtGui.QImageIOHandler.Transformation.TransformationNone
         )
