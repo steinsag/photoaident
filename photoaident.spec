@@ -15,12 +15,24 @@ insightface_libs = collect_dynamic_libs("insightface")
 # libqtgeoservices_osm.so is required for the OSM map plugin to work.
 _pyside6_dir = Path(_pyside6.__file__).parent
 _geoservices_src = _pyside6_dir / "Qt" / "plugins" / "geoservices"
-geoservices_binaries = [
-    (str(so), "PySide6/Qt/plugins/geoservices")
-    for so in _geoservices_src.glob("*.so*")
-    if so.is_file()
-]
 
+# Collect Qt geoservices plugins in a platform-aware way so that the OSM
+# plugin is bundled on Linux (.so), Windows (.dll), and macOS (.dylib).
+if sys.platform.startswith("win"):
+    _geoservices_patterns = ["*.dll"]
+elif sys.platform == "darwin":
+    _geoservices_patterns = ["*.dylib"]
+else:
+    # Default to Unix-like shared libraries
+    _geoservices_patterns = ["*.so*"]
+
+geoservices_binaries = []
+for _pattern in _geoservices_patterns:
+    for _plugin in _geoservices_src.glob(_pattern):
+        if _plugin.is_file():
+            geoservices_binaries.append(
+                (str(_plugin), "PySide6/Qt/plugins/geoservices")
+            )
 a = Analysis(
     ["src/photoaident/__main__.py"],
     pathex=["src"],
