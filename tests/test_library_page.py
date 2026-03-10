@@ -277,7 +277,7 @@ def test_select_multiple_persons_calls_search(
         assert set(kwargs["person_ids"]) == {p1_id, p2_id}
 
 
-def test_person_filter_without_vector_store_fails_with_person_selected(
+def test_select_person_with_no_faces_shows_empty_grid(
     qtbot, session_factory, tmp_app_paths, vs
 ):
     _add_image(session_factory, "/img1.jpg", file_hash="h1")
