@@ -42,19 +42,24 @@ def search_images(
     Returns:
         List of (image_id, file_path, thumb_path) tuples.
     """
+    if not person_ids and not gps_bbox:
+        return []
+
+    # Case: GPS only — use a subquery to avoid SQLite's bound-parameter limit
+    if not person_ids and gps_bbox is not None:
+        with session_factory() as session:
+            stmt = (
+                select(Image)
+                .where(Image.id.in_(_gps_bbox_subquery(gps_bbox)))
+                .order_by(Image.id)
+            )
+            images = session.execute(stmt).unique().scalars().all()
+            return __format_results(images, thumbs_dir)
+
+    # Person filter (with optional GPS): materialise GPS IDs for in-memory intersection
     gps_image_ids: set[int] | None = None
     if gps_bbox:
         gps_image_ids = set(_find_images_by_gps_bbox(session_factory, gps_bbox))
-
-    if not person_ids and gps_image_ids is None:
-        return []
-
-    # Case: GPS only
-    if not person_ids and gps_image_ids is not None:
-        with session_factory() as session:
-            stmt = select(Image).where(Image.id.in_(list(gps_image_ids)))
-            images = session.execute(stmt).unique().scalars().all()
-            return __format_results(images, thumbs_dir)
 
     per_person_scores: list[dict[int, float]] = []
     for person_id in person_ids:
@@ -223,6 +228,34 @@ def _find_images_by_person(
     return sorted_pairs[:limit]
 
 
+def _gps_bbox_subquery(bbox: GpsBoundingBox):
+    """Return a SELECT subquery for image_ids within the GPS bounding box.
+
+    Returns a SQLAlchemy select statement (not yet executed) so callers can
+    embed it as a subquery without materialising results as bound parameters.
+    """
+    if bbox.west <= bbox.east:
+        return select(ImageMetadata.image_id).where(
+            and_(
+                ImageMetadata.gps_lat >= bbox.south,
+                ImageMetadata.gps_lat <= bbox.north,
+                ImageMetadata.gps_lon >= bbox.west,
+                ImageMetadata.gps_lon <= bbox.east,
+            )
+        )
+    # Crosses antimeridian
+    return select(ImageMetadata.image_id).where(
+        and_(
+            ImageMetadata.gps_lat >= bbox.south,
+            ImageMetadata.gps_lat <= bbox.north,
+            (
+                (ImageMetadata.gps_lon >= bbox.west)
+                | (ImageMetadata.gps_lon <= bbox.east)
+            ),
+        )
+    )
+
+
 def _find_images_by_gps_bbox(
     session_factory: "sessionmaker",
     bbox: GpsBoundingBox,
@@ -237,29 +270,7 @@ def _find_images_by_gps_bbox(
         List of image IDs.
     """
     with session_factory() as session:
-        if bbox.west <= bbox.east:
-            # Simple case
-            stmt = select(ImageMetadata.image_id).where(
-                and_(
-                    ImageMetadata.gps_lat >= bbox.south,
-                    ImageMetadata.gps_lat <= bbox.north,
-                    ImageMetadata.gps_lon >= bbox.west,
-                    ImageMetadata.gps_lon <= bbox.east,
-                )
-            )
-        else:
-            # Crosses antimeridian
-            stmt = select(ImageMetadata.image_id).where(
-                and_(
-                    ImageMetadata.gps_lat >= bbox.south,
-                    ImageMetadata.gps_lat <= bbox.north,
-                    (
-                        (ImageMetadata.gps_lon >= bbox.west)
-                        | (ImageMetadata.gps_lon <= bbox.east)
-                    ),
-                )
-            )
-        return list(session.scalars(stmt).all())
+        return list(session.scalars(_gps_bbox_subquery(bbox)).all())
 
 
 def __format_results(
