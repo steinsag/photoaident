@@ -1,6 +1,4 @@
 import logging
-import os
-import subprocess
 import sys
 from collections.abc import Iterable
 from pathlib import Path
@@ -14,6 +12,7 @@ from sqlalchemy.orm import joinedload
 from photoaident.core.search import SearchResult
 from photoaident.db.database import Face, FaceState, Image
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
+from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import generate_thumbnail
 
 if TYPE_CHECKING:
@@ -38,42 +37,6 @@ def _icon_path(name: str) -> str:
     return str(
         Path(__file__).parent.parent.parent.parent.parent / "assets" / "icons" / name
     )
-
-
-def _reveal_in_file_manager(file_path: str) -> None:
-    """Open the parent folder of file_path in the system file manager."""
-    p = Path(file_path)
-    if sys.platform == "darwin":
-        subprocess.Popen(["open", "-R", str(p)])
-    elif sys.platform == "win32":
-        subprocess.Popen(["explorer", "/select,", str(p)])
-    else:  # Linux / BSD
-        # Use D-Bus org.freedesktop.FileManager1 — the Linux equivalent of
-        # Android intents. We call the already-running file manager directly
-        # over D-Bus without spawning a subprocess, so the AppImage's
-        # LD_LIBRARY_PATH never leaks into the file manager process.
-        from PySide6 import QtDBus  # Linux-only module, import lazily
-
-        file_uri = QtCore.QUrl.fromLocalFile(str(p)).toString()
-        iface = QtDBus.QDBusInterface(
-            "org.freedesktop.FileManager1",
-            "/org/freedesktop/FileManager1",
-            "org.freedesktop.FileManager1",
-        )
-        if iface.isValid():
-            reply = iface.call("ShowItems", [file_uri], "")
-            if reply.type() != QtDBus.QDBusMessage.MessageType.ErrorMessage:
-                return
-        # Fallback: no D-Bus file manager service, or the call was rejected.
-        # Strip the AppImage library path so xdg-open's target process
-        # won't pick up the bundled Qt libs.
-        env = os.environ.copy()
-        orig = env.pop("LD_LIBRARY_PATH_ORIG", None)
-        if orig is not None:
-            env["LD_LIBRARY_PATH"] = orig
-        else:
-            env.pop("LD_LIBRARY_PATH", None)
-        subprocess.Popen(["xdg-open", str(p.parent)], env=env)
 
 
 def _has_unidentified_faces(session_factory: "sessionmaker", image_id: int) -> bool:
@@ -201,9 +164,7 @@ class _HoverOverlay(QtWidgets.QWidget):
         layout.addLayout(right_layout)
 
         self.view_btn.clicked.connect(self.view_requested.emit)
-        self.browse_btn.clicked.connect(
-            lambda: _reveal_in_file_manager(self._file_path)
-        )
+        self.browse_btn.clicked.connect(lambda: reveal_in_file_manager(self._file_path))
         self.label_btn.clicked.connect(self.label_requested.emit)
 
         self.hide()

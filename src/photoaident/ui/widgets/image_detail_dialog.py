@@ -3,6 +3,7 @@ from pathlib import Path
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.db.database import FaceState, Image as DBImage
+from photoaident.utils.file_manager import reveal_in_file_manager
 
 
 class ImageDetailDialog(QtWidgets.QDialog):
@@ -85,6 +86,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         label_btn.clicked.connect(self._on_label_faces_clicked)
         metadata_layout.addWidget(label_btn)
 
+        show_in_file_manager_btn = QtWidgets.QPushButton(
+            self.tr("Show in File Manager")
+        )
+        show_in_file_manager_btn.clicked.connect(self._on_show_in_file_manager_clicked)
+        metadata_layout.addWidget(show_in_file_manager_btn)
+
         close_button = QtWidgets.QPushButton(self.tr("Close"))
         close_button.clicked.connect(self.accept)
         metadata_layout.addWidget(close_button)
@@ -161,6 +168,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
     def _on_label_faces_clicked(self) -> None:
         self.accept()
         self.navigate_to_labelling.emit(self.image_data.id)
+
+    def _on_show_in_file_manager_clicked(self) -> None:
+        reveal_in_file_manager(self.image_data.file_path)
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)

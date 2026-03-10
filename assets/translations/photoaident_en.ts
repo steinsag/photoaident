@@ -140,6 +140,10 @@
         <translation>Label Faces</translation>
     </message>
     <message>
+        <source>Show in File Manager</source>
+        <translation>Show in File Manager</translation>
+    </message>
+    <message>
         <source>Close</source>
         <translation>Close</translation>
     </message>

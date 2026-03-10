@@ -1,4 +1,5 @@
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -244,3 +245,70 @@ def test_label_faces_button_emits_signal(qtbot, tmp_path):
     qtbot.mouseClick(label_btn, QtCore.Qt.MouseButton.LeftButton)
 
     assert emitted_ids == [700]
+
+
+# ===========================================================================
+# show_in_file_manager_button
+# ===========================================================================
+
+
+def test_show_in_file_manager_button_exists(qtbot, sample_image_with_metadata):
+    """Show in File Manager button is present in the dialog."""
+    dialog = ImageDetailDialog(sample_image_with_metadata)
+    qtbot.addWidget(dialog)
+
+    buttons = dialog.findChildren(QtWidgets.QPushButton)
+    show_btn = next(
+        (b for b in buttons if b.text() == dialog.tr("Show in File Manager")), None
+    )
+    assert show_btn is not None
+
+
+def test_show_in_file_manager_button_calls_reveal(qtbot, sample_image_with_metadata):
+    """Clicking the button calls reveal_in_file_manager with the image file path."""
+    dialog = ImageDetailDialog(sample_image_with_metadata)
+    qtbot.addWidget(dialog)
+
+    buttons = dialog.findChildren(QtWidgets.QPushButton)
+    show_btn = next(
+        (b for b in buttons if b.text() == dialog.tr("Show in File Manager")), None
+    )
+    assert show_btn is not None
+
+    target = "photoaident.ui.widgets.image_detail_dialog.reveal_in_file_manager"
+    with patch(target) as mock_reveal:
+        qtbot.mouseClick(show_btn, QtCore.Qt.MouseButton.LeftButton)
+
+    mock_reveal.assert_called_once_with(sample_image_with_metadata.file_path)
+
+
+def test_show_in_file_manager_button_always_enabled(qtbot, tmp_path):
+    """Show in File Manager button is enabled regardless of face labelling state."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "all_identified.jpg"
+    PILImage.new("RGB", (100, 100), "cyan").save(img_path)
+
+    db_image = Image(id=800, file_path=str(img_path), file_size=500)
+    db_image.faces = [
+        Face(
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.95,
+            model_version="v1",
+            faiss_id=3,
+            state=FaceState.IDENTIFIED,
+        )
+    ]
+
+    dialog = ImageDetailDialog(db_image)
+    qtbot.addWidget(dialog)
+
+    buttons = dialog.findChildren(QtWidgets.QPushButton)
+    show_btn = next(
+        (b for b in buttons if b.text() == dialog.tr("Show in File Manager")), None
+    )
+    assert show_btn is not None
+    assert show_btn.isEnabled()
