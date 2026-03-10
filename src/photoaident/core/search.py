@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import select, and_
 
-from photoaident.db.database import EmbeddingCluster, Face, FaceState
+from photoaident.core.geo import GpsBoundingBox
+from photoaident.db.database import (
+    EmbeddingCluster,
+    Face,
+    FaceState,
+    ImageMetadata,
+    Image,
+)
+
+_SQLITE_IN_LIMIT = 900  # SQLite bound-parameter limit is 999; stay safely below it
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -15,12 +26,136 @@ if TYPE_CHECKING:
     from photoaident.db.vector_store import VectorStore
 
 
+@dataclass
+class SearchResult:
+    """A single search result referencing an image."""
+
+    image_id: int
+    file_path: str
+    thumb_path: Path
+
+
+def search_images(
+    thumbs_dir: Path,
+    session_factory: "sessionmaker",
+    vector_store: "VectorStore",
+    person_ids: list[int],
+    gps_bbox: Optional[GpsBoundingBox],
+) -> list[SearchResult]:
+    """Search for images based on person and/or GPS filters.
+
+    Args:
+        thumbs_dir: Directory where thumbnails are stored.
+        session_factory: SQLAlchemy session factory.
+        vector_store: FAISS vector store.
+        person_ids: List of person IDs to filter by.
+        gps_bbox: GPS bounding box to filter by.
+
+    Returns:
+        List of SearchResult objects.
+    """
+    if not person_ids and not gps_bbox:
+        return []
+
+    if not person_ids and gps_bbox is not None:
+        return _search_by_gps_only(session_factory, gps_bbox, thumbs_dir)
+
+    gps_image_ids = (
+        set(_find_images_by_gps_bbox(session_factory, gps_bbox)) if gps_bbox else None
+    )
+    per_person_scores = _collect_per_person_scores(
+        session_factory, vector_store, person_ids, gps_image_ids
+    )
+    ordered_ids = _intersect_and_rank(per_person_scores)
+    if not ordered_ids:
+        return []
+
+    images = _fetch_ordered_images(session_factory, ordered_ids)
+    return _format_results(images, thumbs_dir)
+
+
+def _search_by_gps_only(
+    session_factory: "sessionmaker",
+    gps_bbox: GpsBoundingBox,
+    thumbs_dir: Path,
+) -> list[SearchResult]:
+    """Return results for a GPS-only query via subquery (avoids bound-param limit)."""
+    with session_factory() as session:
+        stmt = (
+            select(Image)
+            .where(Image.id.in_(_gps_bbox_subquery(gps_bbox)))
+            .order_by(Image.id)
+        )
+        images: list[Image] = list(session.execute(stmt).unique().scalars().all())
+    return _format_results(images, thumbs_dir)
+
+
+def _collect_per_person_scores(
+    session_factory: "sessionmaker",
+    vector_store: "VectorStore",
+    person_ids: list[int],
+    gps_image_ids: set[int] | None,
+) -> list[dict[int, float]]:
+    """Build one score-dict per person, optionally filtered to GPS image IDs."""
+    per_person_scores: list[dict[int, float]] = []
+    for person_id in person_ids:
+        scores: dict[int, float] = {
+            img_id: score
+            for img_id, score in _find_images_by_person(
+                session_factory, vector_store, person_id
+            )
+            if gps_image_ids is None or img_id in gps_image_ids
+        }
+        per_person_scores.append(scores)
+    return per_person_scores
+
+
+def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
+    """Return image IDs present in all per-person dicts, ranked by min score desc."""
+    if not per_person_scores:
+        return []
+
+    common_ids = set(per_person_scores[0].keys())
+    for scores in per_person_scores[1:]:
+        common_ids &= scores.keys()
+
+    if not common_ids:
+        return []
+
+    # Weakest match across persons determines relevance
+    ranked = sorted(
+        common_ids,
+        key=lambda img_id: min(s[img_id] for s in per_person_scores),
+        reverse=True,
+    )
+    return ranked
+
+
+def _fetch_ordered_images(
+    session_factory: "sessionmaker",
+    ordered_ids: list[int],
+) -> list[Image]:
+    """Fetch Image rows for the given IDs, preserving the requested order."""
+    with session_factory() as session:
+        image_map: dict[int, Image] = {}
+        for chunk_start in range(0, len(ordered_ids), _SQLITE_IN_LIMIT):
+            chunk = ordered_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
+            for img in (
+                session.execute(select(Image).where(Image.id.in_(chunk)))
+                .unique()
+                .scalars()
+                .all()
+            ):
+                image_map[img.id] = img
+    return [image_map[i] for i in ordered_ids if i in image_map]
+
+
 def _compute_cluster_mean(
     cluster_id: int,
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
 ) -> "np.ndarray | None":
-    """Return normalised mean embedding for a cluster, or None if no valid faces."""
+    """Return normalized mean embedding for a cluster, or None if no valid faces."""
     with session_factory() as session:
         faiss_ids = list(
             session.scalars(
@@ -73,19 +208,24 @@ def _accumulate_faiss_scores(
     return faiss_scores
 
 
-def _faiss_to_image_scores(
+def __faiss_to_image_scores(
     faiss_scores: dict[int, float],
     session_factory: "sessionmaker",
 ) -> dict[int, float]:
     """Resolve faiss_id → image_id and deduplicate keeping the highest score."""
     all_faiss_ids = list(faiss_scores.keys())
+    rows: list = []
     with session_factory() as session:
-        rows = session.execute(
-            select(Face.faiss_id, Face.image_id).where(
-                Face.faiss_id.in_(all_faiss_ids),
-                Face.deleted_at.is_(None),
+        for chunk_start in range(0, len(all_faiss_ids), _SQLITE_IN_LIMIT):
+            chunk = all_faiss_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
+            rows.extend(
+                session.execute(
+                    select(Face.faiss_id, Face.image_id).where(
+                        Face.faiss_id.in_(chunk),
+                        Face.deleted_at.is_(None),
+                    )
+                ).all()
             )
-        ).all()
 
     image_scores: dict[int, float] = {}
     for row_faiss_id, row_image_id in rows:
@@ -95,7 +235,7 @@ def _faiss_to_image_scores(
     return image_scores
 
 
-def find_images_by_person(
+def _find_images_by_person(
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     person_id: int,
@@ -137,7 +277,68 @@ def find_images_by_person(
     if not faiss_scores:
         return []
 
-    image_scores = _faiss_to_image_scores(faiss_scores, session_factory)
+    image_scores = __faiss_to_image_scores(faiss_scores, session_factory)
 
     sorted_pairs = sorted(image_scores.items(), key=lambda x: x[1], reverse=True)
     return sorted_pairs[:limit]
+
+
+def _gps_bbox_subquery(bbox: GpsBoundingBox):
+    """Return a SELECT subquery for image_ids within the GPS bounding box.
+
+    Returns an SQLAlchemy select statement (not yet executed) so callers can
+    embed it as a subquery without materializing results as bound parameters.
+    """
+    if bbox.west <= bbox.east:
+        return select(ImageMetadata.image_id).where(
+            and_(
+                ImageMetadata.gps_lat >= bbox.south,
+                ImageMetadata.gps_lat <= bbox.north,
+                ImageMetadata.gps_lon >= bbox.west,
+                ImageMetadata.gps_lon <= bbox.east,
+            )
+        )
+    # Crosses antimeridian
+    return select(ImageMetadata.image_id).where(
+        and_(
+            ImageMetadata.gps_lat >= bbox.south,
+            ImageMetadata.gps_lat <= bbox.north,
+            (
+                (ImageMetadata.gps_lon >= bbox.west)
+                | (ImageMetadata.gps_lon <= bbox.east)
+            ),
+        )
+    )
+
+
+def _find_images_by_gps_bbox(
+    session_factory: "sessionmaker",
+    bbox: GpsBoundingBox,
+) -> list[int]:
+    """Return image IDs within the given GPS bounding box.
+
+    Args:
+        session_factory: SQLAlchemy session factory.
+        bbox: The GPS bounding box to search in.
+
+    Returns:
+        List of image IDs.
+    """
+    with session_factory() as session:
+        return list(session.scalars(_gps_bbox_subquery(bbox)).all())
+
+
+def _format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]:
+    """Format Image objects into SearchResult objects for the UI."""
+    return [
+        SearchResult(
+            image_id=img.id,
+            file_path=img.file_path,
+            thumb_path=(
+                thumbs_dir / f"{img.file_hash}.jpg"
+                if img.file_hash
+                else thumbs_dir / "unknown.jpg"
+            ),
+        )
+        for img in images
+    ]

@@ -25,7 +25,7 @@ def _make_window(
 ) -> MainWindow:
     apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
     window = MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
-    window.settings.collection_path = collection_path
+    window._settings.collection_path = collection_path
     qtbot.addWidget(window)
     return window
 
@@ -414,14 +414,14 @@ def test_refresh_reloads_list(tmp_app_paths, qtbot):
 def test_mainwindow_has_persons_page(tmp_app_paths, qtbot):
     """MainWindow.stacked has 4 pages (Library, Label, Persons, Browse)."""
     window = _make_window(tmp_app_paths, qtbot)
-    assert window.stacked.count() == 4
+    assert window._stacked_pages.count() == 4
 
 
 def test_switch_to_persons_page(tmp_app_paths, qtbot):
     """_switch_page(2) makes persons_page the current widget."""
     window = _make_window(tmp_app_paths, qtbot)
     window._switch_page(2)
-    assert window.stacked.currentWidget() is window.persons_page
+    assert window._stacked_pages.currentWidget() is window._persons_page
 
 
 def test_new_person_button_exists(tmp_app_paths, qtbot):

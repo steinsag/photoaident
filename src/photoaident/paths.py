@@ -55,6 +55,11 @@ class AppPaths:
         return self.cache / "thumbs"
 
     @property
+    def tiles_dir(self) -> Path:
+        """Directory for map tiles cache."""
+        return self.cache / "tiles"
+
+    @property
     def config_file(self) -> Path:
         """Path to the TOML configuration file."""
         return self.config / "config.toml"
@@ -75,4 +80,5 @@ class AppPaths:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.face_crops_dir.mkdir(parents=True, exist_ok=True)
         self.thumbs_dir.mkdir(parents=True, exist_ok=True)
+        self.tiles_dir.mkdir(parents=True, exist_ok=True)
         self.config.mkdir(parents=True, exist_ok=True)

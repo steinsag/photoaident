@@ -25,33 +25,33 @@ def test_navigation_shortcuts(qtbot, tmp_app_paths):
     window = _make_window(tmp_app_paths, qtbot)
 
     # Verify shortcuts are set correctly
-    assert window.btn_search.shortcut().toString() == "Alt+1"
-    assert window.btn_browse.shortcut().toString() == "Alt+2"
-    assert window.btn_persons.shortcut().toString() == "Alt+3"
-    assert window.btn_label.shortcut().toString() == "Alt+4"
+    assert window._page_btn_search.shortcut().toString() == "Alt+1"
+    assert window._page_btn_browse.shortcut().toString() == "Alt+2"
+    assert window._page_btn_persons.shortcut().toString() == "Alt+3"
+    assert window._page_btn_label.shortcut().toString() == "Alt+4"
 
     # Initial page should be 0 (Search)
-    assert window.stacked.currentIndex() == 0
+    assert window._stacked_pages.currentIndex() == 0
 
     # Switch to Browse (Alt+2)
-    window.btn_browse.animateClick()
+    window._page_btn_browse.animateClick()
     qtbot.wait(100)
-    assert window.stacked.currentIndex() == 1
+    assert window._stacked_pages.currentIndex() == 1
 
     # Switch to Persons (Alt+3)
-    window.btn_persons.animateClick()
+    window._page_btn_persons.animateClick()
     qtbot.wait(100)
-    assert window.stacked.currentIndex() == 2
+    assert window._stacked_pages.currentIndex() == 2
 
     # Switch to Labelling (Alt+4)
-    window.btn_label.animateClick()
+    window._page_btn_label.animateClick()
     qtbot.wait(100)
-    assert window.stacked.currentIndex() == 3
+    assert window._stacked_pages.currentIndex() == 3
 
     # Switch back to Search (Alt+1)
-    window.btn_search.animateClick()
+    window._page_btn_search.animateClick()
     qtbot.wait(100)
-    assert window.stacked.currentIndex() == 0
+    assert window._stacked_pages.currentIndex() == 0
 
 
 def test_app_setup(qtbot, tmp_app_paths):
@@ -61,8 +61,8 @@ def test_app_setup(qtbot, tmp_app_paths):
     window = _make_window(tmp_app_paths, qtbot)
 
     assert window.windowTitle() == "PhotoAIdent"
-    assert window.library_page is not None
-    assert window.labelling_page is not None
+    assert window._library_page is not None
+    assert window._labelling_page is not None
 
 
 def test_startup_triggers_inventory_scan_when_collection_path_set(qtbot, tmp_app_paths):
@@ -71,7 +71,7 @@ def test_startup_triggers_inventory_scan_when_collection_path_set(qtbot, tmp_app
     collection_dir.mkdir()
 
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
-    ctrl = window.indexing_controller
+    ctrl = window._indexing_controller
     # Ensure any auto-timer-started task is cleaned up first
     _reset_indexing_controller(ctrl)
 
@@ -86,7 +86,7 @@ def test_startup_triggers_inventory_scan_when_collection_path_set(qtbot, tmp_app
 def test_startup_skips_scan_when_no_collection_path(qtbot, tmp_app_paths):
     """_maybe_start_indexing does nothing when collection_path is empty."""
     window = _make_window(tmp_app_paths, qtbot, collection_path="")
-    ctrl = window.indexing_controller
+    ctrl = window._indexing_controller
     # Reset any task started by the timer
     _reset_indexing_controller(ctrl)
 
@@ -101,7 +101,7 @@ def test_startup_scan_idempotent_when_already_running(qtbot, tmp_app_paths):
     collection_dir = _make_collection_dir(tmp_app_paths)
 
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
-    ctrl = window.indexing_controller
+    ctrl = window._indexing_controller
     # Reset any timer-started tasks
     _reset_indexing_controller(ctrl)
 
@@ -120,7 +120,7 @@ def test_startup_scan_idempotent_when_already_running(qtbot, tmp_app_paths):
 def test_counts_label_shows_zeros_on_empty_db(qtbot, tmp_app_paths):
     """counts_label shows 0 images and 0 faces when the database is empty."""
     window = _make_window(tmp_app_paths, qtbot)
-    text = window.counts_label.text()
+    text = window._counts_label.text()
     assert "0" in text
 
 
@@ -129,7 +129,7 @@ def test_counts_label_reflects_db_contents(qtbot, tmp_app_paths):
     window = _make_window(tmp_app_paths, qtbot)
 
     # Insert one image and two faces directly via the session factory
-    with window.session_factory() as session:
+    with window._session_factory() as session:
         img = Image(file_path="/test/photo.jpg", file_hash="abc123", file_size=1000)
         session.add(img)
         session.flush()
@@ -161,7 +161,7 @@ def test_counts_label_reflects_db_contents(qtbot, tmp_app_paths):
 
     window._update_db_counts()
 
-    text = window.counts_label.text()
+    text = window._counts_label.text()
     assert "1" in text  # 1 image
     assert "2" in text  # 2 faces
 
@@ -170,14 +170,14 @@ def test_counts_label_updated_after_indexing_finished(qtbot, tmp_app_paths):
     """_on_indexing_finished refreshes the counts label."""
     window = _make_window(tmp_app_paths, qtbot)
 
-    with window.session_factory() as session:
+    with window._session_factory() as session:
         img = Image(file_path="/test/photo2.jpg", file_hash="def456", file_size=500)
         session.add(img)
         session.commit()
 
     window._on_indexing_finished()
 
-    text = window.counts_label.text()
+    text = window._counts_label.text()
     assert "1" in text  # 1 image
 
 
@@ -195,8 +195,8 @@ def test_onboarding_triggered_when_no_path(qtbot, tmp_app_paths, monkeypatch):
     window._maybe_start_indexing()
 
     assert len(onboarding_called) == 1
-    assert window.indexing_controller._inventory_task is None
-    assert window.indexing_controller._indexing_task is None
+    assert window._indexing_controller._inventory_task is None
+    assert window._indexing_controller._indexing_task is None
 
 
 def test_onboarding_not_triggered_when_path_set(qtbot, tmp_app_paths, monkeypatch):
@@ -205,7 +205,7 @@ def test_onboarding_not_triggered_when_path_set(qtbot, tmp_app_paths, monkeypatc
 
     window = _make_window(tmp_app_paths, qtbot, collection_path=str(collection_dir))
     monkeypatch.setattr(window, "_onboarding_enabled", True)
-    ctrl = window.indexing_controller
+    ctrl = window._indexing_controller
 
     # Ensure no background tasks from constructor timer interfere
     _reset_indexing_controller(ctrl)
@@ -235,11 +235,11 @@ def test_onboarding_accepted_saves_settings_and_starts_scan(
 
     window._on_onboarding_accepted(str(collection_dir))
 
-    assert window.settings.collection_path == str(collection_dir)
+    assert window._settings.collection_path == str(collection_dir)
     assert scan_called_with == [str(collection_dir)]
 
     # Settings must be persisted to disk
-    loaded = Settings.load(window.paths.config_file)
+    loaded = Settings.load(window._paths.config_file)
     assert loaded.collection_path == str(collection_dir)
 
 
@@ -309,7 +309,7 @@ def test_vector_store_loaded_when_faiss_file_exists(tmp_app_paths, qtbot):
     window = MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
     qtbot.addWidget(window)
 
-    assert window.vector_store is not None
+    assert window._vector_store is not None
 
 
 # ---------------------------------------------------------------------------
@@ -384,12 +384,12 @@ def test_start_indexing_only_idempotent(tmp_app_paths, qtbot):
     window = _make_window(tmp_app_paths, qtbot)
 
     mock_task = MagicMock()
-    window.indexing_controller._indexing_task = mock_task
+    window._indexing_controller._indexing_task = mock_task
 
-    window.indexing_controller.start_indexing_only()
+    window._indexing_controller.start_indexing_only()
 
     # Task object must not have been replaced
-    assert window.indexing_controller._indexing_task is mock_task
+    assert window._indexing_controller._indexing_task is mock_task
 
 
 # ---------------------------------------------------------------------------
@@ -404,14 +404,14 @@ def test_update_indexing_status_formats_label_and_reloads(
     window = _make_window(tmp_app_paths, qtbot)
     reloads: list[bool] = []
     monkeypatch.setattr(
-        window.library_page, "load_images", lambda: reloads.append(True)
+        window._library_page, "load_images", lambda: reloads.append(True)
     )
 
     window._update_indexing_status(50, 100, 7, "Testing")
-    assert "Testing" in window.indexing_label.text()
-    assert "50" in window.indexing_label.text()
-    assert "100" in window.indexing_label.text()
-    assert "7" in window.indexing_label.text()
+    assert "Testing" in window._indexing_label.text()
+    assert "50" in window._indexing_label.text()
+    assert "100" in window._indexing_label.text()
+    assert "7" in window._indexing_label.text()
     assert len(reloads) == 1  # 50 % 50 == 0 → reload
 
     window._update_indexing_status(51, 100, 7)
@@ -433,12 +433,12 @@ def test_switch_page_to_label_refreshes_labelling_page(
     window = _make_window(tmp_app_paths, qtbot)
     refreshed: list[bool] = []
     monkeypatch.setattr(
-        window.labelling_page, "refresh", lambda: refreshed.append(True)
+        window._labelling_page, "refresh", lambda: refreshed.append(True)
     )
 
     window._switch_page(3)
 
-    assert window.stacked.currentIndex() == 3
+    assert window._stacked_pages.currentIndex() == 3
     assert len(refreshed) == 1
 
 
@@ -454,15 +454,15 @@ def test_go_to_labelling_navigates_and_passes_priority(
     window = _make_window(tmp_app_paths, qtbot)
     refreshed_with: list[int | None] = []
     monkeypatch.setattr(
-        window.labelling_page,
+        window._labelling_page,
         "refresh",
         lambda priority_image_id=None: refreshed_with.append(priority_image_id),
     )
 
     window.go_to_labelling(42)
 
-    assert window.stacked.currentIndex() == 3
-    assert window.btn_label.isChecked()
+    assert window._stacked_pages.currentIndex() == 3
+    assert window._page_btn_label.isChecked()
     assert refreshed_with == [42]
 
 
@@ -505,7 +505,7 @@ def test_show_preferences_saves_settings_when_path_unchanged(
 
     window._show_preferences()
 
-    loaded = Settings.load(window.paths.config_file)
+    loaded = Settings.load(window._paths.config_file)
     assert loaded.collection_path == str(collection_dir)
 
 
@@ -528,8 +528,8 @@ def test_check_gpu_cuda_available(tmp_app_paths, qtbot, monkeypatch):
         monkeypatch.setitem(sys.modules, "insightface", MagicMock())
 
     captured: list[str] = []
-    window.gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
-    window.gpu_checker._probe()
+    window._gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
+    window._gpu_checker._probe()
 
     assert captured
     assert "GPU" in captured[0] or "✅" in captured[0]
@@ -546,8 +546,8 @@ def test_check_gpu_cpu_only(tmp_app_paths, qtbot, monkeypatch):
         monkeypatch.setitem(sys.modules, "insightface", MagicMock())
 
     captured: list[str] = []
-    window.gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
-    window.gpu_checker._probe()
+    window._gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
+    window._gpu_checker._probe()
 
     assert captured
     assert "CPU" in captured[0] or "⚠️" in captured[0]
@@ -569,8 +569,8 @@ def test_check_gpu_import_error(tmp_app_paths, qtbot, monkeypatch):
     monkeypatch.setattr(builtins, "__import__", mock_import)
 
     captured: list[str] = []
-    window.gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
-    window.gpu_checker._probe()
+    window._gpu_checker.status_ready.connect(lambda msg: captured.append(msg))
+    window._gpu_checker._probe()
 
     assert captured
     assert "❌" in captured[0]
@@ -599,8 +599,8 @@ def test_close_event_cancels_inventory_task(tmp_app_paths, qtbot):
 
     mock_task = MagicMock()
     mock_thread = MagicMock()
-    window.indexing_controller._inventory_task = mock_task
-    window.indexing_controller._inventory_thread = mock_thread
+    window._indexing_controller._inventory_task = mock_task
+    window._indexing_controller._inventory_thread = mock_thread
 
     event = MagicMock(spec=QtGui.QCloseEvent)
     window.closeEvent(event)
@@ -616,15 +616,15 @@ def test_close_event_cancels_indexing_task_and_saves_vector_store(tmp_app_paths,
 
     mock_task = MagicMock()
     mock_thread = MagicMock()
-    window.indexing_controller._indexing_task = mock_task
-    window.indexing_controller._indexing_thread = mock_thread
+    window._indexing_controller._indexing_task = mock_task
+    window._indexing_controller._indexing_thread = mock_thread
 
     event = MagicMock(spec=QtGui.QCloseEvent)
     window.closeEvent(event)
 
     mock_task.cancel.assert_called_once()
     mock_thread.quit.assert_called_once()
-    assert window.paths.faiss_path.exists()
+    assert window._paths.faiss_path.exists()
     event.accept.assert_called_once()
 
 
@@ -635,10 +635,10 @@ def test_close_event_handles_exceptions_gracefully(tmp_app_paths, qtbot, monkeyp
     mock_task = MagicMock()
     mock_task.cancel.side_effect = RuntimeError("already done")
     mock_thread = MagicMock()
-    window.indexing_controller._indexing_task = mock_task
-    window.indexing_controller._indexing_thread = mock_thread
+    window._indexing_controller._indexing_task = mock_task
+    window._indexing_controller._indexing_thread = mock_thread
     monkeypatch.setattr(
-        window.vector_store, "save", MagicMock(side_effect=OSError("disk full"))
+        window._vector_store, "save", MagicMock(side_effect=OSError("disk full"))
     )
 
     event = MagicMock(spec=QtGui.QCloseEvent)
@@ -653,7 +653,7 @@ def _make_window(
     """Helper: create a MainWindow with migrations applied. Onboarding is disabled."""
     apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
     window = MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
-    window.settings.collection_path = collection_path
+    window._settings.collection_path = collection_path
     qtbot.addWidget(window)
     return window
 

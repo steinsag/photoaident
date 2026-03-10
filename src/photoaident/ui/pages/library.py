@@ -3,9 +3,13 @@ from typing import TYPE_CHECKING
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
-from photoaident.core.search import find_images_by_person
-from photoaident.db.database import Image, Person
+from photoaident.core.geo import GpsBoundingBox
+from photoaident.core.search import search_images
+from photoaident.db.database import Person
+from photoaident.ui.widgets.map_dialog import MapLocationDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
+
+ASPECT_RATIO_WORLD_MAP_ICON = 1.97
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -21,13 +25,14 @@ class LibraryPage(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         paths: "AppPaths",
-        vector_store: "VectorStore | None" = None,
+        vector_store: "VectorStore",
         parent=None,
     ):
         super().__init__(parent)
         self.session_factory = session_factory
-        self.paths = paths
+        self._paths = paths
         self.vector_store = vector_store
+        self._gps_bbox: GpsBoundingBox | None = None
 
         # Top-level horizontal layout: center area + right filter panel
         layout = QtWidgets.QHBoxLayout(self)
@@ -51,7 +56,7 @@ class LibraryPage(QtWidgets.QWidget):
 
         # Placeholder shown when no person is selected
         self.empty_label = QtWidgets.QLabel(
-            self.tr("Select a person to start searching.")
+            self.tr("Select a person or location to start searching.")
         )
         self.empty_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setVisible(False)
@@ -65,6 +70,32 @@ class LibraryPage(QtWidgets.QWidget):
         self.filter_panel.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.filter_panel.setFixedWidth(220)
         panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
+        from photoaident.app import get_resource_path
+
+        self.map_location_btn = QtWidgets.QToolButton()
+        self.map_location_btn.setText(self.tr("Click to set location"))
+        self.map_location_btn.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+        )
+        icon_path = get_resource_path("assets/icons/world_map.svg")
+        world_map_icon = QtGui.QIcon(icon_path)
+        self.map_location_btn.setIcon(world_map_icon)
+        margins = panel_layout.contentsMargins()
+        icon_w = self.filter_panel.width() - margins.left() - margins.right()
+        self.map_location_btn.setIconSize(
+            QtCore.QSize(icon_w, round(icon_w / ASPECT_RATIO_WORLD_MAP_ICON))
+        )
+        self.map_location_btn.setCheckable(True)
+        self.map_location_btn.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.map_location_btn.clicked.connect(self._open_map_dialog)
+        panel_layout.addWidget(self.map_location_btn)
+
+        self.clear_location_btn = QtWidgets.QPushButton(self.tr("Clear Location"))
+        self.clear_location_btn.clicked.connect(self._on_location_cleared)
+        self.clear_location_btn.setVisible(False)
+        panel_layout.addWidget(self.clear_location_btn)
 
         person_header = QtWidgets.QLabel(self.tr("Person"))
         font = person_header.font()
@@ -126,68 +157,60 @@ class LibraryPage(QtWidgets.QWidget):
             for item in self.person_list_widget.selectedItems()
         ]
 
-    def _build_images_data(self, images: list) -> list:
-        result = []
-        for img in images:
-            thumb_path = (
-                self.paths.thumbs_dir / f"{img.file_hash}.jpg"
-                if img.file_hash
-                else self.paths.thumbs_dir / "unknown.jpg"
-            )
-            result.append((img.id, img.file_path, thumb_path))
-        return result
+    def _has_filters(self) -> bool:
+        """Check if any filters (person or location) are active."""
+        return bool(self._selected_person_ids()) or self._gps_bbox is not None
+
+    def _open_map_dialog(self) -> None:
+        dialog = MapLocationDialog(
+            paths=self._paths, initial_bbox=self._gps_bbox, parent=self
+        )
+        result = dialog.exec()
+        if result == QtWidgets.QDialog.DialogCode.Accepted:
+            self._gps_bbox = dialog.selected_bbox()
+            self.load_images()
+        self._update_map_button()
+
+    def _on_location_cleared(self) -> None:
+        self._gps_bbox = None
+        self._update_map_button()
+        self.load_images()
+
+    def _update_map_button(self) -> None:
+        if self._gps_bbox is None:
+            self.clear_location_btn.setVisible(False)
+            self.map_location_btn.setChecked(False)
+        else:
+            self.clear_location_btn.setVisible(True)
+            self.map_location_btn.setChecked(True)
 
     def load_images(self) -> None:
-        person_ids = self._selected_person_ids()
-
-        if not person_ids:
-            self.grid.set_results([])
+        """Fetch search results and update the UI accordingly."""
+        if not self._has_filters():
+            self.grid.clear()
             self.grid.setVisible(False)
             self.empty_label.setVisible(True)
+            self.empty_label.show()  # Explicit show
             return
 
+        person_ids = self._selected_person_ids()
+        results = search_images(
+            thumbs_dir=self._paths.thumbs_dir,
+            session_factory=self.session_factory,
+            vector_store=self.vector_store,
+            person_ids=person_ids,
+            gps_bbox=self._gps_bbox,
+        )
+
+        # Update visibility after retrieving results
+        if not results:
+            self.grid.clear()
+        else:
+            self.grid.set_results(results)
         self.empty_label.setVisible(False)
+        self.empty_label.hide()  # Explicit hide
         self.grid.setVisible(True)
-
-        if self.vector_store is None:
-            with self.session_factory() as session:
-                stmt = select(Image)
-                images = session.execute(stmt).unique().scalars().all()
-                self.grid.set_results(self._build_images_data(images))
-            return
-
-        # Intersect FAISS results: only images where ALL selected persons appear
-        per_person_scores: list[dict[int, float]] = []
-        for person_id in person_ids:
-            scores: dict[int, float] = {}
-            for img_id, score in find_images_by_person(
-                self.session_factory, self.vector_store, person_id
-            ):
-                scores[img_id] = score
-            per_person_scores.append(scores)
-
-        common_ids = set(per_person_scores[0].keys())
-        for scores in per_person_scores[1:]:
-            common_ids &= scores.keys()
-
-        # Rank by minimum score across persons (weakest match determines relevance)
-        image_scores: dict[int, float] = {
-            img_id: min(s[img_id] for s in per_person_scores) for img_id in common_ids
-        }
-
-        if not image_scores:
-            self.grid.set_results([])
-            return
-
-        sorted_pairs = sorted(image_scores.items(), key=lambda kv: kv[1], reverse=True)
-        ordered_ids = [img_id for img_id, _ in sorted_pairs]
-
-        with self.session_factory() as session:
-            stmt = select(Image).where(Image.id.in_(ordered_ids))
-            images = session.execute(stmt).unique().scalars().all()
-            image_map = {img.id: img for img in images}
-            ordered_images = [image_map[i] for i in ordered_ids if i in image_map]
-            self.grid.set_results(self._build_images_data(ordered_images))
+        self.grid.show()  # Explicit show
 
     def _on_navigate_to_labelling(self, image_id: int) -> None:
         from photoaident.app import MainWindow  # local import breaks circular dep

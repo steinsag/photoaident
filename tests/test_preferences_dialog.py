@@ -79,7 +79,7 @@ def test_preferences_save_settings(qtbot, tmp_app_paths, monkeypatch):
     window._show_preferences()
 
     # Verify settings in memory
-    assert window.settings.collection_path == "/mock/saved/path"
+    assert window._settings.collection_path == "/mock/saved/path"
 
     # Verify settings on disk
     loaded_settings = Settings.load(tmp_app_paths.config_file)
@@ -141,7 +141,7 @@ def test_preferences_cancel_not_saved(qtbot, tmp_app_paths, monkeypatch):
     window._show_preferences()
 
     # Verify settings in memory NOT updated
-    assert window.settings.collection_path == initial_path
+    assert window._settings.collection_path == initial_path
 
     # Verify settings on disk NOT updated
     loaded_settings = Settings.load(tmp_app_paths.config_file)
