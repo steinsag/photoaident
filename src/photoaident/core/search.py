@@ -57,38 +57,64 @@ def search_images(
     if not person_ids and not gps_bbox:
         return []
 
-    # Case: GPS only — use a subquery to avoid SQLite's bound-parameter limit
     if not person_ids and gps_bbox is not None:
-        with session_factory() as session:
-            stmt = (
-                select(Image)
-                .where(Image.id.in_(_gps_bbox_subquery(gps_bbox)))
-                .order_by(Image.id)
-            )
-            images = session.execute(stmt).unique().scalars().all()
-            return __format_results(images, thumbs_dir)
+        return _search_by_gps_only(session_factory, gps_bbox, thumbs_dir)
 
-    # Person filter (with optional GPS): materialise GPS IDs for in-memory intersection
-    gps_image_ids: set[int] | None = None
-    if gps_bbox:
-        gps_image_ids = set(_find_images_by_gps_bbox(session_factory, gps_bbox))
-
-    per_person_scores: list[dict[int, float]] = []
-    for person_id in person_ids:
-        scores: dict[int, float] = {}
-        for img_id, score in _find_images_by_person(
-            session_factory, vector_store, person_id
-        ):
-            if gps_image_ids is None or img_id in gps_image_ids:
-                scores[img_id] = score
-        per_person_scores.append(scores)
-
-    if not per_person_scores:
-        # This could happen if person_ids was empty but we handled that above.
-        # Or if find_images_by_person returned nothing.
+    gps_image_ids = (
+        set(_find_images_by_gps_bbox(session_factory, gps_bbox)) if gps_bbox else None
+    )
+    per_person_scores = _collect_per_person_scores(
+        session_factory, vector_store, person_ids, gps_image_ids
+    )
+    ordered_ids = _intersect_and_rank(per_person_scores)
+    if not ordered_ids:
         return []
 
-    # Intersection: image must contain ALL selected persons
+    images = _fetch_ordered_images(session_factory, ordered_ids)
+    return __format_results(images, thumbs_dir)
+
+
+def _search_by_gps_only(
+    session_factory: "sessionmaker",
+    gps_bbox: GpsBoundingBox,
+    thumbs_dir: Path,
+) -> list[SearchResult]:
+    """Return results for a GPS-only query via subquery (avoids bound-param limit)."""
+    with session_factory() as session:
+        stmt = (
+            select(Image)
+            .where(Image.id.in_(_gps_bbox_subquery(gps_bbox)))
+            .order_by(Image.id)
+        )
+        images: list[Image] = list(session.execute(stmt).unique().scalars().all())
+    return __format_results(images, thumbs_dir)
+
+
+def _collect_per_person_scores(
+    session_factory: "sessionmaker",
+    vector_store: "VectorStore",
+    person_ids: list[int],
+    gps_image_ids: set[int] | None,
+) -> list[dict[int, float]]:
+    """Build one score-dict per person, optionally filtered to GPS image IDs."""
+    per_person_scores: list[dict[int, float]] = []
+    for person_id in person_ids:
+        scores: dict[int, float] = {
+            img_id: score
+            for img_id, score in _find_images_by_person(
+                session_factory, vector_store, person_id
+            )
+            if gps_image_ids is None or img_id in gps_image_ids
+        }
+        per_person_scores.append(scores)
+    return per_person_scores
+
+
+def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
+    """Return image IDs present in all per-person dicts, ranked by min score desc."""
+    if not per_person_scores:
+        return []
+
     common_ids = set(per_person_scores[0].keys())
     for scores in per_person_scores[1:]:
         common_ids &= scores.keys()
@@ -96,28 +122,32 @@ def search_images(
     if not common_ids:
         return []
 
-    # Rank by minimum score across persons (weakest match determines relevance)
-    image_scores: dict[int, float] = {
-        img_id: min(s[img_id] for s in per_person_scores) for img_id in common_ids
-    }
+    # Weakest match across persons determines relevance
+    ranked = sorted(
+        common_ids,
+        key=lambda img_id: min(s[img_id] for s in per_person_scores),
+        reverse=True,
+    )
+    return ranked
 
-    sorted_pairs = sorted(image_scores.items(), key=lambda kv: kv[1], reverse=True)
-    ordered_ids = [img_id for img_id, _ in sorted_pairs]
 
+def _fetch_ordered_images(
+    session_factory: "sessionmaker",
+    ordered_ids: list[int],
+) -> list[Image]:
+    """Fetch Image rows for the given IDs, preserving the requested order."""
     with session_factory() as session:
         image_map: dict[int, Image] = {}
         for chunk_start in range(0, len(ordered_ids), _SQLITE_IN_LIMIT):
             chunk = ordered_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
-            rows = (
+            for img in (
                 session.execute(select(Image).where(Image.id.in_(chunk)))
                 .unique()
                 .scalars()
                 .all()
-            )
-            for img in rows:
+            ):
                 image_map[img.id] = img
-        ordered_images = [image_map[i] for i in ordered_ids if i in image_map]
-        return __format_results(ordered_images, thumbs_dir)
+    return [image_map[i] for i in ordered_ids if i in image_map]
 
 
 def __compute_cluster_mean(
