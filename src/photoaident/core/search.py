@@ -71,7 +71,7 @@ def search_images(
         return []
 
     images = _fetch_ordered_images(session_factory, ordered_ids)
-    return __format_results(images, thumbs_dir)
+    return _format_results(images, thumbs_dir)
 
 
 def _search_by_gps_only(
@@ -87,7 +87,7 @@ def _search_by_gps_only(
             .order_by(Image.id)
         )
         images: list[Image] = list(session.execute(stmt).unique().scalars().all())
-    return __format_results(images, thumbs_dir)
+    return _format_results(images, thumbs_dir)
 
 
 def _collect_per_person_scores(
@@ -155,7 +155,7 @@ def __compute_cluster_mean(
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
 ) -> "np.ndarray | None":
-    """Return normalised mean embedding for a cluster, or None if no valid faces."""
+    """Return normalized mean embedding for a cluster, or None if no valid faces."""
     with session_factory() as session:
         faiss_ids = list(
             session.scalars(
@@ -286,8 +286,8 @@ def _find_images_by_person(
 def _gps_bbox_subquery(bbox: GpsBoundingBox):
     """Return a SELECT subquery for image_ids within the GPS bounding box.
 
-    Returns a SQLAlchemy select statement (not yet executed) so callers can
-    embed it as a subquery without materialising results as bound parameters.
+    Returns an SQLAlchemy select statement (not yet executed) so callers can
+    embed it as a subquery without materializing results as bound parameters.
     """
     if bbox.west <= bbox.east:
         return select(ImageMetadata.image_id).where(
@@ -328,7 +328,7 @@ def _find_images_by_gps_bbox(
         return list(session.scalars(_gps_bbox_subquery(bbox)).all())
 
 
-def __format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]:
+def _format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]:
     """Format Image objects into SearchResult objects for the UI."""
     return [
         SearchResult(
