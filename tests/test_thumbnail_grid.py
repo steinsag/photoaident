@@ -13,6 +13,7 @@ from photoaident.db.database import (
     get_engine,
     get_session_factory,
 )
+from photoaident.core.search import SearchResult
 from photoaident.db.migrate import apply_migrations
 from photoaident.paths import AppPaths
 from photoaident.ui.widgets.thumbnail_grid import (
@@ -315,7 +316,9 @@ def test_set_results_loads_first_page_only(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)
+    ]
     grid.set_results(results)
 
     # Only the first page is loaded synchronously; deferred fill not yet triggered
@@ -327,7 +330,9 @@ def test_set_results_fewer_than_page_size(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(10)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(10)
+    ]
     grid.set_results(results)
 
     assert len(grid.thumbnails) == 10
@@ -348,7 +353,9 @@ def test_set_results_emits_results_changed(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(50)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(50)
+    ]
 
     received = []
     grid.results_changed.connect(lambda n: received.append(n))
@@ -361,7 +368,9 @@ def test_page_loaded_signal(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)
+    ]
 
     signals: list[tuple[int, int]] = []
     grid.page_loaded.connect(lambda loaded, total: signals.append((loaded, total)))
@@ -375,11 +384,15 @@ def test_set_results_resets_previous(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results1 = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    results1 = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)
+    ]
     grid.set_results(results1)
     assert len(grid.thumbnails) == PAGE_SIZE
 
-    results2 = [(i, str(sample_image), tmp_path / f"s{i}.jpg") for i in range(100)]
+    results2 = [
+        SearchResult(i, str(sample_image), tmp_path / f"s{i}.jpg") for i in range(100)
+    ]
     grid.set_results(results2)
 
     assert len(grid.thumbnails) == PAGE_SIZE
@@ -390,7 +403,9 @@ def test_hint_label_shown_when_more_remain(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)
+    ]
     grid.set_results(results)
 
     assert not grid._hint_label.isHidden()
@@ -403,7 +418,9 @@ def test_hint_label_hidden_when_all_loaded(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(10)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(10)
+    ]
     grid.set_results(results)
 
     assert grid._hint_label.isHidden()
@@ -413,7 +430,9 @@ def test_scroll_triggers_load_more(qtbot, sample_image, tmp_path):
     grid = ThumbnailGrid()
     qtbot.addWidget(grid)
 
-    results = [(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)]
+    results = [
+        SearchResult(i, str(sample_image), tmp_path / f"t{i}.jpg") for i in range(100)
+    ]
     grid.set_results(results)
 
     initial_count = grid._loaded_count

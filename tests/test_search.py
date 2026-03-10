@@ -313,7 +313,7 @@ def test_search_images_gps_only(search_db, tmp_path):
     results = search_images(tmp_path, search_db, vs, person_ids=[], gps_bbox=bbox)
 
     assert len(results) == 1
-    assert results[0][0] == img1_id
+    assert results[0].image_id == img1_id
 
 
 def test_search_images_person_only(search_db, vs, tmp_path):
@@ -327,7 +327,7 @@ def test_search_images_person_only(search_db, vs, tmp_path):
     )
 
     assert len(results) == 1
-    assert results[0][0] == img_id
+    assert results[0].image_id == img_id
 
 
 def test_search_images_intersection(search_db, vs, tmp_path):
@@ -369,7 +369,7 @@ def test_search_images_intersection(search_db, vs, tmp_path):
     )
 
     assert len(results) == 1
-    assert results[0][0] == img1_id
+    assert results[0].image_id == img1_id
 
 
 def test_search_images_multiple_persons(search_db, vs, tmp_path):
@@ -435,7 +435,7 @@ def test_search_images_multiple_persons(search_db, vs, tmp_path):
         tmp_path, search_db, vs, person_ids=[p1_id, p2_id], gps_bbox=None
     )
     assert len(results_both) == 1
-    assert results_both[0][0] == both_id
+    assert results_both[0].image_id == both_id
 
     # Intersection with no common images
     p3_id, c3_id = _add_person_cluster(search_db)
@@ -543,8 +543,8 @@ def test_search_images_ranking(search_db, vs, tmp_path):
         tmp_path, search_db, vs, person_ids=[p1_id, p2_id], gps_bbox=None
     )
     assert len(results) == 2
-    assert results[0][0] == img1_id
-    assert results[1][0] == img2_id
+    assert results[0].image_id == img1_id
+    assert results[1].image_id == img2_id
 
 
 def test_search_images_empty_input_returns_empty(search_db, vs, tmp_path):

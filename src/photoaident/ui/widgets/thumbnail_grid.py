@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
+from photoaident.core.search import SearchResult
 from photoaident.db.database import Face, FaceState, Image
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.utils.image_utils import generate_thumbnail
@@ -324,7 +325,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.thumbnails: list = []
         self.cols = 4
 
-        self._all_results: list[tuple[int, str, Path]] = []
+        self._all_results: list[SearchResult] = []
         self._loaded_count: int = 0
 
         self.scroll_area.verticalScrollBar().valueChanged.connect(
@@ -381,7 +382,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.grid_layout.addWidget(thumb, row, col)
         self.thumbnails.append(thumb)
 
-    def set_results(self, results: Iterable[tuple[int, str, Path]]) -> None:
+    def set_results(self, results: Iterable[SearchResult]) -> None:
         self.clear()
         self._all_results = list(results)
         self._load_next_page()
@@ -389,8 +390,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     def _load_next_page(self):
         batch = self._all_results[self._loaded_count : self._loaded_count + PAGE_SIZE]
-        for image_id, file_path, thumb_path in batch:
-            self.add_thumbnail(image_id, file_path, thumb_path)
+        for result in batch:
+            self.add_thumbnail(result.image_id, result.file_path, result.thumb_path)
         self._loaded_count += len(batch)
         self._update_scroll_hint()
         self.page_loaded.emit(self._loaded_count, len(self._all_results))

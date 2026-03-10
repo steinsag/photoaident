@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QKeyEvent
 from sqlalchemy import select
 
+from photoaident.core.search import SearchResult
 from photoaident.db.database import Image
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
@@ -285,13 +286,13 @@ class BrowsePage(QtWidgets.QWidget):
         if isinstance(main, MainWindow):
             main.go_to_labelling(image_id)
 
-    def _build_images_data(self, images: list[Image]) -> list[tuple[int, str, Path]]:
-        """Build (image_id, file_path, thumb_path) tuples for ThumbnailGrid."""
+    def _build_images_data(self, images: list[Image]) -> list[SearchResult]:
+        """Build SearchResult objects for ThumbnailGrid."""
         return [
-            (
-                img.id,
-                img.file_path,
-                self.paths.thumbs_dir
+            SearchResult(
+                image_id=img.id,
+                file_path=img.file_path,
+                thumb_path=self.paths.thumbs_dir
                 / (f"{img.file_hash}.jpg" if img.file_hash else "unknown.jpg"),
             )
             for img in images

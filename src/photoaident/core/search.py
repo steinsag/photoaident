@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 import numpy as np
@@ -17,19 +19,27 @@ from photoaident.db.database import (
 )
 
 if TYPE_CHECKING:
-    from pathlib import Path
     from sqlalchemy.orm import sessionmaker
 
     from photoaident.db.vector_store import VectorStore
 
 
+@dataclass
+class SearchResult:
+    """A single search result referencing an image."""
+
+    image_id: int
+    file_path: str
+    thumb_path: Path
+
+
 def search_images(
-    thumbs_dir: "Path",
+    thumbs_dir: Path,
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     person_ids: list[int],
     gps_bbox: Optional[GpsBoundingBox],
-) -> list[tuple[int, str, "Path"]]:
+) -> list[SearchResult]:
     """Search for images based on person and/or GPS filters.
 
     Args:
@@ -40,7 +50,7 @@ def search_images(
         gps_bbox: GPS bounding box to filter by.
 
     Returns:
-        List of (image_id, file_path, thumb_path) tuples.
+        List of SearchResult objects.
     """
     if not person_ids and not gps_bbox:
         return []
@@ -273,16 +283,17 @@ def _find_images_by_gps_bbox(
         return list(session.scalars(_gps_bbox_subquery(bbox)).all())
 
 
-def __format_results(
-    images: list[Image], thumbs_dir: "Path"
-) -> list[tuple[int, str, "Path"]]:
-    """Format Image objects into (id, path, thumb) tuples for the UI."""
-    result = []
-    for img in images:
-        thumb_path = (
-            thumbs_dir / f"{img.file_hash}.jpg"
-            if img.file_hash
-            else thumbs_dir / "unknown.jpg"
+def __format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]:
+    """Format Image objects into SearchResult objects for the UI."""
+    return [
+        SearchResult(
+            image_id=img.id,
+            file_path=img.file_path,
+            thumb_path=(
+                thumbs_dir / f"{img.file_hash}.jpg"
+                if img.file_hash
+                else thumbs_dir / "unknown.jpg"
+            ),
         )
-        result.append((img.id, img.file_path, thumb_path))
-    return result
+        for img in images
+    ]
