@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Optional
 import numpy as np
 from sqlalchemy import select, and_
 
+from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.db.database import (
     EmbeddingCluster,
@@ -41,8 +42,9 @@ def search_images(
     vector_store: "VectorStore",
     person_ids: list[int],
     gps_bbox: Optional[GpsBoundingBox],
+    date_range: Optional[DateRange] = None,
 ) -> list[SearchResult]:
-    """Search for images based on person and/or GPS filters.
+    """Search for images based on person, GPS, and/or date filters.
 
     Args:
         thumbs_dir: Directory where thumbnails are stored.
@@ -50,21 +52,30 @@ def search_images(
         vector_store: FAISS vector store.
         person_ids: List of person IDs to filter by.
         gps_bbox: GPS bounding box to filter by.
+        date_range: Date range to filter by.
 
     Returns:
         List of SearchResult objects.
     """
-    if not person_ids and not gps_bbox:
+    if not person_ids and not gps_bbox and not date_range:
         return []
 
-    if not person_ids and gps_bbox is not None:
-        return _search_by_gps_only(session_factory, gps_bbox, thumbs_dir)
+    # Build combined metadata image ID set (AND intersection)
+    metadata_ids: set[int] | None = None
+    if gps_bbox is not None:
+        gps_ids = set(_find_images_by_gps_bbox(session_factory, gps_bbox))
+        metadata_ids = gps_ids
+    if date_range is not None:
+        date_ids = set(_find_images_by_date_range(session_factory, date_range))
+        metadata_ids = date_ids if metadata_ids is None else metadata_ids & date_ids
 
-    gps_image_ids = (
-        set(_find_images_by_gps_bbox(session_factory, gps_bbox)) if gps_bbox else None
-    )
+    if not person_ids:
+        if metadata_ids is None:
+            return []
+        return _search_by_metadata_only(session_factory, metadata_ids, thumbs_dir)
+
     per_person_scores = _collect_per_person_scores(
-        session_factory, vector_store, person_ids, gps_image_ids
+        session_factory, vector_store, person_ids, metadata_ids
     )
     ordered_ids = _intersect_and_rank(per_person_scores)
     if not ordered_ids:
@@ -74,18 +85,16 @@ def search_images(
     return _format_results(images, thumbs_dir)
 
 
-def _search_by_gps_only(
+def _search_by_metadata_only(
     session_factory: "sessionmaker",
-    gps_bbox: GpsBoundingBox,
+    image_ids: set[int],
     thumbs_dir: Path,
 ) -> list[SearchResult]:
-    """Return results for a GPS-only query via subquery (avoids bound-param limit)."""
+    """Return results for a metadata-only query from a set of image IDs."""
+    if not image_ids:
+        return []
     with session_factory() as session:
-        stmt = (
-            select(Image)
-            .where(Image.id.in_(_gps_bbox_subquery(gps_bbox)))
-            .order_by(Image.id)
-        )
+        stmt = select(Image).where(Image.id.in_(image_ids)).order_by(Image.id)
         images: list[Image] = list(session.execute(stmt).unique().scalars().all())
     return _format_results(images, thumbs_dir)
 
@@ -94,9 +103,9 @@ def _collect_per_person_scores(
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     person_ids: list[int],
-    gps_image_ids: set[int] | None,
+    filter_image_ids: set[int] | None,
 ) -> list[dict[int, float]]:
-    """Build one score-dict per person, optionally filtered to GPS image IDs."""
+    """Build one score-dict per person, optionally filtered to metadata image IDs."""
     per_person_scores: list[dict[int, float]] = []
     for person_id in person_ids:
         scores: dict[int, float] = {
@@ -104,7 +113,7 @@ def _collect_per_person_scores(
             for img_id, score in _find_images_by_person(
                 session_factory, vector_store, person_id
             )
-            if gps_image_ids is None or img_id in gps_image_ids
+            if filter_image_ids is None or img_id in filter_image_ids
         }
         per_person_scores.append(scores)
     return per_person_scores
@@ -326,6 +335,44 @@ def _find_images_by_gps_bbox(
     """
     with session_factory() as session:
         return list(session.scalars(_gps_bbox_subquery(bbox)).all())
+
+
+def _date_range_subquery(date_range: DateRange):
+    """Return a SELECT subquery for image_ids within the given date range.
+
+    Returns an SQLAlchemy select statement (not yet executed) so callers can
+    embed it as a subquery without materializing results as bound parameters.
+    """
+    conditions = []
+    start_dt = date_range.to_start_datetime()
+    end_dt = date_range.to_end_datetime()
+
+    if start_dt is not None:
+        conditions.append(ImageMetadata.taken_at >= start_dt)
+    if end_dt is not None:
+        conditions.append(ImageMetadata.taken_at <= end_dt)
+
+    # Exclude rows where taken_at is NULL
+    conditions.append(ImageMetadata.taken_at.is_not(None))
+
+    return select(ImageMetadata.image_id).where(and_(*conditions))
+
+
+def _find_images_by_date_range(
+    session_factory: "sessionmaker",
+    date_range: DateRange,
+) -> list[int]:
+    """Return image IDs whose taken_at falls within the given date range.
+
+    Args:
+        session_factory: SQLAlchemy session factory.
+        date_range: The date range to filter by.
+
+    Returns:
+        List of image IDs.
+    """
+    with session_factory() as session:
+        return list(session.scalars(_date_range_subquery(date_range)).all())
 
 
 def _format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]:

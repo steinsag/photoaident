@@ -3,9 +3,14 @@ from typing import TYPE_CHECKING
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
+from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import search_images
 from photoaident.db.database import Person
+from photoaident.ui.widgets.date_filter_dialog import (
+    DateFilterDialog,
+    format_date_range,
+)
 from photoaident.ui.widgets.map_dialog import MapLocationDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
@@ -19,7 +24,7 @@ if TYPE_CHECKING:
 
 
 class LibraryPage(QtWidgets.QWidget):
-    """Page showing all indexed images with filtering by person."""
+    """Page showing all indexed images with filtering by person, location, and date."""
 
     def __init__(
         self,
@@ -33,6 +38,7 @@ class LibraryPage(QtWidgets.QWidget):
         self._paths = paths
         self.vector_store = vector_store
         self._gps_bbox: GpsBoundingBox | None = None
+        self._date_range: DateRange | None = None
 
         # Top-level horizontal layout: center area + right filter panel
         layout = QtWidgets.QHBoxLayout(self)
@@ -54,9 +60,9 @@ class LibraryPage(QtWidgets.QWidget):
         self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
         center_layout.addWidget(self.grid, stretch=1)
 
-        # Placeholder shown when no person is selected
+        # Placeholder shown when no filters are active
         self.empty_label = QtWidgets.QLabel(
-            self.tr("Select a person or location to start searching.")
+            self.tr("Select a person, location, or time range to start searching.")
         )
         self.empty_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.empty_label.setVisible(False)
@@ -71,6 +77,9 @@ class LibraryPage(QtWidgets.QWidget):
         self.filter_panel.setFixedWidth(220)
         panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
         from photoaident.app import get_resource_path
+
+        # --- Location section ---
+        self._add_header(self.tr("Location"), panel_layout)
 
         self.map_location_btn = QtWidgets.QToolButton()
         self.map_location_btn.setText(self.tr("Click to set location"))
@@ -97,11 +106,34 @@ class LibraryPage(QtWidgets.QWidget):
         self.clear_location_btn.setVisible(False)
         panel_layout.addWidget(self.clear_location_btn)
 
-        person_header = QtWidgets.QLabel(self.tr("Person"))
-        font = person_header.font()
-        font.setBold(True)
-        person_header.setFont(font)
-        panel_layout.addWidget(person_header)
+        # --- Time section ---
+        self._add_header(self.tr("Time"), panel_layout)
+
+        self.date_filter_btn = QtWidgets.QToolButton()
+        self.date_filter_btn.setText(self.tr("Click to set time range"))
+        self.date_filter_btn.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon
+        )
+        calendar_icon_path = get_resource_path("assets/icons/calendar.svg")
+        calendar_icon = QtGui.QIcon(calendar_icon_path)
+        self.date_filter_btn.setIcon(calendar_icon)
+        self.date_filter_btn.setIconSize(
+            QtCore.QSize(round(icon_w / 3), round(icon_w / 3))
+        )
+        self.date_filter_btn.setCheckable(True)
+        self.date_filter_btn.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
+        )
+        self.date_filter_btn.clicked.connect(self._open_date_dialog)
+        panel_layout.addWidget(self.date_filter_btn)
+
+        self.clear_time_btn = QtWidgets.QPushButton(self.tr("Clear Time"))
+        self.clear_time_btn.clicked.connect(self._on_time_cleared)
+        self.clear_time_btn.setVisible(False)
+        panel_layout.addWidget(self.clear_time_btn)
+
+        # --- Person section ---
+        self._add_header(self.tr("Person"), panel_layout)
 
         self.search_edit = QtWidgets.QLineEdit()
         self.search_edit.setPlaceholderText(self.tr("Type to filter"))
@@ -158,8 +190,12 @@ class LibraryPage(QtWidgets.QWidget):
         ]
 
     def _has_filters(self) -> bool:
-        """Check if any filters (person or location) are active."""
-        return bool(self._selected_person_ids()) or self._gps_bbox is not None
+        """Check if any filters (person, location, or time) are active."""
+        return (
+            bool(self._selected_person_ids())
+            or self._gps_bbox is not None
+            or self._date_range is not None
+        )
 
     def _open_map_dialog(self) -> None:
         dialog = MapLocationDialog(
@@ -184,6 +220,33 @@ class LibraryPage(QtWidgets.QWidget):
             self.clear_location_btn.setVisible(True)
             self.map_location_btn.setChecked(True)
 
+    def _open_date_dialog(self) -> None:
+        dialog = DateFilterDialog(
+            session_factory=self.session_factory,
+            initial_range=self._date_range,
+            parent=self,
+        )
+        result = dialog.exec()
+        if result == QtWidgets.QDialog.DialogCode.Accepted:
+            self._date_range = dialog.selected_range()
+            self.load_images()
+        self._update_time_button()
+
+    def _on_time_cleared(self) -> None:
+        self._date_range = None
+        self._update_time_button()
+        self.load_images()
+
+    def _update_time_button(self) -> None:
+        if self._date_range is None:
+            self.clear_time_btn.setVisible(False)
+            self.date_filter_btn.setChecked(False)
+            self.date_filter_btn.setText(self.tr("Click to set time range"))
+        else:
+            self.clear_time_btn.setVisible(True)
+            self.date_filter_btn.setChecked(True)
+            self.date_filter_btn.setText(format_date_range(self._date_range))
+
     def load_images(self) -> None:
         """Fetch search results and update the UI accordingly."""
         if not self._has_filters():
@@ -200,6 +263,7 @@ class LibraryPage(QtWidgets.QWidget):
             vector_store=self.vector_store,
             person_ids=person_ids,
             gps_bbox=self._gps_bbox,
+            date_range=self._date_range,
         )
 
         # Update visibility after retrieving results
@@ -218,3 +282,11 @@ class LibraryPage(QtWidgets.QWidget):
         main = self.window()
         if isinstance(main, MainWindow):
             main.go_to_labelling(image_id)
+
+    @staticmethod
+    def _add_header(title: str, panel_widget: QtWidgets.QVBoxLayout) -> None:
+        header = QtWidgets.QLabel(title)
+        font = header.font()
+        font.setBold(True)
+        header.setFont(font)
+        panel_widget.addWidget(header)

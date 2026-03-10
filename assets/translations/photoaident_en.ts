@@ -76,6 +76,37 @@
     </message>
 </context>
 <context>
+    <name>DateFilterDialog</name>
+    <message>
+        <source>Select Time Range</source>
+        <translation>Select Time Range</translation>
+    </message>
+    <message>
+        <source>Select the start and end of the time range to filter by.</source>
+        <translation>Select the start and end of the time range to filter by.</translation>
+    </message>
+    <message>
+        <source>From:</source>
+        <translation>From:</translation>
+    </message>
+    <message>
+        <source>To:</source>
+        <translation>To:</translation>
+    </message>
+    <message>
+        <source>(not set)</source>
+        <translation>(not set)</translation>
+    </message>
+    <message>
+        <source>Invalid Date Range</source>
+        <translation>Invalid Date Range</translation>
+    </message>
+    <message>
+        <source>The selected date range is invalid: {error}</source>
+        <translation>The selected date range is invalid: {error}</translation>
+    </message>
+</context>
+<context>
     <name>FaceCropWidget</name>
     <message>
         <source>No image</source>
@@ -225,8 +256,12 @@ Please close it before starting a new one.</translation>
         <translation>Type to search by keyword. Use @… to search for person.</translation>
     </message>
     <message>
-        <source>Select a person or location to start searching.</source>
-        <translation>Select a person or location to start searching.</translation>
+        <source>Select a person, location, or time range to start searching.</source>
+        <translation>Select a person, location, or time range to start searching.</translation>
+    </message>
+    <message>
+        <source>Location</source>
+        <translation>Location</translation>
     </message>
     <message>
         <source>Click to set location</source>
@@ -235,6 +270,18 @@ Please close it before starting a new one.</translation>
     <message>
         <source>Clear Location</source>
         <translation>Clear Location</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Time</translation>
+    </message>
+    <message>
+        <source>Click to set time range</source>
+        <translation>Click to set time range</translation>
+    </message>
+    <message>
+        <source>Clear Time</source>
+        <translation>Clear Time</translation>
     </message>
     <message>
         <source>Person</source>

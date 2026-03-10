@@ -1,9 +1,11 @@
 from typing import Generator
 
 import pytest
+from sqlalchemy import create_engine
 
-from photoaident.db.database import get_engine
+from photoaident.db.database import get_engine, get_session_factory
 from photoaident.db.migrate import apply_migrations
+from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 
 
@@ -46,10 +48,18 @@ def db_session(db_engine):
 
 
 @pytest.fixture
-def vector_store():
-    from photoaident.db.vector_store import VectorStore
-
+def vector_store() -> VectorStore:
+    """A fresh FAISS VectorStore for tests that need the high-level fixture name."""
     return VectorStore()
+
+
+@pytest.fixture
+def search_db(tmp_path):
+    """Fresh per-test SQLite DB with migrations applied (search-layer tests)."""
+    db_path = tmp_path / "search.db"
+    apply_migrations(f"sqlite:///{db_path}")
+    engine = create_engine(f"sqlite:///{db_path}")
+    return get_session_factory(engine)
 
 
 @pytest.fixture(scope="session")

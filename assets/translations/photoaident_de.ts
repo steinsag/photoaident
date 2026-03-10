@@ -76,6 +76,37 @@
     </message>
 </context>
 <context>
+    <name>DateFilterDialog</name>
+    <message>
+        <source>Select Time Range</source>
+        <translation>Zeitraum wählen</translation>
+    </message>
+    <message>
+        <source>Select the start and end of the time range to filter by.</source>
+        <translation>Wählen Sie Beginn und Ende des Zeitraums zum Filtern aus.</translation>
+    </message>
+    <message>
+        <source>From:</source>
+        <translation>Von:</translation>
+    </message>
+    <message>
+        <source>To:</source>
+        <translation>Bis:</translation>
+    </message>
+    <message>
+        <source>(not set)</source>
+        <translation>(nicht gesetzt)</translation>
+    </message>
+    <message>
+        <source>Invalid Date Range</source>
+        <translation>Ungültiger Zeitraum</translation>
+    </message>
+    <message>
+        <source>The selected date range is invalid: {error}</source>
+        <translation>Der ausgewählte Zeitraum ist ungültig: {error}</translation>
+    </message>
+</context>
+<context>
     <name>FaceCropWidget</name>
     <message>
         <source>No image</source>
@@ -227,8 +258,12 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
         <translation>Stichwort eingeben. @… für Personensuche.</translation>
     </message>
     <message>
-        <source>Select a person or location to start searching.</source>
-        <translation>Person oder Standort auswählen, um die Suche zu starten.</translation>
+        <source>Select a person, location, or time range to start searching.</source>
+        <translation>Person, Standort oder Zeitraum auswählen, um die Suche zu starten.</translation>
+    </message>
+    <message>
+        <source>Location</source>
+        <translation>Standort</translation>
     </message>
     <message>
         <source>Click to set location</source>
@@ -237,6 +272,18 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <message>
         <source>Clear Location</source>
         <translation>Standort löschen</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Zeitraum</translation>
+    </message>
+    <message>
+        <source>Click to set time range</source>
+        <translation>Klicken, um Zeitraum festzulegen</translation>
+    </message>
+    <message>
+        <source>Clear Time</source>
+        <translation>Zeitraum löschen</translation>
     </message>
     <message>
         <source>Person</source>
@@ -346,7 +393,8 @@ Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
         <source>Pan and zoom the map. The highlighted area defines the search region.</source>
-        <translation>Karte verschieben und zoomen. Der hervorgehobene Bereich definiert den Suchbereich.</translation>
+        <translation>Karte verschieben und zoomen. Der hervorgehobene Bereich definiert den Suchbereich.
+            </translation>
     </message>
 </context>
 <context>
