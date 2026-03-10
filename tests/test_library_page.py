@@ -15,8 +15,6 @@ from photoaident.db.database import (
     Person,
     get_engine,
     get_session_factory,
-    ImageMetadata,
-    TakenAtSource,
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
@@ -34,38 +32,6 @@ def session_factory(tmp_path):
 @pytest.fixture
 def vs():
     return VectorStore()
-
-
-def _add_test_images_with_gps(session_factory):
-    """Add two images with GPS metadata. Return (img1_id, img2_id)."""
-    with session_factory() as session:
-        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
-        session.add(img1)
-        session.flush()
-        meta1 = ImageMetadata(
-            image_id=img1.id,
-            gps_lat=52.5,
-            gps_lon=13.4,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta1)
-
-        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
-        session.add(img2)
-        session.flush()
-        meta2 = ImageMetadata(
-            image_id=img2.id,
-            gps_lat=40.0,
-            gps_lon=10.0,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
-        )
-        session.add(meta2)
-        session.commit()
-        return img1.id, img2.id
 
 
 def _add_image(
@@ -114,51 +80,6 @@ def _add_person_with_face(session_factory, vs, name, file_path):
         session.add(face)
         session.commit()
         return person_id, img.id
-
-
-def _add_two_persons_with_embeddings(session_factory, vs):
-    """
-    Add two persons with orthogonal embeddings.
-    Return (p1_id, c1_id, faiss_id1, p2_id, c2_id, faiss_id2).
-    """
-    with session_factory() as session:
-        p1 = Person(name="Alice")
-        p2 = Person(name="Bob")
-        session.add_all([p1, p2])
-        session.flush()
-        c1 = EmbeddingCluster(person_id=p1.id)
-        c2 = EmbeddingCluster(person_id=p2.id)
-        session.add_all([c1, c2])
-        session.commit()
-        p1_id, c1_id = p1.id, c1.id
-        p2_id, c2_id = p2.id, c2.id
-
-    # Two orthogonal embeddings so they won't match each other
-    emb1 = np.zeros(512, dtype=np.float32)
-    emb1[0] = 1.0
-    emb2 = np.zeros(512, dtype=np.float32)
-    emb2[1] = 1.0
-    faiss_id1 = vs.add(emb1)
-    faiss_id2 = vs.add(emb2)
-
-    return p1_id, c1_id, faiss_id1, p2_id, c2_id, faiss_id2
-
-
-def _setup_library_page_with_all_selected(
-    qtbot, session_factory, tmp_app_paths, vs
-) -> LibraryPage:
-    """Helper to create LibraryPage and select all persons in the list."""
-    page = LibraryPage(session_factory, tmp_app_paths, vs)
-    qtbot.addWidget(page)
-
-    page.person_list_widget.blockSignals(True)
-    for i in range(page.person_list_widget.count()):
-        item = page.person_list_widget.item(i)
-        assert item is not None
-        item.setSelected(True)
-    page.person_list_widget.blockSignals(False)
-    page.load_images()
-    return page
 
 
 # --- Filter panel always visible ---
