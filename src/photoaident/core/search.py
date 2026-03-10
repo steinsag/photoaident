@@ -150,7 +150,7 @@ def _fetch_ordered_images(
     return [image_map[i] for i in ordered_ids if i in image_map]
 
 
-def __compute_cluster_mean(
+def _compute_cluster_mean(
     cluster_id: int,
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
@@ -187,7 +187,7 @@ def __compute_cluster_mean(
     return mean_emb
 
 
-def __accumulate_faiss_scores(
+def _accumulate_faiss_scores(
     cluster_ids: list[int],
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
@@ -197,7 +197,7 @@ def __accumulate_faiss_scores(
     """Per cluster: compute mean embedding → FAISS search → keep best score."""
     faiss_scores: dict[int, float] = {}
     for cluster_id in cluster_ids:
-        mean_emb = __compute_cluster_mean(cluster_id, session_factory, vector_store)
+        mean_emb = _compute_cluster_mean(cluster_id, session_factory, vector_store)
         if mean_emb is None:
             continue
         for fid, score in vector_store.search(
@@ -270,7 +270,7 @@ def _find_images_by_person(
     if not cluster_ids:
         return []
 
-    faiss_scores = __accumulate_faiss_scores(
+    faiss_scores = _accumulate_faiss_scores(
         cluster_ids, session_factory, vector_store, limit, threshold
     )
 
