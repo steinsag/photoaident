@@ -27,6 +27,9 @@ Item {
         name: "osm"
         PluginParameter { name: "osm.useragent"; value: root.userAgent }
         PluginParameter { name: "osm.mapping.cache.directory"; value: root.cachePath }
+        // Qt 6.5+ changed the default street map to Stadia Maps (API key required).
+        // Use the free OpenStreetMap tile server via the "custom" map type instead.
+        PluginParameter { name: "osm.mapping.custom.host"; value: "https://tile.openstreetmap.org/" }
     }
 
     Map {
@@ -117,5 +120,15 @@ Item {
         }
     }
 
-    Component.onCompleted: map.updateBbox()
+    Component.onCompleted: {
+        // Activate the custom map type so osm.mapping.custom.host is used
+        // instead of the default Stadia Maps type (which requires an API key).
+        for (var i = 0; i < map.supportedMapTypes.length; i++) {
+            if (map.supportedMapTypes[i].style === MapType.CustomMap) {
+                map.activeMapType = map.supportedMapTypes[i]
+                break
+            }
+        }
+        map.updateBbox()
+    }
 }

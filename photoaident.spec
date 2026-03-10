@@ -3,16 +3,28 @@ import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
+import PySide6 as _pyside6
+
 block_cipher = None
 
 # Collect insightface model data and native libs
 insightface_datas = collect_data_files("insightface")
 insightface_libs = collect_dynamic_libs("insightface")
 
+# Qt geoservices plugins are not auto-discovered by PyInstaller.
+# libqtgeoservices_osm.so is required for the OSM map plugin to work.
+_pyside6_dir = Path(_pyside6.__file__).parent
+_geoservices_src = _pyside6_dir / "Qt" / "plugins" / "geoservices"
+geoservices_binaries = [
+    (str(so), "PySide6/Qt/plugins/geoservices")
+    for so in _geoservices_src.glob("*.so*")
+    if so.is_file()
+]
+
 a = Analysis(
     ["src/photoaident/__main__.py"],
     pathex=["src"],
-    binaries=insightface_libs,
+    binaries=[*insightface_libs, *geoservices_binaries],
     datas=[
         *insightface_datas,
         ("assets/", "assets/"),          # icons etc.
