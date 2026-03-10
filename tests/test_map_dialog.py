@@ -40,38 +40,37 @@ def test_map_dialog_extract_bbox(qtbot, tmp_app_paths):
         assert bbox == GpsBoundingBox(south=10.0, west=20.0, north=30.0, east=40.0)
 
 
-# --- _log_qml_errors ---
+# --- _on_qml_status_changed ---
 
 
-def test_log_qml_errors_when_status_error(qtbot, caplog, tmp_app_paths):
-    """_log_qml_errors logs every error message when QML status is Error."""
+def test_on_qml_status_changed_logs_errors_when_error(qtbot, caplog, tmp_app_paths):
+    """_on_qml_status_changed logs every error message when status is Error."""
     from PySide6 import QtQuickWidgets
 
     dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     dialog._quick_widget = MagicMock()
-    dialog._quick_widget.status.return_value = QtQuickWidgets.QQuickWidget.Status.Error
     dialog._quick_widget.errors.return_value = ["bad qml syntax"]
 
     with caplog.at_level(logging.ERROR, logger="photoaident.ui.widgets.map_dialog"):
-        dialog._log_qml_errors()
+        dialog._on_qml_status_changed(QtQuickWidgets.QQuickWidget.Status.Error)
 
     assert len(caplog.records) == 1
     assert "QML error" in caplog.records[0].message
 
 
-def test_log_qml_errors_when_status_ok(qtbot, tmp_app_paths):
-    """_log_qml_errors does nothing and never calls errors() when status is Ready."""
+def test_on_qml_status_changed_does_not_log_errors_when_ready(qtbot, tmp_app_paths):
+    """_on_qml_status_changed never calls errors() when status is Ready."""
     from PySide6 import QtQuickWidgets
 
     dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
 
     dialog._quick_widget = MagicMock()
-    dialog._quick_widget.status.return_value = QtQuickWidgets.QQuickWidget.Status.Ready
+    dialog._quick_widget.rootObject.return_value = None
 
-    dialog._log_qml_errors()
+    dialog._on_qml_status_changed(QtQuickWidgets.QQuickWidget.Status.Ready)
 
     dialog._quick_widget.errors.assert_not_called()
 

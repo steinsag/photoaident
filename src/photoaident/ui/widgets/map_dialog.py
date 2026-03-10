@@ -66,25 +66,33 @@ class MapLocationDialog(QtWidgets.QDialog):
             QtWidgets.QSizePolicy.Policy.Expanding,
         )
 
+        # Store for use by the status handler (may fire after setSource returns).
+        self._pending_initial_bbox = initial_bbox
+
+        # Connect before setSource so we catch both synchronous and asynchronous
+        # status transitions (Loading → Ready / Error).
+        self._quick_widget.statusChanged.connect(self._on_qml_status_changed)
+
         qml_path = Path(__file__).parent / "map_view.qml"
         self._quick_widget.setSource(QtCore.QUrl.fromLocalFile(str(qml_path)))
-        self._log_qml_errors()
-
-        root_obj = self._quick_widget.rootObject()
-        if root_obj:
-            # Create the directory before QML tries to write to it.
-            self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
-            root_obj.setProperty("cachePath", str(self._paths.tiles_dir))
-            if initial_bbox:
-                self._apply_initial_bbox(root_obj, initial_bbox)
 
         layout.addWidget(self._quick_widget, stretch=1)
 
-    def _log_qml_errors(self) -> None:
-        """Log any errors that occurred while loading the QML source."""
-        if self._quick_widget.status() == QtQuickWidgets.QQuickWidget.Status.Error:
+    def _on_qml_status_changed(
+        self, status: QtQuickWidgets.QQuickWidget.Status
+    ) -> None:
+        """Handle QML load completion: apply initial state or log errors."""
+        if status == QtQuickWidgets.QQuickWidget.Status.Error:
             for err in self._quick_widget.errors():
                 logger.error("QML error: %s", err)
+        elif status == QtQuickWidgets.QQuickWidget.Status.Ready:
+            root_obj = self._quick_widget.rootObject()
+            if root_obj:
+                # Create the directory before QML tries to write to it.
+                self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
+                root_obj.setProperty("cachePath", str(self._paths.tiles_dir))
+                if self._pending_initial_bbox:
+                    self._apply_initial_bbox(root_obj, self._pending_initial_bbox)
 
     @staticmethod
     def _apply_initial_bbox(root_obj: object, initial_bbox: GpsBoundingBox) -> None:
