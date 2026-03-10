@@ -140,6 +140,10 @@
         <translation>Gesichter beschriften</translation>
     </message>
     <message>
+        <source>Show in File Manager</source>
+        <translation>Im Dateimanager anzeigen</translation>
+    </message>
+    <message>
         <source>Close</source>
         <translation>Schließen</translation>
     </message>

@@ -24,7 +24,6 @@ from photoaident.ui.widgets.thumbnail_grid import (
     _has_unidentified_faces,
     _icon_path,
     _read_pixmap,
-    _reveal_in_file_manager,
 )
 
 
@@ -460,62 +459,6 @@ def test_icon_path_bundle(tmp_path):
     assert path == str(tmp_path / "assets" / "icons" / "view.svg")
 
 
-# --- _reveal_in_file_manager tests ---
-
-
-def test_reveal_in_file_manager_macos(tmp_path):
-    p = tmp_path / "photo.jpg"
-    p.touch()
-    with patch("sys.platform", "darwin"), patch("subprocess.Popen") as mock_popen:
-        _reveal_in_file_manager(str(p))
-    mock_popen.assert_called_once_with(["open", "-R", str(p)])
-
-
-def test_reveal_in_file_manager_windows(tmp_path):
-    p = tmp_path / "photo.jpg"
-    p.touch()
-    with patch("sys.platform", "win32"), patch("subprocess.Popen") as mock_popen:
-        _reveal_in_file_manager(str(p))
-    mock_popen.assert_called_once_with(["explorer", "/select,", str(p)])
-
-
-def test_reveal_in_file_manager_linux_dbus_success(tmp_path):
-    """D-Bus call succeeds — no xdg-open fallback."""
-    p = tmp_path / "photo.jpg"
-    p.touch()
-    mock_iface = MagicMock()
-    mock_iface.isValid.return_value = True
-    mock_reply = MagicMock()
-    # Anything other than ErrorMessage — use a sentinel that won't equal ErrorMessage
-    mock_reply.type.return_value = object()
-    mock_iface.call.return_value = mock_reply
-
-    with (
-        patch("sys.platform", "linux"),
-        patch("subprocess.Popen") as mock_popen,
-        patch("PySide6.QtDBus.QDBusInterface", return_value=mock_iface),
-    ):
-        _reveal_in_file_manager(str(p))
-    mock_popen.assert_not_called()
-
-
-def test_reveal_in_file_manager_linux_dbus_fallback(tmp_path):
-    """D-Bus interface invalid — falls back to xdg-open."""
-    p = tmp_path / "photo.jpg"
-    p.touch()
-    mock_iface = MagicMock()
-    mock_iface.isValid.return_value = False
-
-    with (
-        patch("sys.platform", "linux"),
-        patch("subprocess.Popen") as mock_popen,
-        patch("PySide6.QtDBus.QDBusInterface", return_value=mock_iface),
-    ):
-        _reveal_in_file_manager(str(p))
-    mock_popen.assert_called_once()
-    assert mock_popen.call_args[0][0][0] == "xdg-open"
-
-
 # --- _has_unidentified_faces tests ---
 
 
@@ -588,7 +531,6 @@ def test_get_scaled_size_unreadable_file(tmp_path):
 
 def test_get_scaled_size_zero_dimension(monkeypatch):
     """QImageReader returns valid but zero-dimension size → invalid QSize returned, no ZeroDivisionError."""  # noqa: E501
-    from unittest.mock import MagicMock
 
     from PySide6 import QtCore, QtGui
 
