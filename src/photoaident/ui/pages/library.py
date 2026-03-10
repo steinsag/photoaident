@@ -9,6 +9,8 @@ from photoaident.db.database import Person
 from photoaident.ui.widgets.map_dialog import MapLocationDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
+ASPECT_RATIO_WORLD_MAP_ICON = 1.97
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
@@ -76,8 +78,13 @@ class LibraryPage(QtWidgets.QWidget):
             QtCore.Qt.ToolButtonStyle.ToolButtonTextUnderIcon
         )
         icon_path = get_resource_path("assets/icons/world_map.svg")
-        self.map_location_btn.setIcon(QtGui.QIcon(icon_path))
-        self.map_location_btn.setIconSize(QtCore.QSize(350, 90))
+        world_map_icon = QtGui.QIcon(icon_path)
+        self.map_location_btn.setIcon(world_map_icon)
+        margins = panel_layout.contentsMargins()
+        icon_w = self.filter_panel.width() - margins.left() - margins.right()
+        self.map_location_btn.setIconSize(
+            QtCore.QSize(icon_w, round(icon_w / ASPECT_RATIO_WORLD_MAP_ICON))
+        )
         self.map_location_btn.setCheckable(True)
         self.map_location_btn.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding, QtWidgets.QSizePolicy.Policy.Fixed
