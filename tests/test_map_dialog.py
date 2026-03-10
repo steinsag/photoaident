@@ -30,14 +30,14 @@ def test_map_dialog_extract_bbox(qtbot, tmp_app_paths):
     root_obj = dialog._quick_widget.rootObject()
     if root_obj is None:
         pytest.skip("QML/QtLocation not available in this environment")
+    else:
+        root_obj.setProperty("south", 10.0)
+        root_obj.setProperty("west", 20.0)
+        root_obj.setProperty("north", 30.0)
+        root_obj.setProperty("east", 40.0)
 
-    root_obj.setProperty("south", 10.0)
-    root_obj.setProperty("west", 20.0)
-    root_obj.setProperty("north", 30.0)
-    root_obj.setProperty("east", 40.0)
-
-    bbox = dialog._extract_bbox()
-    assert bbox == GpsBoundingBox(south=10.0, west=20.0, north=30.0, east=40.0)
+        bbox = dialog._extract_bbox()
+        assert bbox == GpsBoundingBox(south=10.0, west=20.0, north=30.0, east=40.0)
 
 
 # --- _log_qml_errors ---

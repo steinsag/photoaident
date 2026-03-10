@@ -438,7 +438,7 @@ def test_search_images_multiple_persons(search_db, vs, tmp_path):
     assert results_both[0].image_id == both_id
 
     # Intersection with no common images
-    p3_id, c3_id = _add_person_cluster(search_db)
+    p3_id, _ = _add_person_cluster(search_db)
     results_none = search_images(
         tmp_path, search_db, vs, person_ids=[p1_id, p3_id], gps_bbox=None
     )

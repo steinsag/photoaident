@@ -273,7 +273,7 @@ def test_select_multiple_persons_calls_search(
         # load_images is called by itemSelectionChanged signal
         mock_search.assert_called()
         # Verify it was called with both IDs
-        args, kwargs = mock_search.call_args
+        _, kwargs = mock_search.call_args
         assert set(kwargs["person_ids"]) == {p1_id, p2_id}
 
 
