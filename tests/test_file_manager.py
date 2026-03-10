@@ -1,3 +1,4 @@
+import pytest
 from unittest.mock import MagicMock, patch
 
 from photoaident.utils.file_manager import reveal_in_file_manager
@@ -29,6 +30,7 @@ def test_reveal_in_file_manager_windows(tmp_path):
 
 def test_reveal_in_file_manager_linux_dbus_success(tmp_path):
     """D-Bus call succeeds — no xdg-open fallback."""
+    pytest.importorskip("PySide6.QtDBus")
     p = tmp_path / "photo.jpg"
     p.touch()
     mock_iface = MagicMock()
@@ -50,6 +52,7 @@ def test_reveal_in_file_manager_linux_dbus_success(tmp_path):
 
 def test_reveal_in_file_manager_linux_dbus_fallback(tmp_path):
     """D-Bus interface invalid — falls back to xdg-open."""
+    pytest.importorskip("PySide6.QtDBus")
     p = tmp_path / "photo.jpg"
     p.touch()
     mock_iface = MagicMock()
