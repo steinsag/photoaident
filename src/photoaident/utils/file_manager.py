@@ -7,7 +7,13 @@ from PySide6 import QtCore
 
 
 def reveal_in_file_manager(file_path: str) -> None:
-    """Open the parent folder of file_path in the system file manager."""
+    """Reveal file_path in the system file manager, selecting it where supported.
+
+    On macOS and Windows the file is selected directly. On Linux, the
+    org.freedesktop.FileManager1 D-Bus service is tried first (selects the
+    file); if unavailable, falls back to opening the parent directory via
+    xdg-open.
+    """
     p = Path(file_path)
     if sys.platform == "darwin":
         subprocess.Popen(["open", "-R", str(p)])
