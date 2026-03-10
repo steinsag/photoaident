@@ -1,4 +1,4 @@
-"""Tests for core.search.find_images_by_person."""
+"""Tests for photoaident.core.search._find_images_by_person and search_images (including GPS filtering)."""
 
 from unittest.mock import patch
 
