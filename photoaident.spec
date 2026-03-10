@@ -1,9 +1,9 @@
 # photoaident.spec
 import sys
 from pathlib import Path
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 import PySide6 as _pyside6
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 
 block_cipher = None
 
@@ -39,7 +39,7 @@ a = Analysis(
     binaries=[*insightface_libs, *geoservices_binaries],
     datas=[
         *insightface_datas,
-        ("assets/", "assets/"),          # icons etc.
+        ("assets/", "assets/"),  # icons etc.
         # Alembic migration scripts must be present at runtime so the migration
         # engine can load and execute them.  They are not auto-discovered by
         # PyInstaller because the migrations/ directory has no __init__.py.
@@ -80,13 +80,13 @@ exe = EXE(
     pyz,
     a.scripts,
     [],
-    exclude_binaries=True,      # keep as folder first (more debuggable)
+    exclude_binaries=True,  # keep as folder first (more debuggable)
     name="photoaident",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,              # no terminal window
+    console=False,  # no terminal window
     icon="assets/icons/app.png",
 )
 
