@@ -184,13 +184,18 @@ def __faiss_to_image_scores(
 ) -> dict[int, float]:
     """Resolve faiss_id → image_id and deduplicate keeping the highest score."""
     all_faiss_ids = list(faiss_scores.keys())
+    rows: list = []
     with session_factory() as session:
-        rows = session.execute(
-            select(Face.faiss_id, Face.image_id).where(
-                Face.faiss_id.in_(all_faiss_ids),
-                Face.deleted_at.is_(None),
+        for chunk_start in range(0, len(all_faiss_ids), _SQLITE_IN_LIMIT):
+            chunk = all_faiss_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
+            rows.extend(
+                session.execute(
+                    select(Face.faiss_id, Face.image_id).where(
+                        Face.faiss_id.in_(chunk),
+                        Face.deleted_at.is_(None),
+                    )
+                ).all()
             )
-        ).all()
 
     image_scores: dict[int, float] = {}
     for row_faiss_id, row_image_id in rows:
