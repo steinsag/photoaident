@@ -528,3 +528,69 @@ def test_date_filter_calls_search_with_date_range(
 
         mock_search.assert_called_once()
         assert mock_search.call_args[1]["date_range"] == date_range
+
+
+# --- Keyword/filename search tests ---
+
+
+def test_keyword_search_counts_as_filter(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """A non-empty keyword search text activates the filter."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    assert not page._has_filters()
+    page.keyword_search_edit.setText("vacation")
+    assert page._has_filters()
+
+    page.keyword_search_edit.clear()
+    assert not page._has_filters()
+
+
+def test_keyword_search_passes_query_to_search(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """load_images passes filename_query to search_images."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.keyword_search_edit.setText("New York")
+
+    with patch("photoaident.ui.pages.library.search_images") as mock_search:
+        mock_search.return_value = []
+        page.load_images()
+
+        mock_search.assert_called_once()
+        assert mock_search.call_args[1]["filename_query"] == "New York"
+
+
+def test_keyword_search_empty_passes_none(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """load_images passes filename_query=None when keyword field is empty."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    # Need at least one other filter active so load_images actually calls search
+    page._date_range = DateRange(start_year=2020)
+    page.keyword_search_edit.clear()
+
+    with patch("photoaident.ui.pages.library.search_images") as mock_search:
+        mock_search.return_value = []
+        page.load_images()
+
+        mock_search.assert_called_once()
+        assert mock_search.call_args[1]["filename_query"] is None
+
+
+def test_keyword_search_debounce_timer_configured(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """The debounce timer exists, is single-shot, and has a 300 ms interval."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    assert hasattr(page, "_keyword_debounce_timer")
+    assert page._keyword_debounce_timer.isSingleShot()
+    assert page._keyword_debounce_timer.interval() == 300
