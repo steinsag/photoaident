@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 from PySide6 import QtWidgets
+from PySide6.QtCore import QLocale
 from sqlalchemy import func, select
 
 from photoaident.core.date_range import DateRange
@@ -16,38 +17,6 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
 logger = logging.getLogger(__name__)
-
-_MONTH_NAMES = [
-    "",  # index 0 = "not set"
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-]
-
-_MONTH_ABBR = [
-    "",
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
-]
 
 _YEAR_MIN = 1900
 _DIALOG_MIN_WIDTH = 380
@@ -159,9 +128,13 @@ class DateFilterDialog(QtWidgets.QDialog):
         for year in range(min_year, max_year + 1):
             year_combo.addItem(str(year))
 
+        locale = QLocale()
         month_combo = QtWidgets.QComboBox()
-        for name in _MONTH_NAMES:
-            month_combo.addItem(self.tr(name) if name else "")
+        month_combo.addItem("")  # index 0 = "not set"
+        for month in range(1, 13):
+            month_combo.addItem(
+                locale.standaloneMonthName(month, QLocale.FormatType.LongFormat)
+            )
 
         return year_combo, month_combo
 
@@ -275,14 +248,24 @@ def format_date_range(date_range: DateRange) -> str:
     start_parts: list[str] = []
     end_parts: list[str] = []
 
+    locale = QLocale()
+
     if date_range.start_year is not None:
         if date_range.start_month is not None:
-            start_parts.append(_MONTH_ABBR[date_range.start_month])
+            start_parts.append(
+                locale.standaloneMonthName(
+                    date_range.start_month, QLocale.FormatType.ShortFormat
+                )
+            )
         start_parts.append(str(date_range.start_year))
 
     if date_range.end_year is not None:
         if date_range.end_month is not None:
-            end_parts.append(_MONTH_ABBR[date_range.end_month])
+            end_parts.append(
+                locale.standaloneMonthName(
+                    date_range.end_month, QLocale.FormatType.ShortFormat
+                )
+            )
         end_parts.append(str(date_range.end_year))
 
     start_str = " ".join(start_parts)

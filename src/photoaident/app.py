@@ -66,6 +66,9 @@ def load_translations(app: QtWidgets.QApplication):
             app.installTranslator(translator)
             # Keep a reference to prevent garbage collection
             app._translator = translator  # type: ignore[attr-defined]
+            # Align QLocale with the loaded UI language so that locale-aware
+            # APIs (e.g. QLocale.standaloneMonthName) match the UI language.
+            QtCore.QLocale.setDefault(QtCore.QLocale(loc))
             break
 
 
