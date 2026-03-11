@@ -105,6 +105,14 @@
         <source>The selected date range is invalid: {error}</source>
         <translation>The selected date range is invalid: {error}</translation>
     </message>
+    <message>
+        <source>From {start}</source>
+        <translation>From {start}</translation>
+    </message>
+    <message>
+        <source>Until {end}</source>
+        <translation>Until {end}</translation>
+    </message>
 </context>
 <context>
     <name>FaceCropWidget</name>

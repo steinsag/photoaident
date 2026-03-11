@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Optional
 
 from PySide6 import QtWidgets
-from PySide6.QtCore import QLocale
+from PySide6.QtCore import QCoreApplication, QLocale
 from sqlalchemy import func, select
 
 from photoaident.core.date_range import DateRange
@@ -274,7 +274,11 @@ def format_date_range(date_range: DateRange) -> str:
     if start_str and end_str:
         return f"{start_str} \u2013 {end_str}"
     if start_str:
-        return f"From {start_str}"
+        return QCoreApplication.translate("DateFilterDialog", "From {start}").format(
+            start=start_str
+        )
     if end_str:
-        return f"Until {end_str}"
+        return QCoreApplication.translate("DateFilterDialog", "Until {end}").format(
+            end=end_str
+        )
     return ""
