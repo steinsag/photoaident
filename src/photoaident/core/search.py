@@ -60,19 +60,20 @@ def search_images(
     if not person_ids and not gps_bbox and not date_range:
         return []
 
-    # Build combined metadata image ID set (AND intersection)
+    if not person_ids:
+        # Pure metadata query — use SQL subqueries; no Python sets needed.
+        return _search_by_metadata_only(
+            session_factory, gps_bbox, date_range, thumbs_dir
+        )
+
+    # Person-based search: materialize metadata IDs so FAISS results can be
+    # filtered in Python (FAISS lives outside SQL, so this is unavoidable).
     metadata_ids: set[int] | None = None
     if gps_bbox is not None:
-        gps_ids = set(_find_images_by_gps_bbox(session_factory, gps_bbox))
-        metadata_ids = gps_ids
+        metadata_ids = set(_find_images_by_gps_bbox(session_factory, gps_bbox))
     if date_range is not None:
         date_ids = set(_find_images_by_date_range(session_factory, date_range))
         metadata_ids = date_ids if metadata_ids is None else metadata_ids & date_ids
-
-    if not person_ids:
-        if metadata_ids is None:
-            return []
-        return _search_by_metadata_only(session_factory, metadata_ids, thumbs_dir)
 
     per_person_scores = _collect_per_person_scores(
         session_factory, vector_store, person_ids, metadata_ids
@@ -87,14 +88,24 @@ def search_images(
 
 def _search_by_metadata_only(
     session_factory: "sessionmaker",
-    image_ids: set[int],
+    gps_bbox: Optional[GpsBoundingBox],
+    date_range: Optional[DateRange],
     thumbs_dir: Path,
 ) -> list[SearchResult]:
-    """Return results for a metadata-only query from a set of image IDs."""
-    if not image_ids:
+    """Return results for a metadata-only query using SQL subqueries.
+
+    Builds an IN-subquery for each active filter so no large bound-parameter
+    sets are passed to SQLite and no Python-side set materialisation is needed.
+    """
+    conditions = []
+    if gps_bbox is not None:
+        conditions.append(Image.id.in_(_gps_bbox_subquery(gps_bbox)))
+    if date_range is not None:
+        conditions.append(Image.id.in_(_date_range_subquery(date_range)))
+    if not conditions:
         return []
     with session_factory() as session:
-        stmt = select(Image).where(Image.id.in_(image_ids)).order_by(Image.id)
+        stmt = select(Image).where(and_(*conditions)).order_by(Image.id)
         images: list[Image] = list(session.execute(stmt).unique().scalars().all())
     return _format_results(images, thumbs_dir)
 
