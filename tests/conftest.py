@@ -1,12 +1,22 @@
 from typing import Generator
 
 import pytest
+from PySide6.QtCore import QLocale
 from sqlalchemy import create_engine
 
 from photoaident.db.database import get_engine, get_session_factory
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
+
+
+@pytest.fixture
+def force_en_us_locale():
+    """Force en_US locale for the duration of a test to get stable month names."""
+    original = QLocale()
+    QLocale.setDefault(QLocale("en_US"))
+    yield
+    QLocale.setDefault(original)
 
 
 @pytest.fixture

@@ -190,6 +190,10 @@ class TestAcceptReject:
 
 
 class TestFormatDateRange:
+    @pytest.fixture(autouse=True)
+    def use_en_us_locale(self, force_en_us_locale):
+        pass
+
     def test_both_year_and_month(self):
         dr = DateRange(start_year=2020, start_month=3, end_year=2023, end_month=12)
         assert format_date_range(dr) == "Mar 2020 \u2013 Dec 2023"
