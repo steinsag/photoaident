@@ -36,7 +36,6 @@ class TestDateFilterDialogConstruction:
     def test_creates_without_error(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        assert dialog is not None
 
     def test_initial_state_all_not_set(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
