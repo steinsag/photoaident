@@ -21,7 +21,7 @@ from tests.search_helpers import (
 def test_search_images_empty_input_returns_empty(search_db, vector_store, tmp_path):
     """search_images returns empty if no filters are provided."""
     results = search_images(
-        tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None
+        tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None, date_range=None
     )
     assert results == []
 
@@ -65,7 +65,12 @@ def test_search_images_intersection(search_db, vector_store, tmp_path):
 
     bbox = GpsBoundingBox(south=45.0, west=5.0, north=55.0, east=15.0)
     results = search_images(
-        tmp_path, search_db, vector_store, person_ids=[person_id], gps_bbox=bbox
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[person_id],
+        gps_bbox=bbox,
+        date_range=None,
     )
 
     assert len(results) == 1
@@ -122,19 +127,29 @@ def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
 
     # Empty person_ids list
     results_empty = search_images(
-        tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None
+        tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None, date_range=None
     )
     assert results_empty == []
 
     # One person (p1)
     results_p1 = search_images(
-        tmp_path, search_db, vector_store, person_ids=[p1_id], gps_bbox=None
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id],
+        gps_bbox=None,
+        date_range=None,
     )
     assert len(results_p1) == 2  # both.jpg and img1.jpg
 
     # Intersection of p1 and p2
     results_both = search_images(
-        tmp_path, search_db, vector_store, person_ids=[p1_id, p2_id], gps_bbox=None
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id, p2_id],
+        gps_bbox=None,
+        date_range=None,
     )
     assert len(results_both) == 1
     assert results_both[0].image_id == both_id
@@ -142,7 +157,12 @@ def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
     # Intersection with no common images
     p3_id, _ = _add_person_cluster(search_db)
     results_none = search_images(
-        tmp_path, search_db, vector_store, person_ids=[p1_id, p3_id], gps_bbox=None
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id, p3_id],
+        gps_bbox=None,
+        date_range=None,
     )
     assert results_none == []
 
@@ -239,7 +259,12 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
         img1_id, img2_id = img1.id, img2.id
 
     results = search_images(
-        tmp_path, search_db, vector_store, person_ids=[p1_id, p2_id], gps_bbox=None
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id, p2_id],
+        gps_bbox=None,
+        date_range=None,
     )
     assert len(results) == 2
     assert results[0].image_id == img1_id

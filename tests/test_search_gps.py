@@ -160,7 +160,9 @@ def test_search_images_gps_only(session_factory, tmp_path):
 
     bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
     vs = VectorStore()
-    results = search_images(tmp_path, session_factory, vs, person_ids=[], gps_bbox=bbox)
+    results = search_images(
+        tmp_path, session_factory, vs, person_ids=[], gps_bbox=bbox, date_range=None
+    )
 
     assert len(results) == 1
     assert results[0].image_id == img1_id

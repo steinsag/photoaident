@@ -195,7 +195,12 @@ def test_search_images_person_only(search_db, vector_store, tmp_path):
     )
 
     results = search_images(
-        tmp_path, search_db, vector_store, person_ids=[person_id], gps_bbox=None
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[person_id],
+        gps_bbox=None,
+        date_range=None,
     )
 
     assert len(results) == 1
@@ -220,7 +225,12 @@ def test_search_images_chunks_large_id_list(search_db, vector_store, tmp_path):
 
     with patch.object(search_module, "_SQLITE_IN_LIMIT", 3):
         results = search_images(
-            tmp_path, search_db, vector_store, person_ids=[person_id], gps_bbox=None
+            tmp_path,
+            search_db,
+            vector_store,
+            person_ids=[person_id],
+            gps_bbox=None,
+            date_range=None,
         )
 
     assert {r.image_id for r in results} == expected_ids

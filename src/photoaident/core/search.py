@@ -42,7 +42,7 @@ def search_images(
     vector_store: "VectorStore",
     person_ids: list[int],
     gps_bbox: Optional[GpsBoundingBox],
-    date_range: Optional[DateRange] = None,
+    date_range: Optional[DateRange],
 ) -> list[SearchResult]:
     """Search for images based on person, GPS, and/or date filters.
 
