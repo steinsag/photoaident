@@ -10,7 +10,7 @@ from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 
 
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def force_en_us_locale():
     """Force en_US locale for the duration of a test to get stable month names."""
     original = QLocale()
