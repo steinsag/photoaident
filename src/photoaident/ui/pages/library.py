@@ -107,6 +107,7 @@ class LibraryPage(QtWidgets.QWidget):
         panel_layout.addWidget(self.clear_location_btn)
 
         # --- Time section ---
+        self._add_section_separator(panel_layout)
         self._add_header(self.tr("Time"), panel_layout)
 
         self.date_filter_btn = QtWidgets.QToolButton()
@@ -133,6 +134,7 @@ class LibraryPage(QtWidgets.QWidget):
         panel_layout.addWidget(self.clear_time_btn)
 
         # --- Person section ---
+        self._add_section_separator(panel_layout)
         self._add_header(self.tr("Person"), panel_layout)
 
         self.search_edit = QtWidgets.QLineEdit()
@@ -282,6 +284,15 @@ class LibraryPage(QtWidgets.QWidget):
         main = self.window()
         if isinstance(main, MainWindow):
             main.go_to_labelling(image_id)
+
+    @staticmethod
+    def _add_section_separator(layout: QtWidgets.QVBoxLayout) -> None:
+        layout.addSpacing(4)
+        separator = QtWidgets.QFrame()
+        separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        layout.addWidget(separator)
+        layout.addSpacing(4)
 
     @staticmethod
     def _add_header(title: str, panel_widget: QtWidgets.QVBoxLayout) -> None:
