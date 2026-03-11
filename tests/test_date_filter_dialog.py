@@ -25,6 +25,13 @@ def mock_session_factory():
     return factory
 
 
+def _select_year(combo: QtWidgets.QComboBox, year: int) -> None:
+    """Helper: select a year in a year combobox by value."""
+    idx = combo.findText(str(year))
+    assert idx >= 0, f"Year {year} not found in year combo"
+    combo.setCurrentIndex(idx)
+
+
 class TestDateFilterDialogConstruction:
     def test_creates_without_error(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
@@ -34,8 +41,8 @@ class TestDateFilterDialogConstruction:
     def test_initial_state_all_not_set(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        assert dialog._start_year_spin.value() == 0
-        assert dialog._end_year_spin.value() == 0
+        assert dialog._start_year_combo.currentIndex() == 0
+        assert dialog._end_year_combo.currentIndex() == 0
         assert dialog._start_month_combo.currentIndex() == 0
         assert dialog._end_month_combo.currentIndex() == 0
 
@@ -54,9 +61,9 @@ class TestDateFilterDialogConstruction:
         initial = DateRange(start_year=2020, start_month=3, end_year=2023, end_month=12)
         dialog = DateFilterDialog(mock_session_factory, initial_range=initial)
         qtbot.addWidget(dialog)
-        assert dialog._start_year_spin.value() == 2020
+        assert dialog._start_year_combo.currentText() == "2020"
         assert dialog._start_month_combo.currentIndex() == 3  # March
-        assert dialog._end_year_spin.value() == 2023
+        assert dialog._end_year_combo.currentText() == "2023"
         assert dialog._end_month_combo.currentIndex() == 12  # December
 
     def test_initial_range_enables_month_combos(self, qtbot, mock_session_factory):
@@ -66,27 +73,44 @@ class TestDateFilterDialogConstruction:
         assert dialog._start_month_combo.isEnabled()
         assert dialog._end_month_combo.isEnabled()
 
+    def test_year_combo_contains_not_set_option(self, qtbot, mock_session_factory):
+        dialog = DateFilterDialog(mock_session_factory)
+        qtbot.addWidget(dialog)
+        assert dialog._start_year_combo.itemText(0) == "(not set)"
+        assert dialog._end_year_combo.itemText(0) == "(not set)"
+
+    def test_year_combo_contains_years(self, qtbot, mock_session_factory):
+        dialog = DateFilterDialog(mock_session_factory)
+        qtbot.addWidget(dialog)
+        assert dialog._start_year_combo.findText("1900") >= 0
+        assert dialog._start_year_combo.findText("2020") >= 0
+
+    def test_dialog_has_minimum_width(self, qtbot, mock_session_factory):
+        dialog = DateFilterDialog(mock_session_factory)
+        qtbot.addWidget(dialog)
+        assert dialog.minimumWidth() >= 380
+
 
 class TestMonthComboEnablement:
     def test_month_enabled_when_year_set(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        dialog._start_year_spin.setValue(2021)
+        _select_year(dialog._start_year_combo, 2021)
         assert dialog._start_month_combo.isEnabled()
 
     def test_month_disabled_when_year_cleared(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        dialog._start_year_spin.setValue(2021)
-        dialog._start_year_spin.setValue(0)
+        _select_year(dialog._start_year_combo, 2021)
+        dialog._start_year_combo.setCurrentIndex(0)  # "(not set)"
         assert not dialog._start_month_combo.isEnabled()
 
     def test_month_resets_to_zero_when_year_cleared(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        dialog._start_year_spin.setValue(2021)
+        _select_year(dialog._start_year_combo, 2021)
         dialog._start_month_combo.setCurrentIndex(5)  # May
-        dialog._start_year_spin.setValue(0)
+        dialog._start_year_combo.setCurrentIndex(0)  # "(not set)"
         assert dialog._start_month_combo.currentIndex() == 0
 
 
@@ -100,7 +124,7 @@ class TestAcceptReject:
     def test_accept_with_start_year_only(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        dialog._start_year_spin.setValue(2020)
+        _select_year(dialog._start_year_combo, 2020)
         dialog._on_accept()
         result = dialog.selected_range()
         assert result is not None
@@ -111,9 +135,9 @@ class TestAcceptReject:
     def test_accept_with_full_range(self, qtbot, mock_session_factory):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        dialog._start_year_spin.setValue(2020)
+        _select_year(dialog._start_year_combo, 2020)
         dialog._start_month_combo.setCurrentIndex(3)  # March
-        dialog._end_year_spin.setValue(2023)
+        _select_year(dialog._end_year_combo, 2023)
         dialog._end_month_combo.setCurrentIndex(12)  # December
         dialog._on_accept()
         result = dialog.selected_range()
@@ -128,8 +152,8 @@ class TestAcceptReject:
     ):
         dialog = DateFilterDialog(mock_session_factory)
         qtbot.addWidget(dialog)
-        dialog._start_year_spin.setValue(2025)
-        dialog._end_year_spin.setValue(2020)
+        _select_year(dialog._start_year_combo, 2025)
+        _select_year(dialog._end_year_combo, 2020)
 
         warning_shown = []
 
@@ -153,6 +177,17 @@ class TestAcceptReject:
         # selected_range was set from initial_range in __init__
         result = dialog.selected_range()
         assert result == initial
+
+    def test_selecting_not_set_in_year_resets_selection(
+        self, qtbot, mock_session_factory
+    ):
+        """Selecting '(not set)' year after a year was set clears the range."""
+        dialog = DateFilterDialog(mock_session_factory)
+        qtbot.addWidget(dialog)
+        _select_year(dialog._start_year_combo, 2020)
+        dialog._start_year_combo.setCurrentIndex(0)  # reset to "(not set)"
+        dialog._on_accept()
+        assert dialog.selected_range() is None
 
 
 class TestFormatDateRange:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import logging
 from typing import TYPE_CHECKING, Optional
 
@@ -48,16 +49,16 @@ _MONTH_ABBR = [
     "Dec",
 ]
 
-_YEAR_NOT_SET = 0
 _YEAR_MIN = 1900
-_YEAR_MAX = 2100
+_DIALOG_MIN_WIDTH = 380
 
 
 class DateFilterDialog(QtWidgets.QDialog):
     """Modal dialog for selecting a year/month date range.
 
-    Queries the database for actual min/max taken_at to constrain the spinbox
-    range. Supports open-ended ranges (start or end may be unset).
+    Queries the database for actual min/max taken_at to populate the year
+    combobox. Supports open-ended ranges (start or end may be unset). Selecting
+    "(not set)" in the year combobox clears the year and disables the month.
     """
 
     def __init__(
@@ -68,10 +69,11 @@ class DateFilterDialog(QtWidgets.QDialog):
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Select Time Range"))
+        self.setMinimumWidth(_DIALOG_MIN_WIDTH)
         self._selected_range: Optional[DateRange] = initial_range
 
-        _, max_year = self._query_year_range(session_factory)
-        self._setup_ui(initial_range, max_year)
+        min_year, max_year = self._query_year_range(session_factory)
+        self._setup_ui(initial_range, min_year, max_year)
 
     def _query_year_range(self, session_factory: "sessionmaker") -> tuple[int, int]:
         """Query the database for the min/max year of taken_at."""
@@ -87,11 +89,12 @@ class DateFilterDialog(QtWidgets.QDialog):
                     return int(row[0]), int(row[1])
         except Exception:
             logger.exception("Failed to query year range from database")
-        return _YEAR_MIN, _YEAR_MAX
+        return _YEAR_MIN, datetime.date.today().year
 
     def _setup_ui(
         self,
         initial_range: Optional[DateRange],
+        min_year: int,
         max_year: int,
     ) -> None:
         layout = QtWidgets.QVBoxLayout(self)
@@ -104,19 +107,21 @@ class DateFilterDialog(QtWidgets.QDialog):
 
         form_layout = QtWidgets.QFormLayout()
 
-        self._start_year_spin, self._start_month_combo = self._make_year_month_row(
-            max_year
+        self._start_year_combo, self._start_month_combo = self._make_year_month_row(
+            min_year, max_year
         )
-        self._end_year_spin, self._end_month_combo = self._make_year_month_row(max_year)
+        self._end_year_combo, self._end_month_combo = self._make_year_month_row(
+            min_year, max_year
+        )
 
-        self._start_year_spin.valueChanged.connect(self._on_start_year_changed)
-        self._end_year_spin.valueChanged.connect(self._on_end_year_changed)
+        self._start_year_combo.currentIndexChanged.connect(self._on_start_year_changed)
+        self._end_year_combo.currentIndexChanged.connect(self._on_end_year_changed)
 
         from_row_widget = self._make_year_month_widget(
-            self._start_year_spin, self._start_month_combo
+            self._start_year_combo, self._start_month_combo
         )
         to_row_widget = self._make_year_month_widget(
-            self._end_year_spin, self._end_month_combo
+            self._end_year_combo, self._end_month_combo
         )
 
         form_layout.addRow(self.tr("From:"), from_row_widget)
@@ -135,80 +140,98 @@ class DateFilterDialog(QtWidgets.QDialog):
             self._apply_initial_range(initial_range)
         else:
             self._update_month_enabled_state(
-                self._start_year_spin, self._start_month_combo
+                self._start_year_combo, self._start_month_combo
             )
-            self._update_month_enabled_state(self._end_year_spin, self._end_month_combo)
+            self._update_month_enabled_state(
+                self._end_year_combo, self._end_month_combo
+            )
 
     def _make_year_month_row(
-        self, max_year: int
-    ) -> tuple[QtWidgets.QSpinBox, QtWidgets.QComboBox]:
-        """Create a year spinbox and month combobox for a row."""
-        year_spin = QtWidgets.QSpinBox()
-        year_spin.setRange(_YEAR_NOT_SET, max(max_year, _YEAR_MAX))
-        year_spin.setMinimum(_YEAR_NOT_SET)
-        year_spin.setSpecialValueText(self.tr("(not set)"))
+        self, min_year: int, max_year: int
+    ) -> tuple[QtWidgets.QComboBox, QtWidgets.QComboBox]:
+        """Create a year combobox and month combobox for a row.
+
+        Index 0 of the year combobox is "(not set)"; subsequent items are years
+        from min_year to max_year. Selecting "(not set)" disables the month combo.
+        """
+        year_combo = QtWidgets.QComboBox()
+        year_combo.addItem(self.tr("(not set)"))  # index 0
+        for year in range(min_year, max_year + 1):
+            year_combo.addItem(str(year))
 
         month_combo = QtWidgets.QComboBox()
         for name in _MONTH_NAMES:
             month_combo.addItem(self.tr(name) if name else "")
 
-        return year_spin, month_combo
+        return year_combo, month_combo
 
     def _make_year_month_widget(
         self,
-        year_spin: QtWidgets.QSpinBox,
+        year_combo: QtWidgets.QComboBox,
         month_combo: QtWidgets.QComboBox,
     ) -> QtWidgets.QWidget:
-        """Wrap a year spinbox and month combo into a horizontal container."""
+        """Wrap a year combobox and month combo into a horizontal container."""
         container = QtWidgets.QWidget()
         row = QtWidgets.QHBoxLayout(container)
         row.setContentsMargins(0, 0, 0, 0)
-        row.addWidget(year_spin)
+        row.addWidget(year_combo)
         row.addWidget(month_combo)
         return container
 
     def _apply_initial_range(self, date_range: DateRange) -> None:
         """Populate controls from an existing DateRange."""
-        if date_range.start_year is not None:
-            self._start_year_spin.setValue(date_range.start_year)
-        if date_range.start_month is not None:
-            self._start_month_combo.setCurrentIndex(date_range.start_month)
-        else:
-            self._start_month_combo.setCurrentIndex(0)
+        self._set_year_combo(self._start_year_combo, date_range.start_year)
+        self._start_month_combo.setCurrentIndex(date_range.start_month or 0)
 
-        if date_range.end_year is not None:
-            self._end_year_spin.setValue(date_range.end_year)
-        if date_range.end_month is not None:
-            self._end_month_combo.setCurrentIndex(date_range.end_month)
-        else:
-            self._end_month_combo.setCurrentIndex(0)
+        self._set_year_combo(self._end_year_combo, date_range.end_year)
+        self._end_month_combo.setCurrentIndex(date_range.end_month or 0)
 
-        self._update_month_enabled_state(self._start_year_spin, self._start_month_combo)
-        self._update_month_enabled_state(self._end_year_spin, self._end_month_combo)
+        self._update_month_enabled_state(
+            self._start_year_combo, self._start_month_combo
+        )
+        self._update_month_enabled_state(self._end_year_combo, self._end_month_combo)
 
-    def _on_start_year_changed(self, _value: int) -> None:
-        self._update_month_enabled_state(self._start_year_spin, self._start_month_combo)
+    @staticmethod
+    def _set_year_combo(combo: QtWidgets.QComboBox, year: Optional[int]) -> None:
+        """Select a year in the combo, or select '(not set)' if year is None."""
+        if year is None:
+            combo.setCurrentIndex(0)
+            return
+        idx = combo.findText(str(year))
+        combo.setCurrentIndex(idx if idx >= 0 else 0)
 
-    def _on_end_year_changed(self, _value: int) -> None:
-        self._update_month_enabled_state(self._end_year_spin, self._end_month_combo)
+    @staticmethod
+    def _get_year_from_combo(combo: QtWidgets.QComboBox) -> Optional[int]:
+        """Return the selected year, or None if '(not set)' is selected."""
+        if combo.currentIndex() == 0:
+            return None
+        return int(combo.currentText())
+
+    def _on_start_year_changed(self, _index: int) -> None:
+        self._update_month_enabled_state(
+            self._start_year_combo, self._start_month_combo
+        )
+
+    def _on_end_year_changed(self, _index: int) -> None:
+        self._update_month_enabled_state(self._end_year_combo, self._end_month_combo)
 
     def _update_month_enabled_state(
         self,
-        year_spin: QtWidgets.QSpinBox,
+        year_combo: QtWidgets.QComboBox,
         month_combo: QtWidgets.QComboBox,
     ) -> None:
         """Disable month combo when year is not set; reset to empty when disabled."""
-        enabled = year_spin.value() != _YEAR_NOT_SET
+        enabled = year_combo.currentIndex() != 0
         month_combo.setEnabled(enabled)
         if not enabled:
             month_combo.setCurrentIndex(0)
 
     def _on_accept(self) -> None:
-        start_year = self._start_year_spin.value() or None
+        start_year = self._get_year_from_combo(self._start_year_combo)
         start_month_idx = self._start_month_combo.currentIndex()
         start_month = start_month_idx if start_month_idx > 0 and start_year else None
 
-        end_year = self._end_year_spin.value() or None
+        end_year = self._get_year_from_combo(self._end_year_combo)
         end_month_idx = self._end_month_combo.currentIndex()
         end_month = end_month_idx if end_month_idx > 0 and end_year else None
 
