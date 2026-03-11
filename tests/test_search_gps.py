@@ -1,7 +1,7 @@
 import pytest
 
 from photoaident.core.geo import GpsBoundingBox
-from photoaident.core.search import _find_images_by_gps_bbox
+from photoaident.core.search import _find_images_by_gps_bbox, search_images
 from photoaident.db.database import (
     Image,
     ImageMetadata,
@@ -10,6 +10,7 @@ from photoaident.db.database import (
     get_session_factory,
 )
 from photoaident.db.migrate import apply_migrations
+from photoaident.db.vector_store import VectorStore
 
 
 @pytest.fixture
@@ -124,3 +125,44 @@ def test_find_images_by_gps_bbox_antimeridian(session_factory):
 
         assert len(results) == 2
         assert set(results) == {img1.id, img2.id}
+
+
+def test_search_images_gps_only(session_factory, tmp_path):
+    """search_images filters by GPS when no person_ids are provided."""
+    with session_factory() as session:
+        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
+        session.add(img1)
+        session.flush()
+        meta1 = ImageMetadata(
+            image_id=img1.id,
+            gps_lat=52.52,
+            gps_lon=13.40,
+            taken_at_source=TakenAtSource.FILESYSTEM,
+            width=100,
+            height=100,
+        )
+        session.add(meta1)
+
+        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
+        session.add(img2)
+        session.flush()
+        meta2 = ImageMetadata(
+            image_id=img2.id,
+            gps_lat=40.0,
+            gps_lon=10.0,
+            taken_at_source=TakenAtSource.FILESYSTEM,
+            width=100,
+            height=100,
+        )
+        session.add(meta2)
+        session.commit()
+        img1_id = img1.id
+
+    bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
+    vs = VectorStore()
+    results = search_images(
+        tmp_path, session_factory, vs, person_ids=[], gps_bbox=bbox, date_range=None
+    )
+
+    assert len(results) == 1
+    assert results[0].image_id == img1_id
