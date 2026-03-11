@@ -45,4 +45,4 @@ class DateRange:
             return None
         month = self.end_month if self.end_month is not None else 12
         last_day = calendar.monthrange(self.end_year, month)[1]
-        return datetime(self.end_year, month, last_day, 23, 59, 59)
+        return datetime(self.end_year, month, last_day, 23, 59, 59, 999999)

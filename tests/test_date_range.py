@@ -29,25 +29,25 @@ class TestToEndDatetime:
         dr = DateRange()
         assert dr.to_end_datetime() is None
 
-    def test_year_only_gives_dec_31_last_second(self):
+    def test_year_only_gives_dec_31_last_microsecond(self):
         dr = DateRange(end_year=2023)
-        assert dr.to_end_datetime() == datetime(2023, 12, 31, 23, 59, 59)
+        assert dr.to_end_datetime() == datetime(2023, 12, 31, 23, 59, 59, 999999)
 
     def test_year_and_month_gives_last_day_of_month(self):
         dr = DateRange(end_year=2023, end_month=3)
-        assert dr.to_end_datetime() == datetime(2023, 3, 31, 23, 59, 59)
+        assert dr.to_end_datetime() == datetime(2023, 3, 31, 23, 59, 59, 999999)
 
     def test_february_non_leap_year(self):
         dr = DateRange(end_year=2023, end_month=2)
-        assert dr.to_end_datetime() == datetime(2023, 2, 28, 23, 59, 59)
+        assert dr.to_end_datetime() == datetime(2023, 2, 28, 23, 59, 59, 999999)
 
     def test_february_leap_year(self):
         dr = DateRange(end_year=2024, end_month=2)
-        assert dr.to_end_datetime() == datetime(2024, 2, 29, 23, 59, 59)
+        assert dr.to_end_datetime() == datetime(2024, 2, 29, 23, 59, 59, 999999)
 
     def test_april_thirty_days(self):
         dr = DateRange(end_year=2022, end_month=4)
-        assert dr.to_end_datetime() == datetime(2022, 4, 30, 23, 59, 59)
+        assert dr.to_end_datetime() == datetime(2022, 4, 30, 23, 59, 59, 999999)
 
 
 class TestValidation:
@@ -79,7 +79,7 @@ class TestValidation:
         # start == end is allowed (single month)
         dr = DateRange(start_year=2020, start_month=6, end_year=2020, end_month=6)
         assert dr.to_start_datetime() == datetime(2020, 6, 1, 0, 0, 0)
-        assert dr.to_end_datetime() == datetime(2020, 6, 30, 23, 59, 59)
+        assert dr.to_end_datetime() == datetime(2020, 6, 30, 23, 59, 59, 999999)
 
     def test_open_ended_no_start(self):
         dr = DateRange(end_year=2023)
