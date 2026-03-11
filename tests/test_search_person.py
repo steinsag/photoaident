@@ -76,7 +76,7 @@ def test_excludes_dissimilar_face(search_db, vector_store):
 
 
 def test_person_with_no_clusters_returns_empty(search_db, vector_store):
-    """Person that has no EmbeddingCluster records → empty result (line 52)."""
+    """Person that has no EmbeddingCluster records → empty result."""
     with search_db() as session:
         person = Person(name="Cluster-less")
         session.add(person)
@@ -88,7 +88,7 @@ def test_person_with_no_clusters_returns_empty(search_db, vector_store):
 
 
 def test_stale_faiss_id_causes_indexerror_skipped(search_db, vector_store):
-    """Face with faiss_id absent from VectorStore is skipped (lines 78-79)."""
+    """Face with faiss_id absent from VectorStore is skipped."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
     # Insert face with faiss_id=99 but never add that vector to 'vector_store'
@@ -118,7 +118,7 @@ def test_stale_faiss_id_causes_indexerror_skipped(search_db, vector_store):
 
 
 def test_cluster_with_all_stale_faiss_ids_skipped(search_db, vector_store):
-    """All embeddings raise IndexError → cluster skipped entirely (line 82)."""
+    """All embeddings raise IndexError → cluster skipped entirely."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
     with search_db() as session:
