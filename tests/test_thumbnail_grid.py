@@ -175,7 +175,7 @@ def test_hover_overlay_hides_on_hoverleave(
 def test_label_button_disabled_without_faces(
     qtbot, sample_image, tmp_path, mock_session_factory
 ):
-    """label_btn is disabled when there is no unidentified faces."""
+    """label_btn is disabled when there are no unidentified faces."""
     widget = ThumbnailWidget(
         1, str(sample_image), tmp_path / "t.jpg", mock_session_factory
     )

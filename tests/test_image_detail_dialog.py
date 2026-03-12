@@ -408,12 +408,12 @@ def test_face_tooltip_anonymous_shows_anonymous(
     assert regions[0][1] == QtCore.Qt.GlobalColor.green
 
 
-def test_face_tooltip_unidentified_without_vector_store(
+def test_face_tooltip_unidentified_no_vector_match(
     qtbot, tmp_path, mock_session_factory, mock_vector_store
 ):
-    """_build_face_display_info: UNIDENTIFIED without vector_store → Unknown + red."""
-    # This test name is now misleading because we must supply a vector_store,
-    # but we can test the case where _resolve_best_person_name returns None.
+    """_build_face_display_info: UNIDENTIFIED with no vector match → Unknown + red."""
+    # This covers the case where _resolve_best_person_name returns None
+    # even though a vector_store instance is available.
     from PIL import Image as PILImage
 
     img_path = tmp_path / "unknown.jpg"
