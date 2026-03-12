@@ -617,7 +617,7 @@ def test_resolve_best_person_name_returns_match(search_db, tmp_path):
             bbox_h=50,
             detection_confidence=0.9,
             model_version="v1",
-            faiss_id=1,  # faiss_id=1 is the identified neighbor
+            faiss_id=1,  # identified neighbor: faiss_id=1
             state=FaceState.IDENTIFIED,
             person_id=person.id,
         )
@@ -635,8 +635,8 @@ def test_resolve_best_person_name_returns_match(search_db, tmp_path):
     emb1 = np.ones(512, dtype=np.float32)
     emb1 /= np.linalg.norm(emb1)
 
-    vs.add(emb0)  # faiss_id=0 (unidentified)
-    vs.add(emb1)  # faiss_id=1 (Bob, identified)
+    vs.add(emb0)  # unidentified - faiss_id=0
+    vs.add(emb1)  # Bob, identified - faiss_id=1
 
     result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
     assert result is not None
@@ -666,8 +666,8 @@ def test_resolve_best_person_name_neighbors_but_none_identified(search_db):
     vs = VectorStore()
     emb = np.ones(512, dtype=np.float32)
     emb /= np.linalg.norm(emb)
-    vs.add(emb)  # faiss_id=0 (query face)
-    vs.add(emb)  # faiss_id=1 (neighbor, but not identified in DB)
+    vs.add(emb)  # query face - faiss_id=0
+    vs.add(emb)  # neighbor, but not identified in DB - faiss_id=1
 
     # DB is empty — no face with faiss_id=1 is IDENTIFIED → rows is empty → None
     result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
