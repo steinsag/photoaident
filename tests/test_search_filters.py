@@ -7,7 +7,11 @@ import pytest
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import search_images
-from photoaident.core.search_filters import _filename_subquery, _find_images_by_gps_bbox
+from photoaident.core.search_filters import (
+    _filename_filter_clauses,
+    _filename_subquery,
+    _find_images_by_gps_bbox,
+)
 from photoaident.db.vector_store import VectorStore
 from tests.search_helpers import _add_image_with_metadata
 
@@ -446,3 +450,98 @@ def test_filename_subquery_percent_does_not_match_all(search_db):
 
     # "%" contains no literal "%" characters in the DB paths → no match
     assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _filename_filter_clauses — unit tests (no DB round-trip needed)
+# ---------------------------------------------------------------------------
+
+
+def test_filename_filter_clauses_empty_returns_empty_list():
+    """An empty query returns no clauses (caller treats this as 'no filter')."""
+    assert _filename_filter_clauses("") == []
+
+
+@pytest.mark.parametrize("whitespace", ["   ", "\t", "\n"])
+def test_filename_filter_clauses_whitespace_returns_empty_list(whitespace):
+    assert _filename_filter_clauses(whitespace) == []
+
+
+def test_filename_filter_clauses_single_token_returns_one_clause():
+    clauses = _filename_filter_clauses("vacation")
+    assert len(clauses) == 1
+
+
+def test_filename_filter_clauses_multi_token_returns_one_clause_per_token():
+    clauses = _filename_filter_clauses("2024 vacation beach")
+    assert len(clauses) == 3
+
+
+# ---------------------------------------------------------------------------
+# _search_by_metadata_only — filename applied inline (no self-subquery)
+# ---------------------------------------------------------------------------
+
+
+def test_search_images_filename_only_matches_path(search_db):
+    """Filename-only search returns images whose file_path contains the token."""
+    from pathlib import Path
+
+    _add_image_with_metadata(search_db, "/photos/vacation_2024.jpg", "h1")
+    _add_image_with_metadata(search_db, "/photos/birthday_2024.jpg", "h2")
+
+    results = search_images(
+        thumbs_dir=Path("/tmp"),
+        session_factory=search_db,
+        vector_store=VectorStore(),
+        person_ids=[],
+        gps_bbox=None,
+        date_range=None,
+        filename_query="vacation",
+    )
+
+    assert len(results) == 1
+    assert "vacation" in results[0].file_path
+
+
+def test_search_images_filename_multi_token_and_logic(search_db):
+    """All tokens must match — images missing any token are excluded."""
+    from pathlib import Path
+
+    _add_image_with_metadata(search_db, "/photos/2024/vacation.jpg", "h1")
+    _add_image_with_metadata(search_db, "/photos/2023/vacation.jpg", "h2")
+    _add_image_with_metadata(search_db, "/photos/2024/birthday.jpg", "h3")
+
+    results = search_images(
+        thumbs_dir=Path("/tmp"),
+        session_factory=search_db,
+        vector_store=VectorStore(),
+        person_ids=[],
+        gps_bbox=None,
+        date_range=None,
+        filename_query="2024 vacation",
+    )
+
+    assert len(results) == 1
+    assert "2024" in results[0].file_path
+    assert "vacation" in results[0].file_path
+
+
+def test_search_images_filename_metachar_percent_is_literal(search_db):
+    """A '%' in the filename query matches literally, not as a LIKE wildcard."""
+    from pathlib import Path
+
+    literal_id = _add_image_with_metadata(search_db, "/photos/100%_crop.jpg", "h1")
+    _add_image_with_metadata(search_db, "/photos/vacation.jpg", "h2")
+
+    results = search_images(
+        thumbs_dir=Path("/tmp"),
+        session_factory=search_db,
+        vector_store=VectorStore(),
+        person_ids=[],
+        gps_bbox=None,
+        date_range=None,
+        filename_query="100%",
+    )
+
+    assert len(results) == 1
+    assert results[0].image_id == literal_id

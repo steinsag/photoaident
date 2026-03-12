@@ -12,7 +12,7 @@ from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search_filters import (
     _date_range_subquery,
-    _filename_subquery,
+    _filename_filter_clauses,
     _find_images_by_date_range,
     _find_images_by_filename,
     _find_images_by_gps_bbox,
@@ -122,7 +122,9 @@ def _search_by_metadata_only(
     if date_range is not None:
         conditions.append(Image.id.in_(_date_range_subquery(date_range)))
     if filename_query is not None:
-        conditions.append(Image.id.in_(_filename_subquery(filename_query)))
+        # Apply clauses directly on the images table — avoids a redundant
+        # self-subquery (images.id IN (SELECT images.id FROM images WHERE …)).
+        conditions.extend(_filename_filter_clauses(filename_query))
     if not conditions:
         return []
     with session_factory() as session:

@@ -97,19 +97,41 @@ def _find_images_by_date_range(
         return list(session.scalars(_date_range_subquery(date_range)).all())
 
 
+def _filename_filter_clauses(query: str) -> list:
+    """Return SQLAlchemy WHERE clauses for a filename token search.
+
+    Splits the query on whitespace and returns one ``LIKE`` clause per token,
+    all of which must match (AND logic, case-insensitive).  Callers can append
+    these directly to an outer ``WHERE`` clause to avoid a self-subquery on the
+    ``images`` table.
+
+    Returns an empty list when *query* contains no non-whitespace tokens (callers
+    should treat this as "no filter").
+    """
+    tokens = query.lower().split()
+    return [
+        func.lower(Image.file_path).contains(token, autoescape=True) for token in tokens
+    ]
+
+
 def _filename_subquery(query: str):
     """Return a SELECT subquery for image_ids matching the filename query.
 
     Splits the query on whitespace and requires ALL tokens to appear in the
     file_path (case-insensitive AND logic).
+
+    .. note::
+        Prefer :func:`_filename_filter_clauses` when filtering the ``images``
+        table directly — applying the conditions inline avoids a redundant
+        self-subquery (``images.id IN (SELECT images.id FROM images WHERE …)``).
+        This subquery form is kept for callers that need a scalar subquery
+        against a *different* table (e.g. materialising ID sets for FAISS
+        intersection).
     """
-    tokens = query.lower().split()
-    if not tokens:
+    clauses = _filename_filter_clauses(query)
+    if not clauses:
         return select(Image.id).where(false())
-    conditions = [
-        func.lower(Image.file_path).contains(token, autoescape=True) for token in tokens
-    ]
-    return select(Image.id).where(and_(*conditions))
+    return select(Image.id).where(and_(*clauses))
 
 
 def _find_images_by_filename(
