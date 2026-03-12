@@ -52,7 +52,7 @@ def _resolve_batch_person_names(
             continue
 
     if not all_neighbor_ids:
-        return {fid: None for fid in faiss_ids}
+        return dict.fromkeys(faiss_ids)
 
     # 2. Batch DB query for all potential neighbor names
     stmt = (
