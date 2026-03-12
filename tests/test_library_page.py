@@ -541,10 +541,10 @@ def test_keyword_search_counts_as_filter(
     qtbot.addWidget(page)
 
     assert not page._has_filters()
-    page.keyword_search_edit.setText("vacation")
+    page.filepath_search_edit.setText("vacation")
     assert page._has_filters()
 
-    page.keyword_search_edit.clear()
+    page.filepath_search_edit.clear()
     assert not page._has_filters()
 
 
@@ -555,7 +555,7 @@ def test_keyword_search_passes_query_to_search(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    page.keyword_search_edit.setText("New York")
+    page.filepath_search_edit.setText("New York")
     page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
@@ -575,7 +575,7 @@ def test_keyword_search_empty_passes_none(
 
     # Need at least one other filter active so load_images actually calls search
     page._date_range = DateRange(start_year=2020)
-    page.keyword_search_edit.clear()
+    page.filepath_search_edit.clear()
     page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
