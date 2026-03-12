@@ -2,10 +2,12 @@
 
 from datetime import datetime
 
+import pytest
+
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import search_images
-from photoaident.core.search_filters import _find_images_by_gps_bbox
+from photoaident.core.search_filters import _filename_subquery, _find_images_by_gps_bbox
 from photoaident.db.vector_store import VectorStore
 from tests.search_helpers import _add_image_with_metadata
 
@@ -387,3 +389,19 @@ def test_search_by_filename_multiple_keywords_case_insensitive(search_db, tmp_pa
     )
 
     assert len(results) == 1
+
+
+# ---------------------------------------------------------------------------
+# _filename_subquery — empty / whitespace guard
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("empty", ["", "   ", "\t", "\n"])
+def test_filename_subquery_empty_matches_nothing(search_db, empty):
+    """An empty or whitespace-only query produces a subquery that matches no rows."""
+    _add_image_with_metadata(search_db, "/photos/vacation.jpg", "h1")
+
+    with search_db() as session:
+        result = list(session.scalars(_filename_subquery(empty)).all())
+
+    assert result == [], f"Expected no matches for query {empty!r}, got {result}"

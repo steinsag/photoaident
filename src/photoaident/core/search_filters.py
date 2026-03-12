@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, false, func, select
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -104,6 +104,8 @@ def _filename_subquery(query: str):
     file_path (case-insensitive AND logic).
     """
     tokens = query.lower().split()
+    if not tokens:
+        return select(Image.id).where(false())
     conditions = [func.lower(Image.file_path).contains(token) for token in tokens]
     return select(Image.id).where(and_(*conditions))
 
