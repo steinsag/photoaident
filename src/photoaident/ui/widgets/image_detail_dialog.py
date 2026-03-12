@@ -138,7 +138,15 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._setup_ui()
         self._load_image()
 
-    def _setup_ui(self):
+    def _format_file_size(self, size_bytes: int) -> str:
+        """Format file size in bytes to a human-readable string."""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        if size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+    def _setup_ui(self) -> None:
         main_layout = QtWidgets.QHBoxLayout(self)
 
         # Left panel: Metadata
@@ -152,7 +160,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         metadata_layout.addWidget(title_label)
 
         # Helper to add metadata rows
-        def add_meta(label_text, value_text):
+        def add_meta(label_text: str, value_text: str | int | None) -> None:
+            if value_text is None:
+                return
             row_layout = QtWidgets.QHBoxLayout()
             label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
             label.setFixedWidth(80)
@@ -167,16 +177,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         add_meta(self.tr("ID"), self.image_data.id)
         add_meta(self.tr("File Path"), self.image_data.file_path)
-
-        # Format file size
-        size_bytes = self.image_data.file_size
-        if size_bytes < 1024:
-            size_str = f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            size_str = f"{size_bytes / 1024:.1f} KB"
-        else:
-            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-        add_meta(self.tr("File Size"), size_str)
+        add_meta(
+            self.tr("File Size"), self._format_file_size(self.image_data.file_size)
+        )
 
         if self.image_data.metadata_rel:
             meta = self.image_data.metadata_rel
@@ -224,6 +227,29 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         main_layout.addWidget(self.scroll_area, 1)
 
+    def _get_face_display_info(self, face: Face) -> tuple[QtCore.Qt.GlobalColor, str]:
+        """Return (color, tooltip) for a single face based on its state."""
+        green = QtCore.Qt.GlobalColor.green
+        red = QtCore.Qt.GlobalColor.red
+
+        if face.state == FaceState.IDENTIFIED:
+            name = face.person.name if face.person else self.tr("Unknown")
+            return green, name
+
+        if face.state == FaceState.ANONYMOUS:
+            return green, self.tr("Anonymous")
+
+        # UNIDENTIFIED: try FAISS match
+        if self._vector_store and self._session_factory:
+            match = _resolve_best_person_name(
+                face.faiss_id, self._session_factory, self._vector_store
+            )
+            if match:
+                name, score = match
+                return green, f"{name} ({score:.0%})"
+
+        return red, self.tr("Unknown")
+
     def _build_face_display_info(
         self,
     ) -> list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]]:
@@ -232,41 +258,15 @@ class ImageDetailDialog(QtWidgets.QDialog):
         Color is green for identified/anonymous/matched-unidentified faces and
         red only for truly unknown (unidentified with no FAISS match) faces.
         """
-        _GREEN = QtCore.Qt.GlobalColor.green
-        _RED = QtCore.Qt.GlobalColor.red
-
         result: list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]] = []
         for face in self.image_data.faces:
             if face.deleted_at is not None:
                 continue
 
             rect = QtCore.QRectF(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h)
-
-            if face.state == FaceState.IDENTIFIED:
-                tooltip = (
-                    face.person.name if face.person is not None else self.tr("Unknown")
-                )
-                color = _GREEN
-            elif face.state == FaceState.ANONYMOUS:
-                tooltip = self.tr("Anonymous")
-                color = _GREEN
-            else:  # UNIDENTIFIED
-                if self._vector_store is not None and self._session_factory is not None:
-                    match = _resolve_best_person_name(
-                        face.faiss_id, self._session_factory, self._vector_store
-                    )
-                    if match is not None:
-                        name, score = match
-                        tooltip = f"{name} ({score:.0%})"
-                        color = _GREEN
-                    else:
-                        tooltip = self.tr("Unknown")
-                        color = _RED
-                else:
-                    tooltip = self.tr("Unknown")
-                    color = _RED
-
+            color, tooltip = self._get_face_display_info(face)
             result.append((rect, color, tooltip))
+
         return result
 
     def _load_image(self):
