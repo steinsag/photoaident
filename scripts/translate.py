@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from collections.abc import Iterator
 from pathlib import Path
 
 TS_FILES: list[Path] = [
@@ -36,34 +37,39 @@ def _ensure_available(cmd: str) -> None:
 _PROBLEM_TYPES = ("vanished", "unfinished", "obsolete")
 
 
+def _find_problems(ts_path: Path) -> Iterator[tuple[str, str, str]]:
+    """Yield (kind, context_name, source_text) for each problematic entry in a .ts file.
+
+    Problematic entries are those with type "vanished", "unfinished", or "obsolete".
+    """
+    for context in ET.parse(ts_path).getroot().findall("context"):
+        context_name = context.findtext("name", default="<unknown>")
+        for message in context.findall("message"):
+            translation = message.find("translation")
+            if translation is None:
+                continue
+            kind = translation.get("type", "")
+            if kind in _PROBLEM_TYPES:
+                yield kind, context_name, message.findtext("source", default="")
+
+
 def _check_ts_files(ts_files: list[Path]) -> int:
-    """Parse each .ts file and report vanished, unfinished, or obsolete strings.
+    """Report vanished, unfinished, or obsolete strings across all .ts files.
 
     Returns 0 if clean, 1 if any problems are found.
     """
     found_problems = False
     for ts_path in ts_files:
         try:
-            tree = ET.parse(ts_path)
+            for kind, context_name, source_text in _find_problems(ts_path):
+                print(
+                    f"[translate] {ts_path}: {kind} string"
+                    f" in '{context_name}': {source_text!r}"
+                )
+                found_problems = True
         except ET.ParseError as exc:
             print(f"[translate] failed to parse {ts_path}: {exc}")
             return 1
-
-        root = tree.getroot()
-        for context in root.findall("context"):
-            context_name = context.findtext("name", default="<unknown>")
-            for message in context.findall("message"):
-                translation = message.find("translation")
-                if translation is None:
-                    continue
-                kind = translation.get("type")
-                if kind in _PROBLEM_TYPES:
-                    source_text = message.findtext("source", default="")
-                    print(
-                        f"[translate] {ts_path}: {kind} string in"
-                        f" '{context_name}': {source_text!r}"
-                    )
-                    found_problems = True
 
     if found_problems:
         print("[translate] fix the problems above before compiling.")
