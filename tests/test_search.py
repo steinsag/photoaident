@@ -164,12 +164,27 @@ def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
 
 
 def test_search_images_ranking(search_db, vector_store, tmp_path):
-    """search_images ranks results by minimum score across multiple persons."""
+    """search_images ranks results by minimum score across multiple persons.
+
+    Fixture design: each cluster has exactly ONE identified face (in img1), so
+    the cluster mean equals that face's embedding exactly — making FAISS scores
+    fully deterministic.  img2 carries only UNIDENTIFIED faces (excluded from
+    mean computation) with a lower-similarity embedding so it ranks second.
+    """
     p1_id, c1_id = _add_person_cluster(search_db)
     p2_id, c2_id = _add_person_cluster(search_db)
 
-    emb_exact = np.zeros(512, dtype=np.float32)
-    emb_exact[0] = 1.0
+    # Orthogonal unit vectors — cluster means are exactly these after one face each.
+    emb_p1 = np.zeros(512, dtype=np.float32)
+    emb_p1[0] = 1.0
+    emb_p2 = np.zeros(512, dtype=np.float32)
+    emb_p2[1] = 1.0
+
+    # 45-degree mix: cosine similarity ~0.707 with both emb_p1 and emb_p2.
+    emb_mix = np.zeros(512, dtype=np.float32)
+    emb_mix[0] = 1.0
+    emb_mix[1] = 1.0
+    emb_mix /= np.linalg.norm(emb_mix)
 
     with search_db() as session:
         img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
@@ -177,19 +192,12 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
         session.add_all([img1, img2])
         session.flush()
 
-        v09 = emb_exact.copy()
-        v09[1] = 0.435  # approx sqrt(1 - 0.9²)
-        v09 /= np.linalg.norm(v09)
-
-        v08 = emb_exact.copy()
-        v08[1] = 0.6
-        v08 /= np.linalg.norm(v08)
-
         session.add_all(
             [
+                # img1: one identified face per person — cluster mean = that embedding.
                 Face(
                     image_id=img1.id,
-                    faiss_id=vector_store.add(emb_exact),
+                    faiss_id=vector_store.add(emb_p1),
                     bbox_x=0,
                     bbox_y=0,
                     bbox_w=100,
@@ -202,7 +210,7 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
                 ),
                 Face(
                     image_id=img1.id,
-                    faiss_id=vector_store.add(v09),
+                    faiss_id=vector_store.add(emb_p2),
                     bbox_x=110,
                     bbox_y=0,
                     bbox_w=100,
@@ -213,30 +221,28 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
                     state=FaceState.IDENTIFIED,
                     model_version="test",
                 ),
+                # img2: unidentified faces — excluded from cluster mean computation
+                # but still found by FAISS search (cosine ~0.707, above threshold).
                 Face(
                     image_id=img2.id,
-                    faiss_id=vector_store.add(v08),
+                    faiss_id=vector_store.add(emb_mix),
                     bbox_x=0,
                     bbox_y=0,
                     bbox_w=100,
                     bbox_h=100,
                     detection_confidence=0.9,
-                    person_id=p1_id,
-                    cluster_id=c1_id,
-                    state=FaceState.IDENTIFIED,
+                    state=FaceState.UNIDENTIFIED,
                     model_version="test",
                 ),
                 Face(
                     image_id=img2.id,
-                    faiss_id=vector_store.add(v08),
+                    faiss_id=vector_store.add(emb_mix),
                     bbox_x=110,
                     bbox_y=0,
                     bbox_w=100,
                     bbox_h=100,
                     detection_confidence=0.9,
-                    person_id=p2_id,
-                    cluster_id=c2_id,
-                    state=FaceState.IDENTIFIED,
+                    state=FaceState.UNIDENTIFIED,
                     model_version="test",
                 ),
             ]
