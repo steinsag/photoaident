@@ -64,6 +64,10 @@ def search_images(
     Returns:
         List of SearchResult objects.
     """
+    filename_query = (
+        filename_query.strip() or None if filename_query is not None else None
+    )
+
     if not person_ids and not gps_bbox and not date_range and not filename_query:
         return []
 

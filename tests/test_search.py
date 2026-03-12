@@ -3,6 +3,7 @@
 from datetime import datetime
 
 import numpy as np
+import pytest
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -39,6 +40,27 @@ def test_no_filters_returns_empty(search_db, vector_store, tmp_path):
     )
     results = search_images(
         tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None, date_range=None
+    )
+    assert results == []
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_blank_filename_query_returns_empty(search_db, vector_store, tmp_path, blank):
+    """Blank/whitespace filename_query must be treated as no filter → empty result."""
+    _add_image_with_metadata(
+        search_db,
+        file_path="/photos/img.jpg",
+        file_hash="h",
+        taken_at=datetime(2021, 1, 1),
+    )
+    results = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[],
+        gps_bbox=None,
+        date_range=None,
+        filename_query=blank,
     )
     assert results == []
 
