@@ -70,6 +70,7 @@ class _FaceOverlayLabel(QtWidgets.QLabel):
         super().__init__(parent)
         self._face_regions: list[tuple[QtCore.QRectF, str]] = []
         self._original_size: QtCore.QSize = QtCore.QSize()
+        self._last_hovered_index: int = -1
         self.setMouseTracking(True)
 
     def set_face_regions(
@@ -80,6 +81,7 @@ class _FaceOverlayLabel(QtWidgets.QLabel):
         """Set face bounding boxes (in original-image coords) and their tooltip text."""
         self._face_regions = regions
         self._original_size = original_size
+        self._last_hovered_index = -2
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
         super().mouseMoveEvent(event)
@@ -102,15 +104,22 @@ class _FaceOverlayLabel(QtWidgets.QLabel):
         pos = event.position()
         orig_x = (pos.x() - offset_x) / pm_w * self._original_size.width()
         orig_y = (pos.y() - offset_y) / pm_h * self._original_size.height()
+        current_hovered_index = -1
 
-        for rect, tooltip_text in self._face_regions:
+        for i, (rect, tooltip_text) in enumerate(self._face_regions):
             if rect.contains(orig_x, orig_y):
+                current_hovered_index = i
+                break
+
+        if current_hovered_index != self._last_hovered_index:
+            self._last_hovered_index = current_hovered_index
+            if current_hovered_index != -1:
+                _, tooltip_text = self._face_regions[current_hovered_index]
                 QtWidgets.QToolTip.showText(
                     event.globalPosition().toPoint(), tooltip_text, self
                 )
-                return
-
-        QtWidgets.QToolTip.hideText()
+            else:
+                QtWidgets.QToolTip.hideText()
 
 
 class ImageDetailDialog(QtWidgets.QDialog):
