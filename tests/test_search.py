@@ -1,7 +1,11 @@
-"""Combined search tests: empty input, person+GPS, multi-person, ranking."""
+"""Orchestration tests for search_images(): multi-filter combinations and ranking."""
+
+from datetime import datetime
 
 import numpy as np
+import pytest
 
+from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import search_images
 from photoaident.db.database import (
@@ -11,8 +15,11 @@ from photoaident.db.database import (
     ImageMetadata,
     TakenAtSource,
 )
+from photoaident.db.vector_store import VectorStore
 from tests.search_helpers import (
+    _add_face_for_image,
     _add_identified_face,
+    _add_image_with_metadata,
     _add_person_cluster,
     _rand_norm_emb,
 )
@@ -26,41 +33,276 @@ def test_search_images_empty_input_returns_empty(search_db, vector_store, tmp_pa
     assert results == []
 
 
-def test_search_images_intersection(search_db, vector_store, tmp_path):
+def test_no_filters_returns_empty(search_db, vector_store, tmp_path):
+    """search_images with no filters returns empty even when images exist."""
+    _add_image_with_metadata(
+        search_db, file_path="/img.jpg", file_hash="h", taken_at=datetime(2021, 1, 1)
+    )
+    results = search_images(
+        tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None, date_range=None
+    )
+    assert results == []
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\t"])
+def test_blank_filename_query_returns_empty(search_db, vector_store, tmp_path, blank):
+    """Blank/whitespace filename_query must be treated as no filter → empty result."""
+    _add_image_with_metadata(
+        search_db,
+        file_path="/photos/img.jpg",
+        file_hash="h",
+        taken_at=datetime(2021, 1, 1),
+    )
+    results = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[],
+        gps_bbox=None,
+        date_range=None,
+        filename_query=blank,
+    )
+    assert results == []
+
+
+def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
+    """search_images requires ALL persons to be present (AND logic)."""
+    p1_id, c1_id = _add_person_cluster(search_db)
+    p2_id, c2_id = _add_person_cluster(search_db)
+
+    emb1 = np.zeros(512, dtype=np.float32)
+    emb1[0] = 1.0
+    emb2 = np.zeros(512, dtype=np.float32)
+    emb2[1] = 1.0
+
+    # Image with both persons
+    with search_db() as session:
+        img_both = Image(file_path="/both.jpg", file_size=100, file_hash="both")
+        session.add(img_both)
+        session.flush()
+        both_id = img_both.id
+        session.add_all(
+            [
+                Face(
+                    image_id=both_id,
+                    faiss_id=vector_store.add(emb1),
+                    bbox_x=0,
+                    bbox_y=0,
+                    bbox_w=50,
+                    bbox_h=50,
+                    detection_confidence=0.9,
+                    person_id=p1_id,
+                    cluster_id=c1_id,
+                    state=FaceState.IDENTIFIED,
+                    model_version="test",
+                ),
+                Face(
+                    image_id=both_id,
+                    faiss_id=vector_store.add(emb2),
+                    bbox_x=60,
+                    bbox_y=0,
+                    bbox_w=50,
+                    bbox_h=50,
+                    detection_confidence=0.9,
+                    person_id=p2_id,
+                    cluster_id=c2_id,
+                    state=FaceState.IDENTIFIED,
+                    model_version="test",
+                ),
+            ]
+        )
+        session.commit()
+
+    # Image with only p1
+    _add_identified_face(search_db, vector_store, p1_id, c1_id, emb1)
+
+    assert (
+        search_images(
+            tmp_path,
+            search_db,
+            vector_store,
+            person_ids=[],
+            gps_bbox=None,
+            date_range=None,
+        )
+        == []
+    )
+
+    results_p1 = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id],
+        gps_bbox=None,
+        date_range=None,
+    )
+    assert len(results_p1) == 2
+
+    results_both = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id, p2_id],
+        gps_bbox=None,
+        date_range=None,
+    )
+    assert len(results_both) == 1
+    assert results_both[0].image_id == both_id
+
+    p3_id, _ = _add_person_cluster(search_db)
+    assert (
+        search_images(
+            tmp_path,
+            search_db,
+            vector_store,
+            person_ids=[p1_id, p3_id],
+            gps_bbox=None,
+            date_range=None,
+        )
+        == []
+    )
+
+
+def test_search_images_ranking(search_db, vector_store, tmp_path):
+    """search_images ranks results by minimum score across multiple persons.
+
+    Fixture design: each cluster has exactly ONE identified face (in img1), so
+    the cluster mean equals that face's embedding exactly — making FAISS scores
+    fully deterministic.  img2 carries only UNIDENTIFIED faces (excluded from
+    mean computation) with a lower-similarity embedding so it ranks second.
+    """
+    p1_id, c1_id = _add_person_cluster(search_db)
+    p2_id, c2_id = _add_person_cluster(search_db)
+
+    # Orthogonal unit vectors — cluster means are exactly these after one face each.
+    emb_p1 = np.zeros(512, dtype=np.float32)
+    emb_p1[0] = 1.0
+    emb_p2 = np.zeros(512, dtype=np.float32)
+    emb_p2[1] = 1.0
+
+    # 45-degree mix: cosine similarity ~0.707 with both emb_p1 and emb_p2.
+    emb_mix = np.zeros(512, dtype=np.float32)
+    emb_mix[0] = 1.0
+    emb_mix[1] = 1.0
+    emb_mix /= np.linalg.norm(emb_mix)
+
+    with search_db() as session:
+        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
+        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
+        session.add_all([img1, img2])
+        session.flush()
+
+        session.add_all(
+            [
+                # img1: one identified face per person — cluster mean = that embedding.
+                Face(
+                    image_id=img1.id,
+                    faiss_id=vector_store.add(emb_p1),
+                    bbox_x=0,
+                    bbox_y=0,
+                    bbox_w=100,
+                    bbox_h=100,
+                    detection_confidence=0.9,
+                    person_id=p1_id,
+                    cluster_id=c1_id,
+                    state=FaceState.IDENTIFIED,
+                    model_version="test",
+                ),
+                Face(
+                    image_id=img1.id,
+                    faiss_id=vector_store.add(emb_p2),
+                    bbox_x=110,
+                    bbox_y=0,
+                    bbox_w=100,
+                    bbox_h=100,
+                    detection_confidence=0.9,
+                    person_id=p2_id,
+                    cluster_id=c2_id,
+                    state=FaceState.IDENTIFIED,
+                    model_version="test",
+                ),
+                # img2: unidentified faces — excluded from cluster mean computation
+                # but still found by FAISS search (cosine ~0.707, above threshold).
+                Face(
+                    image_id=img2.id,
+                    faiss_id=vector_store.add(emb_mix),
+                    bbox_x=0,
+                    bbox_y=0,
+                    bbox_w=100,
+                    bbox_h=100,
+                    detection_confidence=0.9,
+                    state=FaceState.UNIDENTIFIED,
+                    model_version="test",
+                ),
+                Face(
+                    image_id=img2.id,
+                    faiss_id=vector_store.add(emb_mix),
+                    bbox_x=110,
+                    bbox_y=0,
+                    bbox_w=100,
+                    bbox_h=100,
+                    detection_confidence=0.9,
+                    state=FaceState.UNIDENTIFIED,
+                    model_version="test",
+                ),
+            ]
+        )
+        session.commit()
+        img1_id, img2_id = img1.id, img2.id
+
+    results = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[p1_id, p2_id],
+        gps_bbox=None,
+        date_range=None,
+    )
+    assert len(results) == 2
+    assert results[0].image_id == img1_id
+    assert results[1].image_id == img2_id
+
+
+# ---------------------------------------------------------------------------
+# Person + GPS
+# ---------------------------------------------------------------------------
+
+
+def test_search_images_person_and_gps_intersection(search_db, vector_store, tmp_path):
     """search_images intersects person and GPS filters."""
     person_id, cluster_id = _add_person_cluster(search_db)
     emb = _rand_norm_emb()
 
-    # Image 1: has person, inside GPS
     img1_id, _ = _add_identified_face(
         search_db, vector_store, person_id, cluster_id, emb
     )
     with search_db() as session:
-        meta1 = ImageMetadata(
-            image_id=img1_id,
-            gps_lat=50.0,
-            gps_lon=10.0,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
+        session.add(
+            ImageMetadata(
+                image_id=img1_id,
+                gps_lat=50.0,
+                gps_lon=10.0,
+                taken_at_source=TakenAtSource.FILESYSTEM,
+                width=100,
+                height=100,
+            )
         )
-        session.add(meta1)
         session.commit()
 
-    # Image 2: has person, outside GPS
     img2_id, _ = _add_identified_face(
         search_db, vector_store, person_id, cluster_id, emb
     )
     with search_db() as session:
-        meta2 = ImageMetadata(
-            image_id=img2_id,
-            gps_lat=20.0,
-            gps_lon=20.0,
-            taken_at_source=TakenAtSource.FILESYSTEM,
-            width=100,
-            height=100,
+        session.add(
+            ImageMetadata(
+                image_id=img2_id,
+                gps_lat=20.0,
+                gps_lon=20.0,
+                taken_at_source=TakenAtSource.FILESYSTEM,
+                width=100,
+                height=100,
+            )
         )
-        session.add(meta2)
         session.commit()
 
     bbox = GpsBoundingBox(south=45.0, west=5.0, north=55.0, east=15.0)
@@ -77,195 +319,266 @@ def test_search_images_intersection(search_db, vector_store, tmp_path):
     assert results[0].image_id == img1_id
 
 
-def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
-    """search_images requires ALL persons to be present (AND logic)."""
-    p1_id, c1_id = _add_person_cluster(search_db)
-    p2_id, c2_id = _add_person_cluster(search_db)
+# ---------------------------------------------------------------------------
+# Person + date
+# ---------------------------------------------------------------------------
 
-    emb1 = np.zeros(512, dtype=np.float32)
-    emb1[0] = 1.0
-    emb2 = np.zeros(512, dtype=np.float32)
-    emb2[1] = 1.0
 
-    # Image with both
+def test_date_and_person_intersection(search_db, vector_store, tmp_path):
+    """Date filter is applied together with person filter (AND intersection)."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+    emb = _rand_norm_emb()
+
+    img1_id, _ = _add_identified_face(
+        search_db, vector_store, person_id, cluster_id, emb
+    )
     with search_db() as session:
-        img_both = Image(file_path="/both.jpg", file_size=100, file_hash="both")
-        session.add(img_both)
-        session.flush()
-        both_id = img_both.id
-        f1 = Face(
-            image_id=both_id,
-            faiss_id=vector_store.add(emb1),
-            bbox_x=0,
-            bbox_y=0,
-            bbox_w=50,
-            bbox_h=50,
-            detection_confidence=0.9,
-            person_id=p1_id,
-            cluster_id=c1_id,
-            state=FaceState.IDENTIFIED,
-            model_version="test",
-        )
-        f2 = Face(
-            image_id=both_id,
-            faiss_id=vector_store.add(emb2),
-            bbox_x=60,
-            bbox_y=0,
-            bbox_w=50,
-            bbox_h=50,
-            detection_confidence=0.9,
-            person_id=p2_id,
-            cluster_id=c2_id,
-            state=FaceState.IDENTIFIED,
-            model_version="test",
-        )
-        session.add_all([f1, f2])
-        session.commit()
-
-    # Image with only p1
-    _add_identified_face(search_db, vector_store, p1_id, c1_id, emb1)
-
-    # Empty person_ids list
-    results_empty = search_images(
-        tmp_path, search_db, vector_store, person_ids=[], gps_bbox=None, date_range=None
-    )
-    assert results_empty == []
-
-    # One person (p1)
-    results_p1 = search_images(
-        tmp_path,
-        search_db,
-        vector_store,
-        person_ids=[p1_id],
-        gps_bbox=None,
-        date_range=None,
-    )
-    assert len(results_p1) == 2  # both.jpg and img1.jpg
-
-    # Intersection of p1 and p2
-    results_both = search_images(
-        tmp_path,
-        search_db,
-        vector_store,
-        person_ids=[p1_id, p2_id],
-        gps_bbox=None,
-        date_range=None,
-    )
-    assert len(results_both) == 1
-    assert results_both[0].image_id == both_id
-
-    # Intersection with no common images
-    p3_id, _ = _add_person_cluster(search_db)
-    results_none = search_images(
-        tmp_path,
-        search_db,
-        vector_store,
-        person_ids=[p1_id, p3_id],
-        gps_bbox=None,
-        date_range=None,
-    )
-    assert results_none == []
-
-
-def test_search_images_ranking(search_db, vector_store, tmp_path):
-    """search_images ranks by minimum score across multiple persons."""
-    p1_id, c1_id = _add_person_cluster(search_db)
-    p2_id, c2_id = _add_person_cluster(search_db)
-
-    emb_exact = np.zeros(512, dtype=np.float32)
-    emb_exact[0] = 1.0
-
-    # Image 1: p1 matched at 1.0, p2 matched at 0.9
-    # Image 2: p1 matched at 0.8, p2 matched at 0.8
-    # Image 1 min score: 0.9, Image 2 min score: 0.8 -> Image 1 should be first
-
-    with search_db() as session:
-        img1 = Image(file_path="/img1.jpg", file_size=100, file_hash="h1")
-        img2 = Image(file_path="/img2.jpg", file_size=100, file_hash="h2")
-        session.add_all([img1, img2])
-        session.flush()
-
-        # Image 1 faces
         session.add(
-            Face(
-                image_id=img1.id,
-                faiss_id=vector_store.add(emb_exact),
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=100,
-                bbox_h=100,
-                detection_confidence=0.9,
-                person_id=p1_id,
-                cluster_id=c1_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
-        # Using a vector very close to emb_exact for 0.9 score
-        v09 = emb_exact.copy()
-        v09[1] = 0.435  # sqrt(1-0.9^2) approx 0.4358
-        v09 /= np.linalg.norm(v09)
-        session.add(
-            Face(
-                image_id=img1.id,
-                faiss_id=vector_store.add(v09),
-                bbox_x=110,
-                bbox_y=0,
-                bbox_w=100,
-                bbox_h=100,
-                detection_confidence=0.9,
-                person_id=p2_id,
-                cluster_id=c2_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
-
-        # Image 2 faces (both 0.8)
-        v08 = emb_exact.copy()
-        v08[1] = 0.6
-        v08 /= np.linalg.norm(v08)
-        session.add(
-            Face(
-                image_id=img2.id,
-                faiss_id=vector_store.add(v08),
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=100,
-                bbox_h=100,
-                detection_confidence=0.9,
-                person_id=p1_id,
-                cluster_id=c1_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
-        )
-        session.add(
-            Face(
-                image_id=img2.id,
-                faiss_id=vector_store.add(v08),
-                bbox_x=110,
-                bbox_y=0,
-                bbox_w=100,
-                bbox_h=100,
-                detection_confidence=0.9,
-                person_id=p2_id,
-                cluster_id=c2_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
+            ImageMetadata(
+                image_id=img1_id,
+                taken_at=datetime(2021, 5, 1),
+                taken_at_source=TakenAtSource.FILESYSTEM,
+                width=100,
+                height=100,
             )
         )
         session.commit()
-        img1_id, img2_id = img1.id, img2.id
+
+    img2_id, _ = _add_identified_face(
+        search_db, vector_store, person_id, cluster_id, emb
+    )
+    with search_db() as session:
+        session.add(
+            ImageMetadata(
+                image_id=img2_id,
+                taken_at=datetime(2018, 1, 1),
+                taken_at_source=TakenAtSource.FILESYSTEM,
+                width=100,
+                height=100,
+            )
+        )
+        session.commit()
 
     results = search_images(
         tmp_path,
         search_db,
         vector_store,
-        person_ids=[p1_id, p2_id],
+        person_ids=[person_id],
+        gps_bbox=None,
+        date_range=DateRange(start_year=2020, end_year=2022),
+    )
+
+    result_ids = {r.image_id for r in results}
+    assert img1_id in result_ids
+    assert img2_id not in result_ids
+
+
+# ---------------------------------------------------------------------------
+# GPS + date
+# ---------------------------------------------------------------------------
+
+
+def test_date_and_gps_intersection(search_db, tmp_path):
+    """Date filter and GPS filter both apply (AND intersection)."""
+    _add_image_with_metadata(
+        search_db,
+        file_path="/both.jpg",
+        file_hash="both",
+        taken_at=datetime(2021, 6, 1),
+        gps_lat=52.0,
+        gps_lon=13.0,
+    )
+    _add_image_with_metadata(
+        search_db,
+        file_path="/date_only.jpg",
+        file_hash="dateonly",
+        taken_at=datetime(2021, 6, 1),
+        gps_lat=10.0,
+        gps_lon=10.0,
+    )
+    _add_image_with_metadata(
+        search_db,
+        file_path="/gps_only.jpg",
+        file_hash="gpsonly",
+        taken_at=datetime(2015, 1, 1),
+        gps_lat=52.0,
+        gps_lon=13.0,
+    )
+
+    results = search_images(
+        tmp_path,
+        search_db,
+        VectorStore(),
+        person_ids=[],
+        gps_bbox=GpsBoundingBox(south=50.0, west=10.0, north=55.0, east=16.0),
+        date_range=DateRange(start_year=2020, end_year=2022),
+    )
+
+    paths = {r.file_path for r in results}
+    assert "/both.jpg" in paths
+    assert "/date_only.jpg" not in paths
+    assert "/gps_only.jpg" not in paths
+
+
+# ---------------------------------------------------------------------------
+# Person + GPS + date
+# ---------------------------------------------------------------------------
+
+
+def test_all_three_filters_combined(search_db, vector_store, tmp_path):
+    """Person + GPS + date all combined in one search."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+    emb = np.zeros(512, dtype=np.float32)
+    emb[0] = 1.0
+
+    img_match_id, _ = _add_identified_face(
+        search_db, vector_store, person_id, cluster_id, emb
+    )
+    with search_db() as session:
+        session.add(
+            ImageMetadata(
+                image_id=img_match_id,
+                taken_at=datetime(2021, 6, 1),
+                gps_lat=52.0,
+                gps_lon=13.0,
+                taken_at_source=TakenAtSource.FILESYSTEM,
+                width=100,
+                height=100,
+            )
+        )
+        session.commit()
+
+    img_wrong_date_id, _ = _add_identified_face(
+        search_db, vector_store, person_id, cluster_id, emb
+    )
+    with search_db() as session:
+        session.add(
+            ImageMetadata(
+                image_id=img_wrong_date_id,
+                taken_at=datetime(2015, 1, 1),
+                gps_lat=52.0,
+                gps_lon=13.0,
+                taken_at_source=TakenAtSource.FILESYSTEM,
+                width=100,
+                height=100,
+            )
+        )
+        session.commit()
+
+    results = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[person_id],
+        gps_bbox=GpsBoundingBox(south=50.0, west=10.0, north=55.0, east=16.0),
+        date_range=DateRange(start_year=2020, end_year=2022),
+    )
+
+    result_ids = {r.image_id for r in results}
+    assert img_match_id in result_ids
+    assert img_wrong_date_id not in result_ids
+
+
+# ---------------------------------------------------------------------------
+# Filename + other filters
+# ---------------------------------------------------------------------------
+
+
+def test_search_by_filename_combined_with_date(search_db, tmp_path):
+    """Filename filter ANDs with date range filter."""
+    _add_image_with_metadata(
+        search_db,
+        file_path="/vacation/Rome/img.jpg",
+        file_hash="rome_in",
+        taken_at=datetime(2021, 6, 1),
+    )
+    _add_image_with_metadata(
+        search_db,
+        file_path="/vacation/Rome/old.jpg",
+        file_hash="rome_out",
+        taken_at=datetime(2010, 1, 1),
+    )
+    _add_image_with_metadata(
+        search_db,
+        file_path="/vacation/Berlin/img.jpg",
+        file_hash="berlin_in",
+        taken_at=datetime(2021, 6, 1),
+    )
+
+    results = search_images(
+        tmp_path,
+        search_db,
+        VectorStore(),
+        person_ids=[],
+        gps_bbox=None,
+        date_range=DateRange(start_year=2020, end_year=2022),
+        filename_query="Rome",
+    )
+
+    assert len(results) == 1
+    assert results[0].file_path == "/vacation/Rome/img.jpg"
+
+
+def test_search_by_filename_combined_with_gps(search_db, tmp_path):
+    """Filename filter ANDs with GPS bounding box filter."""
+    _add_image_with_metadata(
+        search_db,
+        file_path="/trip/Barcelona/beach.jpg",
+        file_hash="bcn_in",
+        gps_lat=41.4,
+        gps_lon=2.2,
+    )
+    _add_image_with_metadata(
+        search_db,
+        file_path="/trip/Barcelona/mountain.jpg",
+        file_hash="bcn_out",
+        gps_lat=10.0,
+        gps_lon=10.0,
+    )
+    _add_image_with_metadata(
+        search_db,
+        file_path="/trip/Madrid/plaza.jpg",
+        file_hash="mad_in",
+        gps_lat=41.4,
+        gps_lon=2.2,
+    )
+
+    results = search_images(
+        tmp_path,
+        search_db,
+        VectorStore(),
+        person_ids=[],
+        gps_bbox=GpsBoundingBox(south=40.0, west=1.0, north=43.0, east=4.0),
+        date_range=None,
+        filename_query="Barcelona",
+    )
+
+    assert len(results) == 1
+    assert results[0].file_path == "/trip/Barcelona/beach.jpg"
+
+
+def test_search_by_filename_combined_with_person(search_db, vector_store, tmp_path):
+    """Filename filter ANDs with person filter in person-based search path."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+    emb = _rand_norm_emb()
+
+    img1_id = _add_face_for_image(
+        search_db, vector_store, person_id, cluster_id, "/New York/photo.jpg", emb
+    )
+    img2_id = _add_face_for_image(
+        search_db, vector_store, person_id, cluster_id, "/London/photo.jpg", emb
+    )
+
+    results = search_images(
+        tmp_path,
+        search_db,
+        vector_store,
+        person_ids=[person_id],
         gps_bbox=None,
         date_range=None,
+        filename_query="york",
     )
-    assert len(results) == 2
-    assert results[0].image_id == img1_id
-    assert results[1].image_id == img2_id
+
+    result_ids = {r.image_id for r in results}
+    assert img1_id in result_ids
+    assert img2_id not in result_ids

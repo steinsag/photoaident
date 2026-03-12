@@ -48,12 +48,19 @@ class LibraryPage(QtWidgets.QWidget):
         center_layout = QtWidgets.QVBoxLayout(center_area)
         center_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Non-functional keyword search bar
-        self.keyword_search_edit = QtWidgets.QLineEdit()
-        self.keyword_search_edit.setPlaceholderText(
-            self.tr("Type to search by keyword. Use @\u2026 to search for person.")
+        # File path/name search with 300 ms debounce
+        self.filepath_search_edit = QtWidgets.QLineEdit()
+        self.filepath_search_edit.setPlaceholderText(
+            self.tr("Search by file name or path")
         )
-        center_layout.addWidget(self.keyword_search_edit)
+        self._keyword_debounce_timer = QtCore.QTimer(self)
+        self._keyword_debounce_timer.setSingleShot(True)
+        self._keyword_debounce_timer.setInterval(300)
+        self._keyword_debounce_timer.timeout.connect(self.load_images)
+        self.filepath_search_edit.textChanged.connect(
+            lambda _: self._keyword_debounce_timer.start()
+        )
+        center_layout.addWidget(self.filepath_search_edit)
 
         # Image grid
         self.grid = ThumbnailGrid(self.session_factory)
@@ -192,11 +199,12 @@ class LibraryPage(QtWidgets.QWidget):
         ]
 
     def _has_filters(self) -> bool:
-        """Check if any filters (person, location, or time) are active."""
+        """Check if any filters (person, location, time, or filename) are active."""
         return (
             bool(self._selected_person_ids())
             or self._gps_bbox is not None
             or self._date_range is not None
+            or bool(self.filepath_search_edit.text().strip())
         )
 
     def _open_map_dialog(self) -> None:
@@ -259,6 +267,7 @@ class LibraryPage(QtWidgets.QWidget):
             return
 
         person_ids = self._selected_person_ids()
+        filename_query = self.filepath_search_edit.text().strip() or None
         results = search_images(
             thumbs_dir=self._paths.thumbs_dir,
             session_factory=self.session_factory,
@@ -266,6 +275,7 @@ class LibraryPage(QtWidgets.QWidget):
             person_ids=person_ids,
             gps_bbox=self._gps_bbox,
             date_range=self._date_range,
+            filename_query=filename_query,
         )
 
         # Update visibility after retrieving results

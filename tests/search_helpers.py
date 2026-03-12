@@ -100,6 +100,41 @@ def _add_unidentified_face(
         return img.id, faiss_id
 
 
+def _add_face_for_image(
+    session_factory,
+    vector_store: VectorStore,
+    person_id: int,
+    cluster_id: int,
+    file_path: str,
+    embedding: np.ndarray,
+) -> int:
+    """Insert an Image with the given path and an identified Face; return image_id."""
+    from photoaident.db.database import Face, FaceState, Image
+
+    faiss_id = vector_store.add(embedding)
+    with session_factory() as session:
+        img = Image(file_path=file_path, file_size=100)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=100,
+                bbox_h=100,
+                detection_confidence=0.9,
+                person_id=person_id,
+                cluster_id=cluster_id,
+                state=FaceState.IDENTIFIED,
+                model_version="test",
+            )
+        )
+        session.commit()
+        return img.id
+
+
 def _add_image_with_metadata(
     session_factory,
     file_path: str = "/img.jpg",

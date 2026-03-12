@@ -261,7 +261,11 @@ Please close it before starting a new one.</translation>
     <name>LibraryPage</name>
     <message>
         <source>Type to search by keyword. Use @… to search for person.</source>
-        <translation>Type to search by keyword. Use @… to search for person.</translation>
+        <translation type="vanished">Type to search by keyword. Use @… to search for person.</translation>
+    </message>
+    <message>
+        <source>Search by file name or path</source>
+        <translation>Search by file name or path</translation>
     </message>
     <message>
         <source>Select a person, location, or time range to start searching.</source>
