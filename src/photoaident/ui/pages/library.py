@@ -57,7 +57,9 @@ class LibraryPage(QtWidgets.QWidget):
         self._keyword_debounce_timer.setSingleShot(True)
         self._keyword_debounce_timer.setInterval(300)
         self._keyword_debounce_timer.timeout.connect(self.load_images)
-        self.keyword_search_edit.textChanged.connect(self._keyword_debounce_timer.start)
+        self.keyword_search_edit.textChanged.connect(
+            lambda _: self._keyword_debounce_timer.start()
+        )
         center_layout.addWidget(self.keyword_search_edit)
 
         # Image grid
