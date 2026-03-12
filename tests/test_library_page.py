@@ -556,6 +556,7 @@ def test_keyword_search_passes_query_to_search(
     qtbot.addWidget(page)
 
     page.keyword_search_edit.setText("New York")
+    page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
@@ -575,6 +576,7 @@ def test_keyword_search_empty_passes_none(
     # Need at least one other filter active so load_images actually calls search
     page._date_range = DateRange(start_year=2020)
     page.keyword_search_edit.clear()
+    page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
