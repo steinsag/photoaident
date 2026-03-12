@@ -13,6 +13,7 @@ from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
+    from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
     from photoaident.settings import Settings
 
@@ -28,12 +29,14 @@ class BrowsePage(QtWidgets.QWidget):
         session_factory: "sessionmaker",
         paths: "AppPaths",
         settings: "Settings",
+        vector_store: "VectorStore",
         parent=None,
     ):
         super().__init__(parent)
         self.session_factory = session_factory
         self.paths = paths
         self.settings = settings
+        self.vector_store = vector_store
 
         self._columns: list[QtWidgets.QListWidget] = []
         self._selected_path: Path | None = None
@@ -64,7 +67,7 @@ class BrowsePage(QtWidgets.QWidget):
         splitter.addWidget(self._scroll_area)
 
         # Bottom: thumbnail grid
-        self.grid = ThumbnailGrid(self.session_factory)
+        self.grid = ThumbnailGrid(self.session_factory, self.vector_store)
         self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
         splitter.addWidget(self.grid)
 

@@ -113,7 +113,7 @@ class MainWindow(QtWidgets.QMainWindow):
         )
         self._persons_page = PersonsPage(self._session_factory, self._paths)
         self._browse_page = BrowsePage(
-            self._session_factory, self._paths, self._settings
+            self._session_factory, self._paths, self._settings, self._vector_store
         )
 
         # Stacked widget holding the pages (Search=0, Browse=1, Persons=2, Labelling=3)

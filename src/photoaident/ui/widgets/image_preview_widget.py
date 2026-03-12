@@ -3,40 +3,7 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-
-def _exif_pixmap_transform(
-    transformation: QtGui.QImageIOHandler.Transformation,
-) -> QtGui.QTransform:
-    """Return the QTransform that corresponds to a QImageIOHandler.Transformation.
-
-    Replicates the logic Qt applies internally when
-    ``QImageReader.setAutoTransform(True)`` is used, so callers can apply the
-    same orientation correction manually after drawing overlays in the
-    un-rotated coordinate space.
-
-    The implementation mirrors the switch statement in Qt's own
-    ``exifTransform`` helper (qtbase/src/gui/image/qimagereader.cpp).
-    """
-    m = QtGui.QTransform()
-    T = QtGui.QImageIOHandler.Transformation
-    if transformation == T.TransformationMirror:
-        m.scale(-1.0, 1.0)
-    elif transformation == T.TransformationFlip:
-        m.scale(1.0, -1.0)
-    elif transformation == T.TransformationRotate180:
-        m.rotate(180.0)
-    elif transformation == T.TransformationRotate90:
-        m.rotate(90.0)
-    elif transformation == T.TransformationMirrorAndRotate90:
-        m.scale(-1.0, 1.0)
-        m.rotate(90.0)
-    elif transformation == T.TransformationFlipAndRotate90:
-        m.scale(1.0, -1.0)
-        m.rotate(90.0)
-    elif transformation == T.TransformationRotate270:
-        m.rotate(270.0)
-    # TransformationNone → identity, already initialised above
-    return m
+from photoaident.utils.image_utils import get_exif_transform
 
 
 class ImagePreviewWidget(QtWidgets.QWidget):
@@ -87,7 +54,7 @@ class ImagePreviewWidget(QtWidgets.QWidget):
         painter.drawRect(QtCore.QRect(x, y, w, h))
         painter.end()
 
-        exif_transform = _exif_pixmap_transform(reader.transformation())
+        exif_transform = get_exif_transform(reader.transformation())
         if not exif_transform.isIdentity():
             pixmap = pixmap.transformed(
                 exif_transform, QtCore.Qt.TransformationMode.SmoothTransformation

@@ -18,6 +18,8 @@ from photoaident.utils.image_utils import generate_thumbnail
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
+    from photoaident.db.vector_store import VectorStore
+
 logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 30
@@ -90,7 +92,7 @@ class _HoverOverlay(QtWidgets.QWidget):
         self,
         image_id: int,
         file_path: str,
-        session_factory: "sessionmaker | None",
+        session_factory: "sessionmaker",
         parent=None,
     ):
         super().__init__(parent)
@@ -176,11 +178,8 @@ class _HoverOverlay(QtWidgets.QWidget):
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
-        if self._session_factory is not None:
-            has_faces = _has_unidentified_faces(self._session_factory, self._image_id)
-            self.label_btn.setEnabled(has_faces)
-        else:
-            self.label_btn.setEnabled(False)
+        has_faces = _has_unidentified_faces(self._session_factory, self._image_id)
+        self.label_btn.setEnabled(has_faces)
 
 
 class ThumbnailWidget(QtWidgets.QWidget):
@@ -194,7 +193,7 @@ class ThumbnailWidget(QtWidgets.QWidget):
         image_id: int,
         file_path: str,
         thumb_path: Path,
-        session_factory: "sessionmaker | None" = None,
+        session_factory: "sessionmaker",
         parent=None,
     ):
         super().__init__(parent)
@@ -258,9 +257,15 @@ class ThumbnailGrid(QtWidgets.QWidget):
     results_changed = QtCore.Signal(int)  # total result count, emitted on set_results()
     page_loaded = QtCore.Signal(int, int)  # (loaded_so_far, total)
 
-    def __init__(self, session_factory: "sessionmaker | None" = None, parent=None):
+    def __init__(
+        self,
+        session_factory: "sessionmaker",
+        vector_store: "VectorStore",
+        parent=None,
+    ):
         super().__init__(parent)
         self._session_factory = session_factory
+        self._vector_store = vector_store
 
         self.main_layout = QtWidgets.QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -296,17 +301,23 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.image_selected.connect(self._on_image_selected)
 
     def _on_image_selected(self, image_id: int) -> None:
-        if self._session_factory is None:
-            return
         with self._session_factory() as session:
             stmt = (
                 select(Image)
                 .where(Image.id == image_id)
-                .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
+                .options(
+                    joinedload(Image.faces).joinedload(Face.person),
+                    joinedload(Image.metadata_rel),
+                )
             )
             image = session.execute(stmt).unique().scalar_one_or_none()
             if image:
-                dialog = ImageDetailDialog(image, self)
+                dialog = ImageDetailDialog(
+                    image,
+                    self._session_factory,
+                    self._vector_store,
+                    parent=self,
+                )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
                 dialog.exec()
 

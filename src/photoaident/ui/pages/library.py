@@ -63,7 +63,7 @@ class LibraryPage(QtWidgets.QWidget):
         center_layout.addWidget(self.filepath_search_edit)
 
         # Image grid
-        self.grid = ThumbnailGrid(self.session_factory)
+        self.grid = ThumbnailGrid(self.session_factory, self.vector_store)
         self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
         center_layout.addWidget(self.grid, stretch=1)
 
