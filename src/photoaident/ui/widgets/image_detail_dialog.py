@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from photoaident.db.database import Face, FaceState, Image as DBImage, Person
 from photoaident.utils.file_manager import reveal_in_file_manager
+from photoaident.utils.image_utils import get_exif_transform
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -286,9 +287,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
             )
             return
 
-        # Load image with QImageReader to respect EXIF orientation
+        # Load image with QImageReader. We do NOT call setAutoTransform(True) here
+        # because InsightFace/OpenCV bbox coordinates are in the un-rotated
+        # pixel space. We draw the bbox in that space first, then rotate the
+        # whole pixmap so the box stays correctly aligned with the face.
         reader = QtGui.QImageReader(str(file_path))
-        reader.setAutoTransform(True)
         qimage = reader.read()
 
         if qimage.isNull():
@@ -314,8 +317,28 @@ class ImageDetailDialog(QtWidgets.QDialog):
                 painter.drawRect(rect.toRect())
             painter.end()
 
+        # Apply EXIF transformation after drawing bounding boxes
+        exif_transform = get_exif_transform(reader.transformation())
+        if not exif_transform.isIdentity():
+            # Get the matrix that includes necessary translations
+            # to stay within the bounds of the transformed pixmap.
+            true_transform = QtGui.QPixmap.trueMatrix(
+                exif_transform, pixmap.width(), pixmap.height()
+            )
+            pixmap = pixmap.transformed(
+                exif_transform, QtCore.Qt.TransformationMode.SmoothTransformation
+            )
+            # Use true_transform for mapping rects so they land in [0, new_width/height]
+            exif_transform = true_transform
+
         # Register tooltip regions (rect + text only)
-        tooltip_regions = [(rect, tooltip) for rect, _, tooltip in face_display]
+        # Note: Bounding boxes are in un-rotated space, but tooltip hit-testing
+        # needs to account for the rotation. We transform the rects as well.
+        tooltip_regions = []
+        for rect, _, tooltip in face_display:
+            transformed_rect = exif_transform.mapRect(rect)
+            tooltip_regions.append((transformed_rect, tooltip))
+
         self.image_label.set_face_regions(tooltip_regions, pixmap.size())
 
         self._original_pixmap = pixmap
