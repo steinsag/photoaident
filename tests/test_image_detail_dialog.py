@@ -521,7 +521,7 @@ def test_face_overlay_label_hit_detection(qtbot):
 
 
 def test_face_overlay_label_no_regions_early_return(qtbot):
-    """mouseMoveEvent returns early when no face regions are set (line 87)."""
+    """mouseMoveEvent returns early when no face regions are set."""
     label = _FaceOverlayLabel()
     qtbot.add_widget(label)
 
@@ -553,7 +553,7 @@ def test_face_overlay_label_no_regions_early_return(qtbot):
 
 
 def test_face_overlay_label_no_pixmap_early_return(qtbot):
-    """mouseMoveEvent returns early when pixmap is null (line 91)."""
+    """mouseMoveEvent returns early when pixmap is null."""
     label = _FaceOverlayLabel()
     qtbot.add_widget(label)
     label.resize(200, 200)
@@ -584,7 +584,7 @@ def test_face_overlay_label_no_pixmap_early_return(qtbot):
 
 
 def test_face_overlay_label_zero_size_pixmap_early_return(qtbot):
-    """mouseMoveEvent returns early when pixmap reports zero dimensions (line 96)."""
+    """mouseMoveEvent returns early when pixmap reports zero dimensions."""
     label = _FaceOverlayLabel()
     qtbot.add_widget(label)
     label.resize(200, 200)
@@ -906,7 +906,7 @@ def test_bounding_box_colors_by_state(
 def test_image_detail_dialog_with_exif_rotation(
     qtbot, tmp_path, mock_session_factory, mock_vector_store
 ):
-    """Lines 350-357: Image with EXIF rotation triggers the transformation block."""
+    """Image with EXIF rotation triggers the transformation block."""
     from PIL import Image as PILImage
 
     img_path = tmp_path / "rotated.jpg"
@@ -934,8 +934,8 @@ def test_image_detail_dialog_with_exif_rotation(
     dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
-    # If lines 350-357 were executed, the pixmap dimensions should be
-    # swapped (100x200 -> 200x100)
+    # If the EXIF rotation transformation block was executed, the
+    # pixmap dimensions should be swapped (100x200 -> 200x100)
     # PIL (100, 200) -> QImageReader reads it.
     # Orientation 6 is Rotate 90.
     assert hasattr(dialog, "_original_pixmap")
