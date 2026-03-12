@@ -59,7 +59,9 @@ def search_images(
         person_ids: List of person IDs to filter by.
         gps_bbox: GPS bounding box to filter by.
         date_range: Date range to filter by.
-        filename_query: Case-insensitive substring to match against file paths.
+        filename_query: Optional, case-insensitive filename filter. The string is
+            split on whitespace into tokens, and each token must appear as a
+            substring in the image file path (logical AND).
 
     Returns:
         List of SearchResult objects.
