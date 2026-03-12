@@ -593,8 +593,11 @@ def test_face_overlay_label_miss_detection(qtbot):
 # ===========================================================================
 
 
-def test_resolve_best_person_name_returns_match(search_db):
+def test_resolve_best_person_name_returns_match(search_db, tmp_path):
     """Returns (name, score) when an identified neighbor exists in the DB."""
+    img_path = tmp_path / "bob.jpg"
+    img_path.touch()
+
     # Set up DB with an identified face
     with search_db() as session:
         session.begin()
@@ -602,7 +605,7 @@ def test_resolve_best_person_name_returns_match(search_db):
         session.add(person)
         session.flush()
 
-        img = Image(id=1, file_path="/tmp/bob.jpg", file_size=100)
+        img = Image(id=1, file_path=str(img_path), file_size=100)
         session.add(img)
         session.flush()
 

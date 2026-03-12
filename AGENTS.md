@@ -167,6 +167,7 @@ For pure metadata queries (no person filter): skip FAISS, query SQLite directly.
 - `ui/` - pytest-qt for smoke tests; avoid testing Qt internals
 - GPU tests: `@pytest.mark.gpu` — skipped when CUDA unavailable.
 - All others must pass on CPU-only CI.
+- **Never hardcode `/tmp` paths in tests.** Always use the `tmp_path` pytest fixture for temporary files — it provides isolated, automatically-cleaned directories per test.
 
 ---
 
