@@ -252,14 +252,13 @@ class ImageDetailDialog(QtWidgets.QDialog):
         green = QtCore.Qt.GlobalColor.green
         red = QtCore.Qt.GlobalColor.red
 
-        if face.state == FaceState.IDENTIFIED:
-            name = face.person.name if face.person else self.tr("Unknown")
-            return green, name
+        if face.state == FaceState.IDENTIFIED and face.person:
+            return green, face.person.name
 
         if face.state == FaceState.ANONYMOUS:
             return green, self.tr("Anonymous")
 
-        # UNIDENTIFIED: check cached FAISS match
+        # UNIDENTIFIED (or IDENTIFIED without a person): check cached FAISS match
         match = self._resolved_names.get(face.faiss_id)
         if match:
             name, score = match
