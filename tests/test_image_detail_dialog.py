@@ -17,6 +17,7 @@ from photoaident.db.vector_store import VectorStore
 from photoaident.ui.widgets.image_detail_dialog import (
     ImageDetailDialog,
     _FaceOverlayLabel,
+    _resolve_batch_person_names,
     _resolve_best_person_name,
 )
 
@@ -748,6 +749,100 @@ def test_resolve_best_person_name_index_error():
 
 
 # ===========================================================================
+# _resolve_batch_person_names
+# ===========================================================================
+
+
+def test_resolve_batch_person_names_multiple_matches(search_db, tmp_path):
+    """Successfully resolves multiple unidentified faces in one call."""
+    img_path = tmp_path / "batch.jpg"
+    img_path.touch()
+
+    with search_db() as session:
+        session.begin()
+        p1 = Person(name="Alice")
+        p2 = Person(name="Bob")
+        session.add_all([p1, p2])
+        session.flush()
+
+        img = Image(id=1, file_path=str(img_path), file_size=100)
+        session.add(img)
+        session.flush()
+
+        # Identified faces for neighbors
+        session.add_all(
+            [
+                Face(
+                    image_id=img.id,
+                    faiss_id=10,
+                    state=FaceState.IDENTIFIED,
+                    person_id=p1.id,
+                    bbox_x=0,
+                    bbox_y=0,
+                    bbox_w=1,
+                    bbox_h=1,
+                    detection_confidence=1.0,
+                    model_version="v1",
+                ),
+                Face(
+                    image_id=img.id,
+                    faiss_id=20,
+                    state=FaceState.IDENTIFIED,
+                    person_id=p2.id,
+                    bbox_x=0,
+                    bbox_y=0,
+                    bbox_w=1,
+                    bbox_h=1,
+                    detection_confidence=1.0,
+                    model_version="v1",
+                ),
+            ]
+        )
+        session.commit()
+
+    vs = VectorStore()
+    # Query embeddings
+    q1 = np.zeros(512, dtype=np.float32)
+    q1[0] = 1.0  # matches Alice (fid 10)
+    q2 = np.zeros(512, dtype=np.float32)
+    q2[1] = 1.0  # matches Bob (fid 20)
+
+    # Neighbor embeddings
+    n1 = np.zeros(512, dtype=np.float32)
+    n1[0] = 0.99
+    n2 = np.zeros(512, dtype=np.float32)
+    n2[1] = 0.99
+
+    # Add to VS. Mapping:
+    # 0 -> q1
+    # 1 -> q2
+    # 10 -> n1 (Alice)
+    # 20 -> n2 (Bob)
+    vs.add(q1)  # 0
+    vs.add(q2)  # 1
+    for _ in range(8):  # pad to ensure IDs match
+        vs.add(np.zeros(512, dtype=np.float32))
+    vs.add(n1)  # 10
+    for _ in range(9):
+        vs.add(np.zeros(512, dtype=np.float32))
+    vs.add(n2)  # 20
+
+    with search_db() as session:
+        results = _resolve_batch_person_names([0, 1, 999], session, vs, threshold=0.5)
+
+    assert results[0] is not None
+    assert results[0][0] == "Alice"
+    assert results[1] is not None
+    assert results[1][0] == "Bob"
+    assert results[999] is None
+
+
+def test_resolve_batch_person_names_empty():
+    """Returns empty dict for empty input."""
+    assert _resolve_batch_person_names([], MagicMock(), MagicMock()) == {}
+
+
+# ===========================================================================
 # Bounding box colors by state
 # ===========================================================================
 
@@ -776,8 +871,8 @@ def test_face_tooltip_unidentified_with_vector_store_match(qtbot, tmp_path):
     mock_vs = MagicMock()
 
     with patch(
-        "photoaident.ui.widgets.image_detail_dialog._resolve_best_person_name",
-        return_value=("Dave", 0.82),
+        "photoaident.ui.widgets.image_detail_dialog._resolve_batch_person_names",
+        return_value={5: ("Dave", 0.82)},
     ):
         dialog = ImageDetailDialog(
             db_image, session_factory=mock_sf, vector_store=mock_vs
