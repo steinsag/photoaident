@@ -460,6 +460,105 @@ def test_face_overlay_label_hit_detection(qtbot):
         assert mock_show.call_args[0][1] == "Alice"
 
 
+def test_face_overlay_label_no_regions_early_return(qtbot):
+    """mouseMoveEvent returns early when no face regions are set (line 87)."""
+    label = _FaceOverlayLabel()
+    qtbot.add_widget(label)
+
+    pixmap = QtGui.QPixmap(200, 200)
+    pixmap.fill(QtGui.QColor("white"))
+    label.setPixmap(pixmap)
+    label.resize(200, 200)
+    # Do NOT call set_face_regions — _face_regions stays empty
+
+    with (
+        patch(
+            "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.showText"
+        ) as mock_show,
+        patch(
+            "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
+        ) as mock_hide,
+    ):
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.Type.MouseMove,
+            QtCore.QPointF(80.0, 80.0),
+            QtCore.QPointF(80.0, 80.0),
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.KeyboardModifier.NoModifier,
+        )
+        label.mouseMoveEvent(event)
+        mock_show.assert_not_called()
+        mock_hide.assert_not_called()
+
+
+def test_face_overlay_label_no_pixmap_early_return(qtbot):
+    """mouseMoveEvent returns early when pixmap is null (line 91)."""
+    label = _FaceOverlayLabel()
+    qtbot.add_widget(label)
+    label.resize(200, 200)
+
+    region = (QtCore.QRectF(50, 50, 60, 60), "Alice")
+    label.set_face_regions([region], QtCore.QSize(200, 200))
+    # No pixmap set — label.pixmap() returns a null pixmap
+
+    with (
+        patch(
+            "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.showText"
+        ) as mock_show,
+        patch(
+            "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
+        ) as mock_hide,
+    ):
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.Type.MouseMove,
+            QtCore.QPointF(80.0, 80.0),
+            QtCore.QPointF(80.0, 80.0),
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.KeyboardModifier.NoModifier,
+        )
+        label.mouseMoveEvent(event)
+        mock_show.assert_not_called()
+        mock_hide.assert_not_called()
+
+
+def test_face_overlay_label_zero_size_pixmap_early_return(qtbot):
+    """mouseMoveEvent returns early when pixmap reports zero dimensions (line 96)."""
+    label = _FaceOverlayLabel()
+    qtbot.add_widget(label)
+    label.resize(200, 200)
+
+    region = (QtCore.QRectF(50, 50, 60, 60), "Alice")
+    label.set_face_regions([region], QtCore.QSize(200, 200))
+
+    mock_pm = MagicMock()
+    mock_pm.isNull.return_value = False
+    mock_pm.width.return_value = 0
+    mock_pm.height.return_value = 0
+
+    with (
+        patch.object(label, "pixmap", return_value=mock_pm),
+        patch(
+            "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.showText"
+        ) as mock_show,
+        patch(
+            "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
+        ) as mock_hide,
+    ):
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.Type.MouseMove,
+            QtCore.QPointF(80.0, 80.0),
+            QtCore.QPointF(80.0, 80.0),
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.MouseButton.NoButton,
+            QtCore.Qt.KeyboardModifier.NoModifier,
+        )
+        label.mouseMoveEvent(event)
+        mock_show.assert_not_called()
+        mock_hide.assert_not_called()
+
+
 def test_face_overlay_label_miss_detection(qtbot):
     """Mouse outside all face bboxes calls QToolTip.hideText."""
     label = _FaceOverlayLabel()
@@ -552,7 +651,22 @@ def test_resolve_best_person_name_no_match(search_db):
     emb /= np.linalg.norm(emb)
     vs.add(emb)  # faiss_id=0
 
-    # DB has no identified faces → should return None
+    # Only one embedding — search returns self only, neighbor_ids is empty → None
+    result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
+    assert result is None
+
+
+def test_resolve_best_person_name_neighbors_but_none_identified(search_db):
+    """Returns None when FAISS finds neighbors but none are IDENTIFIED in DB."""
+    from photoaident.db.vector_store import VectorStore
+
+    vs = VectorStore()
+    emb = np.ones(512, dtype=np.float32)
+    emb /= np.linalg.norm(emb)
+    vs.add(emb)  # faiss_id=0 (query face)
+    vs.add(emb)  # faiss_id=1 (neighbor, but not identified in DB)
+
+    # DB is empty — no face with faiss_id=1 is IDENTIFIED → rows is empty → None
     result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
     assert result is None
 
@@ -570,6 +684,82 @@ def test_resolve_best_person_name_index_error():
 # ===========================================================================
 # Bounding box colors by state
 # ===========================================================================
+
+
+def test_face_tooltip_unidentified_with_vector_store_match(qtbot, tmp_path):
+    """UNIDENTIFIED face with a FAISS match shows name + percentage and green color."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "matched.jpg"
+    PILImage.new("RGB", (200, 200), "white").save(img_path)
+
+    face = Face(
+        bbox_x=10,
+        bbox_y=10,
+        bbox_w=50,
+        bbox_h=50,
+        detection_confidence=0.9,
+        model_version="v1",
+        faiss_id=5,
+        state=FaceState.UNIDENTIFIED,
+    )
+    db_image = Image(id=10, file_path=str(img_path), file_size=500)
+    db_image.faces = [face]
+
+    mock_sf = MagicMock()
+    mock_vs = MagicMock()
+
+    with patch(
+        "photoaident.ui.widgets.image_detail_dialog._resolve_best_person_name",
+        return_value=("Dave", 0.82),
+    ):
+        dialog = ImageDetailDialog(
+            db_image, session_factory=mock_sf, vector_store=mock_vs
+        )
+        qtbot.add_widget(dialog)
+        regions = dialog._build_face_display_info()
+
+    assert len(regions) == 1
+    assert regions[0][2] == "Dave (82%)"
+    assert regions[0][1] == QtCore.Qt.GlobalColor.green
+
+
+def test_face_tooltip_unidentified_with_vector_store_no_match(qtbot, tmp_path):
+    """UNIDENTIFIED face with no FAISS match shows Unknown and red color."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "unmatched.jpg"
+    PILImage.new("RGB", (200, 200), "white").save(img_path)
+
+    face = Face(
+        bbox_x=10,
+        bbox_y=10,
+        bbox_w=50,
+        bbox_h=50,
+        detection_confidence=0.9,
+        model_version="v1",
+        faiss_id=6,
+        state=FaceState.UNIDENTIFIED,
+    )
+    db_image = Image(id=11, file_path=str(img_path), file_size=500)
+    db_image.faces = [face]
+
+    mock_sf = MagicMock()
+    mock_vs = MagicMock()
+
+    with patch(
+        "photoaident.ui.widgets.image_detail_dialog._resolve_best_person_name",
+        return_value=None,
+    ):
+        dialog = ImageDetailDialog(
+            db_image, session_factory=mock_sf, vector_store=mock_vs
+        )
+        qtbot.add_widget(dialog)
+        regions = dialog._build_face_display_info()
+
+    assert len(regions) == 1
+    assert regions[0][2] == dialog.tr("Unknown")
+    assert regions[0][1] == QtCore.Qt.GlobalColor.red
 
 
 def test_bounding_box_colors_by_state(qtbot, tmp_path):
