@@ -283,7 +283,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             and f.faiss_id not in self._resolved_names
         ]
 
-        if unidentified_ids and self._vector_store and self._session_factory:
+        if unidentified_ids:
             with self._session_factory() as session:
                 for fid in unidentified_ids:
                     # Individual FAISS searches are still done per face,
