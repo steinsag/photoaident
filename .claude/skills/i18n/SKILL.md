@@ -9,17 +9,14 @@ description: >
 
 Run the full Qt i18n workflow for PhotoAIdent:
 
-1. Run lupdate to extract new/changed strings:
-   uv run pyside6-lupdate -locations none -extensions py src/ -ts assets/translations/photoaident_de.ts assets/translations/photoaident_en.ts
+1. Run the translate script (lupdate + vanished/unfinished/obsolete check + lrelease):
+   uv run scripts/translate.py
 
-2. Read assets/translations/photoaident_de.ts and find all entries with `type="unfinished"` or an empty `<translation>` tag.
+2. If it exits non-zero due to unfinished/vanished/obsolete strings:
+   - Read assets/translations/photoaident_de.ts and find all `<translation type="unfinished">` or empty `<translation>` entries.
+   - For each unfinished German translation, propose an appropriate German translation (this is a desktop photo-management and face-recognition app). Ask the user to confirm or correct each suggestion before writing.
+   - Write the confirmed translations into photoaident_de.ts (set the text, remove the `type="unfinished"` attribute).
+   - Re-run `uv run scripts/translate.py` and repeat until it exits 0.
 
-3. For each unfinished German translation, provide an appropriate German translation (this is a desktop photo-management and face-recognition app). Ask the user to confirm or correct each suggestion before writing.
-
-4. Write the confirmed translations into photoaident_de.ts (replace `type="unfinished"` entries with the final German text).
-
-5. Recompile all translation files:
-   for ts in assets/translations/*.ts; do uv run pyside6-lrelease "$ts" -qm "${ts%.ts}.qm"; done
-
-6. Verify the translation check passes:
+3. Verify the translation check passes:
    uv run scripts/verify.py
