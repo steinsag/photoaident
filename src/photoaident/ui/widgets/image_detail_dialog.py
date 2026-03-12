@@ -85,12 +85,17 @@ class _FaceOverlayLabel(QtWidgets.QLabel):
 
     def set_face_regions(
         self,
-        regions: list[tuple[QtCore.QRectF, str]],
-        original_size: QtCore.QSize,
+        pixmap_regions: list[tuple[QtCore.QRectF, str]],
+        pixmap_size: QtCore.QSize,
     ) -> None:
-        """Set face bounding boxes (in original-image coords) and their tooltip text."""
-        self._face_regions = regions
-        self._original_size = original_size
+        """
+        Set face bounding boxes and their tooltip text.
+        Coordinates must be in the same coordinate space as the pixmap
+        provided to setPixmap (e.g., after EXIF transformation but before
+        UI-level scaling).
+        """
+        self._face_regions = pixmap_regions
+        self._original_size = pixmap_size
         self._last_hovered_index = -2
 
     def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
@@ -112,12 +117,13 @@ class _FaceOverlayLabel(QtWidgets.QLabel):
         offset_y = (self.height() - pm_h) / 2
 
         pos = event.position()
-        orig_x = (pos.x() - offset_x) / pm_w * self._original_size.width()
-        orig_y = (pos.y() - offset_y) / pm_h * self._original_size.height()
+        # Map mouse position to pixmap coordinates
+        px_x = (pos.x() - offset_x) / pm_w * self._original_size.width()
+        px_y = (pos.y() - offset_y) / pm_h * self._original_size.height()
         current_hovered_index = -1
 
         for i, (rect, tooltip_text) in enumerate(self._face_regions):
-            if rect.contains(orig_x, orig_y):
+            if rect.contains(px_x, px_y):
                 current_hovered_index = i
                 break
 
@@ -363,7 +369,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
             transformed_rect = exif_transform.mapRect(rect)
             tooltip_regions.append((transformed_rect, tooltip))
 
-        self.image_label.set_face_regions(tooltip_regions, pixmap.size())
+        self.image_label.set_face_regions(
+            pixmap_regions=tooltip_regions, pixmap_size=pixmap.size()
+        )
 
         self._original_pixmap = pixmap
         self._update_image_display()
