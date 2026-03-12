@@ -270,10 +270,6 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
 <context>
     <name>LibraryPage</name>
     <message>
-        <source>Type to search by keyword. Use @… to search for person.</source>
-        <translation type="vanished">Stichwort eingeben. @… für Personensuche.</translation>
-    </message>
-    <message>
         <source>Search by file name or path</source>
         <translation>Nach Dateiname oder Pfad suchen</translation>
     </message>

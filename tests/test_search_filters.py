@@ -482,15 +482,13 @@ def test_filename_filter_clauses_multi_token_returns_one_clause_per_token():
 # ---------------------------------------------------------------------------
 
 
-def test_search_images_filename_only_matches_path(search_db):
+def test_search_images_filename_only_matches_path(search_db, tmp_path):
     """Filename-only search returns images whose file_path contains the token."""
-    from pathlib import Path
-
     _add_image_with_metadata(search_db, "/photos/vacation_2024.jpg", "h1")
     _add_image_with_metadata(search_db, "/photos/birthday_2024.jpg", "h2")
 
     results = search_images(
-        thumbs_dir=Path("/tmp"),
+        thumbs_dir=tmp_path,
         session_factory=search_db,
         vector_store=VectorStore(),
         person_ids=[],
@@ -503,16 +501,14 @@ def test_search_images_filename_only_matches_path(search_db):
     assert "vacation" in results[0].file_path
 
 
-def test_search_images_filename_multi_token_and_logic(search_db):
+def test_search_images_filename_multi_token_and_logic(search_db, tmp_path):
     """All tokens must match — images missing any token are excluded."""
-    from pathlib import Path
-
     _add_image_with_metadata(search_db, "/photos/2024/vacation.jpg", "h1")
     _add_image_with_metadata(search_db, "/photos/2023/vacation.jpg", "h2")
     _add_image_with_metadata(search_db, "/photos/2024/birthday.jpg", "h3")
 
     results = search_images(
-        thumbs_dir=Path("/tmp"),
+        thumbs_dir=tmp_path,
         session_factory=search_db,
         vector_store=VectorStore(),
         person_ids=[],
@@ -526,15 +522,13 @@ def test_search_images_filename_multi_token_and_logic(search_db):
     assert "vacation" in results[0].file_path
 
 
-def test_search_images_filename_metachar_percent_is_literal(search_db):
+def test_search_images_filename_metachar_percent_is_literal(search_db, tmp_path):
     """A '%' in the filename query matches literally, not as a LIKE wildcard."""
-    from pathlib import Path
-
     literal_id = _add_image_with_metadata(search_db, "/photos/100%_crop.jpg", "h1")
     _add_image_with_metadata(search_db, "/photos/vacation.jpg", "h2")
 
     results = search_images(
-        thumbs_dir=Path("/tmp"),
+        thumbs_dir=tmp_path,
         session_factory=search_db,
         vector_store=VectorStore(),
         person_ids=[],

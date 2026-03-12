@@ -268,10 +268,6 @@ Please close it before starting a new one.</translation>
 <context>
     <name>LibraryPage</name>
     <message>
-        <source>Type to search by keyword. Use @… to search for person.</source>
-        <translation type="vanished">Type to search by keyword. Use @… to search for person.</translation>
-    </message>
-    <message>
         <source>Search by file name or path</source>
         <translation>Search by file name or path</translation>
     </message>
