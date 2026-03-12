@@ -18,8 +18,8 @@ Run the full Qt i18n workflow for PhotoAIdent:
 
 4. Write the confirmed translations into photoaident_de.ts (replace `type="unfinished"` entries with the final German text).
 
-5. Recompile all translation files:
-   for ts in assets/translations/*.ts; do uv run pyside6-lrelease "$ts" -qm "${ts%.ts}.qm"; done
+5. Run the translate script (lupdate + vanished/unfinished/obsolete check + lrelease):
+   uv run scripts/translate.py
 
 6. Verify the translation check passes:
    uv run scripts/verify.py
