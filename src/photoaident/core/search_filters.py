@@ -106,7 +106,9 @@ def _filename_subquery(query: str):
     tokens = query.lower().split()
     if not tokens:
         return select(Image.id).where(false())
-    conditions = [func.lower(Image.file_path).contains(token) for token in tokens]
+    conditions = [
+        func.lower(Image.file_path).contains(token, autoescape=True) for token in tokens
+    ]
     return select(Image.id).where(and_(*conditions))
 
 

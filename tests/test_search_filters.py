@@ -405,3 +405,44 @@ def test_filename_subquery_empty_matches_nothing(search_db, empty):
         result = list(session.scalars(_filename_subquery(empty)).all())
 
     assert result == [], f"Expected no matches for query {empty!r}, got {result}"
+
+
+# ---------------------------------------------------------------------------
+# _filename_subquery — LIKE metacharacter escaping
+# ---------------------------------------------------------------------------
+
+
+def test_filename_subquery_percent_is_literal(search_db):
+    """A '%' in the query is treated as a literal character, not a LIKE wildcard."""
+    literal_id = _add_image_with_metadata(search_db, "/photos/100%_crop.jpg", "h1")
+    _add_image_with_metadata(search_db, "/photos/vacation.jpg", "h2")
+
+    with search_db() as session:
+        # "100%" must match the first file but NOT act as a wildcard matching everything
+        result = list(session.scalars(_filename_subquery("100%")).all())
+
+    assert result == [literal_id]
+
+
+def test_filename_subquery_underscore_is_literal(search_db):
+    """An '_' in the query is treated as a literal character, not a LIKE wildcard."""
+    literal_id = _add_image_with_metadata(search_db, "/photos/my_photo.jpg", "h1")
+    _add_image_with_metadata(search_db, "/photos/myphoto.jpg", "h2")
+
+    with search_db() as session:
+        # "my_photo" should match only the file with the literal underscore
+        result = list(session.scalars(_filename_subquery("my_photo")).all())
+
+    assert result == [literal_id]
+
+
+def test_filename_subquery_percent_does_not_match_all(search_db):
+    """A bare '%' query must not match every row (wildcard semantics suppressed)."""
+    _add_image_with_metadata(search_db, "/photos/beach.jpg", "h1")
+    _add_image_with_metadata(search_db, "/photos/mountain.jpg", "h2")
+
+    with search_db() as session:
+        result = list(session.scalars(_filename_subquery("%")).all())
+
+    # "%" contains no literal "%" characters in the DB paths → no match
+    assert result == []
