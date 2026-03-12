@@ -6,6 +6,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.db.database import Image, get_engine, get_session_factory
 from photoaident.db.migrate import apply_migrations
+from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 from photoaident.settings import Settings
 from photoaident.ui.pages.browse import BrowsePage
@@ -19,7 +20,8 @@ def _make_browse_page(
     engine = get_engine(str(tmp_app_paths.db_path))
     session_factory = get_session_factory(engine)
     settings = Settings(collection_path=collection_path)
-    page = BrowsePage(session_factory, tmp_app_paths, settings)
+    vector_store = VectorStore()
+    page = BrowsePage(session_factory, tmp_app_paths, settings, vector_store)
     qtbot.addWidget(page)
     return page
 
@@ -96,7 +98,8 @@ def test_browse_page_root_images_shown_on_open(tmp_app_paths, qtbot):
         session.commit()
 
     settings = Settings(collection_path=str(collection))
-    page = BrowsePage(session_factory, tmp_app_paths, settings)
+    vector_store = VectorStore()
+    page = BrowsePage(session_factory, tmp_app_paths, settings, vector_store)
     qtbot.addWidget(page)
     page.refresh()
 
@@ -130,7 +133,8 @@ def test_browse_page_loads_direct_images_only(tmp_app_paths, qtbot):
         session.commit()
 
     settings = Settings(collection_path=str(collection))
-    page = BrowsePage(session_factory, tmp_app_paths, settings)
+    vector_store = VectorStore()
+    page = BrowsePage(session_factory, tmp_app_paths, settings, vector_store)
     qtbot.addWidget(page)
     page.refresh()
     # After refresh: col 0 = root (auto-selected), col 1 = ["subA"]

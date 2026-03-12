@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import numpy as np
+import pytest
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.db.database import (
@@ -12,6 +13,7 @@ from photoaident.db.database import (
     Person,
     TakenAtSource,
 )
+from photoaident.db.vector_store import VectorStore
 from photoaident.ui.widgets.image_detail_dialog import (
     ImageDetailDialog,
     _FaceOverlayLabel,
@@ -19,8 +21,22 @@ from photoaident.ui.widgets.image_detail_dialog import (
 )
 
 
-def test_image_detail_dialog_init(qtbot, sample_image_with_metadata):
-    dialog = ImageDetailDialog(sample_image_with_metadata)
+@pytest.fixture
+def mock_session_factory():
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_vector_store():
+    return MagicMock(spec=VectorStore)
+
+
+def test_image_detail_dialog_init(
+    qtbot, sample_image_with_metadata, mock_session_factory, mock_vector_store
+):
+    dialog = ImageDetailDialog(
+        sample_image_with_metadata, mock_session_factory, mock_vector_store
+    )
     qtbot.add_widget(dialog)
 
     # Check metadata display (look for some expected strings)
@@ -36,20 +52,26 @@ def test_image_detail_dialog_init(qtbot, sample_image_with_metadata):
     assert not dialog.image_label.pixmap().isNull()
 
 
-def test_image_detail_dialog_missing_file(qtbot):
+def test_image_detail_dialog_missing_file(
+    qtbot, mock_session_factory, mock_vector_store
+):
     db_image = Image(
         id=456,
         file_path="/non/existent/path.jpg",
         file_size=0,
     )
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     assert "not found" in dialog.image_label.text().lower()
 
 
-def test_image_detail_dialog_close(qtbot, sample_image_with_metadata):
-    dialog = ImageDetailDialog(sample_image_with_metadata)
+def test_image_detail_dialog_close(
+    qtbot, sample_image_with_metadata, mock_session_factory, mock_vector_store
+):
+    dialog = ImageDetailDialog(
+        sample_image_with_metadata, mock_session_factory, mock_vector_store
+    )
     qtbot.add_widget(dialog)
 
     # Close button should accept the dialog
@@ -65,7 +87,9 @@ def test_image_detail_dialog_close(qtbot, sample_image_with_metadata):
         qtbot.mouseClick(close_button, QtCore.Qt.MouseButton.LeftButton)
 
 
-def test_large_file_size_shows_mb(qtbot, tmp_path):
+def test_large_file_size_shows_mb(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """File size ≥ 1 MB is displayed in MB units."""
     from PIL import Image as PILImage
 
@@ -77,7 +101,7 @@ def test_large_file_size_shows_mb(qtbot, tmp_path):
         file_path=str(img_path),
         file_size=2 * 1024 * 1024,  # 2 MB
     )
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     labels = dialog.findChildren(QtWidgets.QLabel)
@@ -85,7 +109,9 @@ def test_large_file_size_shows_mb(qtbot, tmp_path):
     assert any("MB" in t for t in texts)
 
 
-def test_taken_at_in_metadata_is_displayed(qtbot, tmp_path):
+def test_taken_at_in_metadata_is_displayed(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """taken_at field in ImageMetadata appears in the dialog."""
     from PIL import Image as PILImage
 
@@ -101,7 +127,7 @@ def test_taken_at_in_metadata_is_displayed(qtbot, tmp_path):
     )
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     labels = dialog.findChildren(QtWidgets.QLabel)
@@ -109,32 +135,40 @@ def test_taken_at_in_metadata_is_displayed(qtbot, tmp_path):
     assert any("2021-03-14" in t for t in texts)
 
 
-def test_load_image_failure_shows_error(qtbot, tmp_path):
+def test_load_image_failure_shows_error(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """A file with invalid image content shows a failure message."""
     bad_file = tmp_path / "bad.jpg"
     bad_file.write_bytes(b"this is not a valid jpeg")
 
     db_image = Image(id=400, file_path=str(bad_file), file_size=25)
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     text = dialog.image_label.text().lower()
     assert "failed" in text
 
 
-def test_update_image_display_without_pixmap_is_noop(qtbot):
+def test_update_image_display_without_pixmap_is_noop(
+    qtbot, mock_session_factory, mock_vector_store
+):
     """_update_image_display returns early if _original_pixmap is not set."""
     db_image = Image(id=500, file_path="/nonexistent.jpg", file_size=0)
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     assert not hasattr(dialog, "_original_pixmap")
     dialog._update_image_display()  # must not raise
 
 
-def test_resize_event_schedules_redisplay(qtbot, sample_image_with_metadata):
+def test_resize_event_schedules_redisplay(
+    qtbot, sample_image_with_metadata, mock_session_factory, mock_vector_store
+):
     """resizeEvent does not raise and schedules a display update."""
-    dialog = ImageDetailDialog(sample_image_with_metadata)
+    dialog = ImageDetailDialog(
+        sample_image_with_metadata, mock_session_factory, mock_vector_store
+    )
     qtbot.add_widget(dialog)
 
     event = QtGui.QResizeEvent(QtCore.QSize(900, 700), QtCore.QSize(800, 600))
@@ -142,10 +176,12 @@ def test_resize_event_schedules_redisplay(qtbot, sample_image_with_metadata):
 
 
 def test_label_faces_button_enabled_when_unidentified_faces(
-    qtbot, sample_image_with_metadata
+    qtbot, sample_image_with_metadata, mock_session_factory, mock_vector_store
 ):
     """Label button is enabled when the image has at least one unidentified face."""
-    dialog = ImageDetailDialog(sample_image_with_metadata)
+    dialog = ImageDetailDialog(
+        sample_image_with_metadata, mock_session_factory, mock_vector_store
+    )
     qtbot.add_widget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -154,7 +190,9 @@ def test_label_faces_button_enabled_when_unidentified_faces(
     assert label_btn.isEnabled()
 
 
-def test_label_faces_button_disabled_when_no_unidentified_faces(qtbot, tmp_path):
+def test_label_faces_button_disabled_when_no_unidentified_faces(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """Label button is disabled when the image has no unidentified faces."""
     from PIL import Image as PILImage
 
@@ -175,7 +213,7 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(qtbot, tmp_path)
         )
     ]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -184,7 +222,9 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(qtbot, tmp_path)
     assert not label_btn.isEnabled()
 
 
-def test_label_faces_button_emits_signal(qtbot, tmp_path):
+def test_label_faces_button_emits_signal(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """Clicking the label button emits navigate_to_labelling with the image id."""
     from PIL import Image as PILImage
 
@@ -205,7 +245,7 @@ def test_label_faces_button_emits_signal(qtbot, tmp_path):
         )
     ]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     emitted_ids: list[int] = []
@@ -225,9 +265,13 @@ def test_label_faces_button_emits_signal(qtbot, tmp_path):
 # ===========================================================================
 
 
-def test_show_in_file_manager_button_exists(qtbot, sample_image_with_metadata):
+def test_show_in_file_manager_button_exists(
+    qtbot, sample_image_with_metadata, mock_session_factory, mock_vector_store
+):
     """Show in File Manager button is present in the dialog."""
-    dialog = ImageDetailDialog(sample_image_with_metadata)
+    dialog = ImageDetailDialog(
+        sample_image_with_metadata, mock_session_factory, mock_vector_store
+    )
     qtbot.addWidget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -237,9 +281,13 @@ def test_show_in_file_manager_button_exists(qtbot, sample_image_with_metadata):
     assert show_btn is not None
 
 
-def test_show_in_file_manager_button_calls_reveal(qtbot, sample_image_with_metadata):
+def test_show_in_file_manager_button_calls_reveal(
+    qtbot, sample_image_with_metadata, mock_session_factory, mock_vector_store
+):
     """Clicking the button calls reveal_in_file_manager with the image file path."""
-    dialog = ImageDetailDialog(sample_image_with_metadata)
+    dialog = ImageDetailDialog(
+        sample_image_with_metadata, mock_session_factory, mock_vector_store
+    )
     qtbot.addWidget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -255,7 +303,9 @@ def test_show_in_file_manager_button_calls_reveal(qtbot, sample_image_with_metad
     mock_reveal.assert_called_once_with(sample_image_with_metadata.file_path)
 
 
-def test_show_in_file_manager_button_always_enabled(qtbot, tmp_path):
+def test_show_in_file_manager_button_always_enabled(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """Show in File Manager button is enabled regardless of face labelling state."""
     from PIL import Image as PILImage
 
@@ -276,7 +326,7 @@ def test_show_in_file_manager_button_always_enabled(qtbot, tmp_path):
         )
     ]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.addWidget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -292,7 +342,9 @@ def test_show_in_file_manager_button_always_enabled(qtbot, tmp_path):
 # ===========================================================================
 
 
-def test_face_tooltip_identified_shows_person_name(qtbot, tmp_path):
+def test_face_tooltip_identified_shows_person_name(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """_build_face_display_info returns the person's name for IDENTIFIED faces."""
     from PIL import Image as PILImage
 
@@ -315,7 +367,7 @@ def test_face_tooltip_identified_shows_person_name(qtbot, tmp_path):
     db_image = Image(id=1, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -324,7 +376,9 @@ def test_face_tooltip_identified_shows_person_name(qtbot, tmp_path):
     assert regions[0][1] == QtCore.Qt.GlobalColor.green
 
 
-def test_face_tooltip_anonymous_shows_anonymous(qtbot, tmp_path):
+def test_face_tooltip_anonymous_shows_anonymous(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """_build_face_display_info returns 'Anonymous' for ANONYMOUS faces."""
     from PIL import Image as PILImage
 
@@ -345,7 +399,7 @@ def test_face_tooltip_anonymous_shows_anonymous(qtbot, tmp_path):
     db_image = Image(id=2, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -354,8 +408,12 @@ def test_face_tooltip_anonymous_shows_anonymous(qtbot, tmp_path):
     assert regions[0][1] == QtCore.Qt.GlobalColor.green
 
 
-def test_face_tooltip_unidentified_without_vector_store(qtbot, tmp_path):
+def test_face_tooltip_unidentified_without_vector_store(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """_build_face_display_info: UNIDENTIFIED without vector_store → Unknown + red."""
+    # This test name is now misleading because we must supply a vector_store,
+    # but we can test the case where _resolve_best_person_name returns None.
     from PIL import Image as PILImage
 
     img_path = tmp_path / "unknown.jpg"
@@ -375,7 +433,7 @@ def test_face_tooltip_unidentified_without_vector_store(qtbot, tmp_path):
     db_image = Image(id=3, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(db_image)  # no vector_store
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -384,7 +442,9 @@ def test_face_tooltip_unidentified_without_vector_store(qtbot, tmp_path):
     assert regions[0][1] == QtCore.Qt.GlobalColor.red
 
 
-def test_face_tooltip_deleted_face_excluded(qtbot, tmp_path):
+def test_face_tooltip_deleted_face_excluded(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """_build_face_display_info skips faces where deleted_at is set."""
     from PIL import Image as PILImage
 
@@ -416,7 +476,7 @@ def test_face_tooltip_deleted_face_excluded(qtbot, tmp_path):
     db_image = Image(id=4, file_path=str(img_path), file_size=500)
     db_image.faces = [active_face, deleted_face]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -765,7 +825,9 @@ def test_face_tooltip_unidentified_with_vector_store_no_match(qtbot, tmp_path):
     assert regions[0][1] == QtCore.Qt.GlobalColor.red
 
 
-def test_bounding_box_colors_by_state(qtbot, tmp_path):
+def test_bounding_box_colors_by_state(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
     """Verify that face boxes are drawn in different colors for different states."""
     from PIL import Image as PILImage
 
@@ -810,7 +872,7 @@ def test_bounding_box_colors_by_state(qtbot, tmp_path):
     db_image = Image(id=5, file_path=str(img_path), file_size=500)
     db_image.faces = [identified_face, anonymous_face, unidentified_face]
 
-    dialog = ImageDetailDialog(db_image)
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
     qtbot.add_widget(dialog)
 
     # The pixmap has bounding boxes drawn; verify it's not null and loaded correctly

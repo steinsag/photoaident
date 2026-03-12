@@ -6,6 +6,7 @@ import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtWidgets
 
+from photoaident.core.search import SearchResult
 from photoaident.db.database import (
     Face,
     FaceState,
@@ -13,8 +14,8 @@ from photoaident.db.database import (
     get_engine,
     get_session_factory,
 )
-from photoaident.core.search import SearchResult
 from photoaident.db.migrate import apply_migrations
+from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 from photoaident.ui.widgets.thumbnail_grid import (
     PAGE_SIZE,
@@ -35,12 +36,28 @@ def sample_image(tmp_path):
     return img_path
 
 
-def test_thumbnail_widget_init(qtbot, sample_image, tmp_path):
+@pytest.fixture
+def mock_session_factory():
+    factory = MagicMock()
+    # Mocking the context manager session_factory() as session:
+    session = factory.return_value.__enter__.return_value
+    # Mocking session.scalar(...) to return 0 by default
+    session.scalar.return_value = 0
+    return factory
+
+
+@pytest.fixture
+def mock_vector_store():
+    return MagicMock(spec=VectorStore)
+
+
+def test_thumbnail_widget_init(qtbot, sample_image, tmp_path, mock_session_factory):
     thumb_path = tmp_path / "thumb.jpg"
     widget = ThumbnailWidget(
         image_id=1,
         file_path=str(sample_image),
         thumb_path=thumb_path,
+        session_factory=mock_session_factory,
     )
     qtbot.addWidget(widget)
 
@@ -54,13 +71,18 @@ def test_thumbnail_widget_init(qtbot, sample_image, tmp_path):
     assert not widget.image_label.pixmap().isNull()
 
 
-def test_thumbnail_widget_with_existing_thumb(qtbot, sample_image, tmp_path):
+def test_thumbnail_widget_with_existing_thumb(
+    qtbot, sample_image, tmp_path, mock_session_factory
+):
     thumb_path = tmp_path / "thumb_exists.jpg"
     # Create a dummy thumbnail
     PILImage.new("RGB", (150, 150), "red").save(thumb_path, "JPEG")
 
     widget = ThumbnailWidget(
-        image_id=1, file_path=str(sample_image), thumb_path=thumb_path
+        image_id=1,
+        file_path=str(sample_image),
+        thumb_path=thumb_path,
+        session_factory=mock_session_factory,
     )
     qtbot.addWidget(widget)
 
@@ -70,10 +92,12 @@ def test_thumbnail_widget_with_existing_thumb(qtbot, sample_image, tmp_path):
     assert widget.image_label.pixmap() is not None
 
 
-def test_thumbnail_widget_click(qtbot, sample_image, tmp_path):
+def test_thumbnail_widget_click(qtbot, sample_image, tmp_path, mock_session_factory):
     """Clicking the view button on the overlay emits the clicked signal."""
     thumb_path = tmp_path / "thumb_click.jpg"
-    widget = ThumbnailWidget(1, str(sample_image), thumb_path)
+    widget = ThumbnailWidget(
+        1, str(sample_image), thumb_path, session_factory=mock_session_factory
+    )
     qtbot.addWidget(widget)
 
     widget._overlay.show()
@@ -84,10 +108,12 @@ def test_thumbnail_widget_click(qtbot, sample_image, tmp_path):
     assert blocker.args == [1]
 
 
-def test_thumbnail_widget_error_loading(qtbot, tmp_path):
+def test_thumbnail_widget_error_loading(qtbot, tmp_path, mock_session_factory):
     # Pass a non-existent file path and non-existent thumb path
     thumb_path = tmp_path / "non_existent_thumb.jpg"
-    widget = ThumbnailWidget(1, "non_existent_file.jpg", thumb_path)
+    widget = ThumbnailWidget(
+        1, "non_existent_file.jpg", thumb_path, session_factory=mock_session_factory
+    )
     qtbot.addWidget(widget)
 
     # Should show error text
@@ -97,17 +123,25 @@ def test_thumbnail_widget_error_loading(qtbot, tmp_path):
 # --- hover overlay tests ---
 
 
-def test_hover_overlay_hidden_initially(qtbot, sample_image, tmp_path):
+def test_hover_overlay_hidden_initially(
+    qtbot, sample_image, tmp_path, mock_session_factory
+):
     """The overlay is hidden before any hover event."""
-    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    widget = ThumbnailWidget(
+        1, str(sample_image), tmp_path / "t.jpg", session_factory=mock_session_factory
+    )
     qtbot.addWidget(widget)
 
     assert widget._overlay.isHidden()
 
 
-def test_hover_overlay_shows_on_hoverenter(qtbot, sample_image, tmp_path):
+def test_hover_overlay_shows_on_hoverenter(
+    qtbot, sample_image, tmp_path, mock_session_factory
+):
     """Sending a HoverEnter event shows the overlay."""
-    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    widget = ThumbnailWidget(
+        1, str(sample_image), tmp_path / "t.jpg", session_factory=mock_session_factory
+    )
     qtbot.addWidget(widget)
     widget.show()
 
@@ -117,9 +151,13 @@ def test_hover_overlay_shows_on_hoverenter(qtbot, sample_image, tmp_path):
     assert not widget._overlay.isHidden()
 
 
-def test_hover_overlay_hides_on_hoverleave(qtbot, sample_image, tmp_path):
+def test_hover_overlay_hides_on_hoverleave(
+    qtbot, sample_image, tmp_path, mock_session_factory
+):
     """Sending a HoverLeave event hides the overlay."""
-    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+    widget = ThumbnailWidget(
+        1, str(sample_image), tmp_path / "t.jpg", session_factory=mock_session_factory
+    )
     qtbot.addWidget(widget)
     widget.show()
 
@@ -134,9 +172,13 @@ def test_hover_overlay_hides_on_hoverleave(qtbot, sample_image, tmp_path):
     assert widget._overlay.isHidden()
 
 
-def test_label_button_disabled_without_faces(qtbot, sample_image, tmp_path):
-    """label_btn is disabled when there is no session_factory."""
-    widget = ThumbnailWidget(1, str(sample_image), tmp_path / "t.jpg")
+def test_label_button_disabled_without_faces(
+    qtbot, sample_image, tmp_path, mock_session_factory
+):
+    """label_btn is disabled when there is no unidentified faces."""
+    widget = ThumbnailWidget(
+        1, str(sample_image), tmp_path / "t.jpg", mock_session_factory
+    )
     qtbot.addWidget(widget)
     widget.show()  # parent must be visible for showEvent to fire on child
 
@@ -206,7 +248,7 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
         session.commit()
         img_id = img.id
 
-    grid = ThumbnailGrid(session_factory)
+    grid = ThumbnailGrid(session_factory, VectorStore())
     qtbot.addWidget(grid)
 
     grid.add_thumbnail(img_id, str(sample_image), tmp_app_paths.thumbs_dir / "t.jpg")
@@ -222,14 +264,16 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
     assert received == [img_id]
 
 
-def test_thumbnail_grid_init(qtbot):
-    grid = ThumbnailGrid()
+def test_thumbnail_grid_init(qtbot, mock_session_factory, mock_vector_store):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
     assert len(grid.thumbnails) == 0
 
 
-def test_thumbnail_grid_add_thumbnail(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_thumbnail_grid_add_thumbnail(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     thumb_path = tmp_path / "thumb_grid.jpg"
@@ -240,8 +284,10 @@ def test_thumbnail_grid_add_thumbnail(qtbot, sample_image, tmp_path):
     assert grid.grid_layout.count() == 1
 
 
-def test_thumbnail_grid_clear(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_thumbnail_grid_clear(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     grid.add_thumbnail(1, str(sample_image), tmp_path / "t1.jpg")
@@ -256,8 +302,10 @@ def test_thumbnail_grid_clear(qtbot, sample_image, tmp_path):
     assert grid.grid_layout.count() == 0
 
 
-def test_thumbnail_grid_resize(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_thumbnail_grid_resize(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     grid.show()  # Need to show to have a valid width
     qtbot.addWidget(grid)
 
@@ -311,8 +359,10 @@ def test_thumbnail_grid_resize(qtbot, sample_image, tmp_path):
 # --- set_results / infinite scroll tests ---
 
 
-def test_set_results_loads_first_page_only(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_set_results_loads_first_page_only(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -325,8 +375,10 @@ def test_set_results_loads_first_page_only(qtbot, sample_image, tmp_path):
     assert grid._loaded_count == PAGE_SIZE
 
 
-def test_set_results_fewer_than_page_size(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_set_results_fewer_than_page_size(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -338,8 +390,8 @@ def test_set_results_fewer_than_page_size(qtbot, sample_image, tmp_path):
     assert grid._hint_label.isHidden()
 
 
-def test_set_results_empty(qtbot):
-    grid = ThumbnailGrid()
+def test_set_results_empty(qtbot, mock_session_factory, mock_vector_store):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     grid.set_results([])
@@ -348,8 +400,10 @@ def test_set_results_empty(qtbot):
     assert grid._hint_label.isHidden()
 
 
-def test_set_results_emits_results_changed(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_set_results_emits_results_changed(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -363,8 +417,10 @@ def test_set_results_emits_results_changed(qtbot, sample_image, tmp_path):
     assert received == [50]
 
 
-def test_page_loaded_signal(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_page_loaded_signal(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -379,8 +435,10 @@ def test_page_loaded_signal(qtbot, sample_image, tmp_path):
     assert signals[0] == (PAGE_SIZE, 100)
 
 
-def test_set_results_resets_previous(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_set_results_resets_previous(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results1 = [
@@ -398,8 +456,10 @@ def test_set_results_resets_previous(qtbot, sample_image, tmp_path):
     assert grid._loaded_count == PAGE_SIZE
 
 
-def test_hint_label_shown_when_more_remain(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_hint_label_shown_when_more_remain(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -413,8 +473,10 @@ def test_hint_label_shown_when_more_remain(qtbot, sample_image, tmp_path):
     assert "remaining" in grid._hint_label.text()
 
 
-def test_hint_label_hidden_when_all_loaded(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_hint_label_hidden_when_all_loaded(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -425,8 +487,10 @@ def test_hint_label_hidden_when_all_loaded(qtbot, sample_image, tmp_path):
     assert grid._hint_label.isHidden()
 
 
-def test_scroll_triggers_load_more(qtbot, sample_image, tmp_path):
-    grid = ThumbnailGrid()
+def test_scroll_triggers_load_more(
+    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     results = [
@@ -598,7 +662,7 @@ def _make_session_factory(paths: AppPaths):
     return get_session_factory(engine)
 
 
-def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths):
+def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths, mock_vector_store):
     """Clicking a thumbnail opens ImageDetailDialog."""
     session_factory = _make_session_factory(tmp_app_paths)
 
@@ -610,7 +674,7 @@ def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths):
         session.commit()
         img_id = img.id
 
-    grid = ThumbnailGrid(session_factory)
+    grid = ThumbnailGrid(session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
@@ -620,10 +684,12 @@ def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths):
         MockDlg.return_value.exec.assert_called_once()
 
 
-def test_on_image_selected_nonexistent_id_skips_dialog(qtbot, tmp_app_paths):
+def test_on_image_selected_nonexistent_id_skips_dialog(
+    qtbot, tmp_app_paths, mock_vector_store
+):
     """Selecting a non-existent image id does not open the dialog."""
     session_factory = _make_session_factory(tmp_app_paths)
-    grid = ThumbnailGrid(session_factory)
+    grid = ThumbnailGrid(session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
@@ -631,9 +697,15 @@ def test_on_image_selected_nonexistent_id_skips_dialog(qtbot, tmp_app_paths):
         MockDlg.assert_not_called()
 
 
-def test_on_image_selected_without_session_factory_is_noop(qtbot):
-    """Without a session_factory, clicking a thumbnail does nothing."""
-    grid = ThumbnailGrid()
+def test_on_image_selected_without_image_in_db_is_noop(
+    qtbot, mock_session_factory, mock_vector_store
+):
+    """If image is not found in DB, clicking a thumbnail does nothing."""
+    session = mock_session_factory.return_value.__enter__.return_value
+    (
+        session.execute.return_value.unique.return_value.scalar_one_or_none.return_value
+    ) = None
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
@@ -641,7 +713,9 @@ def test_on_image_selected_without_session_factory_is_noop(qtbot):
         MockDlg.assert_not_called()
 
 
-def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_app_paths):
+def test_navigate_to_labelling_signal_forwarded(
+    qtbot, tmp_app_paths, mock_vector_store
+):
     """navigate_to_labelling from ImageDetailDialog is forwarded by the grid."""
     session_factory = _make_session_factory(tmp_app_paths)
 
@@ -653,7 +727,7 @@ def test_navigate_to_labelling_signal_forwarded(qtbot, tmp_app_paths):
         session.commit()
         img_id = img.id
 
-    grid = ThumbnailGrid(session_factory)
+    grid = ThumbnailGrid(session_factory, mock_vector_store)
     qtbot.addWidget(grid)
 
     received: list[int] = []

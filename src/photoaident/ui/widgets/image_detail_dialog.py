@@ -124,8 +124,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
     def __init__(
         self,
         image: DBImage,
-        session_factory: "sessionmaker | None" = None,
-        vector_store: "VectorStore | None" = None,
+        session_factory: "sessionmaker",
+        vector_store: "VectorStore",
         parent=None,
     ):
         super().__init__(parent)

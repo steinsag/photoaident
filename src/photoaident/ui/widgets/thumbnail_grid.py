@@ -92,7 +92,7 @@ class _HoverOverlay(QtWidgets.QWidget):
         self,
         image_id: int,
         file_path: str,
-        session_factory: "sessionmaker | None",
+        session_factory: "sessionmaker",
         parent=None,
     ):
         super().__init__(parent)
@@ -178,11 +178,8 @@ class _HoverOverlay(QtWidgets.QWidget):
 
     def showEvent(self, event: QtGui.QShowEvent) -> None:
         super().showEvent(event)
-        if self._session_factory is not None:
-            has_faces = _has_unidentified_faces(self._session_factory, self._image_id)
-            self.label_btn.setEnabled(has_faces)
-        else:
-            self.label_btn.setEnabled(False)
+        has_faces = _has_unidentified_faces(self._session_factory, self._image_id)
+        self.label_btn.setEnabled(has_faces)
 
 
 class ThumbnailWidget(QtWidgets.QWidget):
@@ -196,7 +193,7 @@ class ThumbnailWidget(QtWidgets.QWidget):
         image_id: int,
         file_path: str,
         thumb_path: Path,
-        session_factory: "sessionmaker | None" = None,
+        session_factory: "sessionmaker",
         parent=None,
     ):
         super().__init__(parent)
@@ -262,8 +259,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     def __init__(
         self,
-        session_factory: "sessionmaker | None" = None,
-        vector_store: "VectorStore | None" = None,
+        session_factory: "sessionmaker",
+        vector_store: "VectorStore",
         parent=None,
     ):
         super().__init__(parent)
@@ -304,8 +301,6 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.image_selected.connect(self._on_image_selected)
 
     def _on_image_selected(self, image_id: int) -> None:
-        if self._session_factory is None:
-            return
         with self._session_factory() as session:
             stmt = (
                 select(Image)
@@ -319,8 +314,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
             if image:
                 dialog = ImageDetailDialog(
                     image,
-                    session_factory=self._session_factory,
-                    vector_store=self._vector_store,
+                    self._session_factory,
+                    self._vector_store,
                     parent=self,
                 )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
