@@ -9,14 +9,14 @@ from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import get_exif_transform
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.orm import Session, sessionmaker
 
     from photoaident.db.vector_store import VectorStore
 
 
 def _resolve_best_person_name(
     faiss_id: int,
-    session_factory: "sessionmaker",
+    session: "Session",
     vector_store: "VectorStore",
     threshold: float = 0.35,
 ) -> tuple[str, float] | None:
@@ -24,7 +24,7 @@ def _resolve_best_person_name(
 
     Args:
         faiss_id: The FAISS index ID of the face to resolve.
-        session_factory: SQLAlchemy session factory.
+        session: SQLAlchemy session (already open).
         vector_store: FAISS vector store.
         threshold: Minimum similarity score to consider a match.
 
@@ -42,17 +42,26 @@ def _resolve_best_person_name(
     if not neighbor_ids:
         return None
 
-    with session_factory() as session:
-        stmt = (
-            select(Face.faiss_id, Person.name)
-            .join(Face.person)
-            .where(
-                Face.faiss_id.in_(neighbor_ids),
-                Face.state == FaceState.IDENTIFIED,
-                Face.deleted_at.is_(None),
-            )
+    return _query_best_person(faiss_id, neighbor_ids, neighbors, session)
+
+
+def _query_best_person(
+    faiss_id: int,
+    neighbor_ids: list[int],
+    neighbors: list[tuple[int, float]],
+    session: "Session",
+) -> tuple[str, float] | None:
+    """Execute the DB query to find the best person among neighbors."""
+    stmt = (
+        select(Face.faiss_id, Person.name)
+        .join(Face.person)
+        .where(
+            Face.faiss_id.in_(neighbor_ids),
+            Face.state == FaceState.IDENTIFIED,
+            Face.deleted_at.is_(None),
         )
-        rows = session.execute(stmt).all()
+    )
+    rows = session.execute(stmt).all()
 
     if not rows:
         return None
@@ -144,6 +153,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.image_data = image
         self._session_factory = session_factory
         self._vector_store = vector_store
+        self._resolved_names: dict[int, tuple[str, float] | None] = {}
 
         self._setup_ui()
         self._load_image()
@@ -249,14 +259,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
         if face.state == FaceState.ANONYMOUS:
             return green, self.tr("Anonymous")
 
-        # UNIDENTIFIED: try FAISS match
-        if self._vector_store and self._session_factory:
-            match = _resolve_best_person_name(
-                face.faiss_id, self._session_factory, self._vector_store
-            )
-            if match:
-                name, score = match
-                return green, f"{name} ({score:.0%})"
+        # UNIDENTIFIED: check cached FAISS match
+        match = self._resolved_names.get(face.faiss_id)
+        if match:
+            name, score = match
+            return green, f"{name} ({score:.0%})"
 
         return red, self.tr("Unknown")
 
@@ -268,6 +275,24 @@ class ImageDetailDialog(QtWidgets.QDialog):
         Color is green for identified/anonymous/matched-unidentified faces and
         red only for truly unknown (unidentified with no FAISS match) faces.
         """
+        # Pre-resolve unidentified faces in a single session to avoid N+1 queries
+        unidentified_ids = [
+            f.faiss_id
+            for f in self.image_data.faces
+            if f.state == FaceState.UNIDENTIFIED
+            and f.deleted_at is None
+            and f.faiss_id not in self._resolved_names
+        ]
+
+        if unidentified_ids and self._vector_store and self._session_factory:
+            with self._session_factory() as session:
+                for fid in unidentified_ids:
+                    # Individual FAISS searches are still done per face,
+                    # but we reuse the same DB session for lookups.
+                    self._resolved_names[fid] = _resolve_best_person_name(
+                        fid, session, self._vector_store
+                    )
+
         result: list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]] = []
         for face in self.image_data.faces:
             if face.deleted_at is not None:

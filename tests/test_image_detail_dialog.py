@@ -698,7 +698,8 @@ def test_resolve_best_person_name_returns_match(search_db, tmp_path):
     vs.add(emb0)  # unidentified - faiss_id=0
     vs.add(emb1)  # Bob, identified - faiss_id=1
 
-    result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
+    with search_db() as session:
+        result = _resolve_best_person_name(0, session, vs, threshold=0.0)
     assert result is not None
     name, score = result
     assert name == "Bob"
@@ -714,8 +715,9 @@ def test_resolve_best_person_name_no_match(search_db):
     emb /= np.linalg.norm(emb)
     vs.add(emb)  # faiss_id=0
 
-    # Only one embedding — search returns self only, neighbor_ids is empty → None
-    result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
+    with search_db() as session:
+        # Only one embedding — search returns self only, neighbor_ids is empty → None
+        result = _resolve_best_person_name(0, session, vs, threshold=0.0)
     assert result is None
 
 
@@ -729,8 +731,9 @@ def test_resolve_best_person_name_neighbors_but_none_identified(search_db):
     vs.add(emb)  # query face - faiss_id=0
     vs.add(emb)  # neighbor, but not identified in DB - faiss_id=1
 
-    # DB is empty — no face with faiss_id=1 is IDENTIFIED → rows is empty → None
-    result = _resolve_best_person_name(0, search_db, vs, threshold=0.0)
+    with search_db() as session:
+        # DB is empty — no face with faiss_id=1 is IDENTIFIED → rows is empty → None
+        result = _resolve_best_person_name(0, session, vs, threshold=0.0)
     assert result is None
 
 
@@ -738,9 +741,9 @@ def test_resolve_best_person_name_index_error():
     """Returns None when faiss_id is out of bounds in the vector store."""
     mock_vs = MagicMock()
     mock_vs.get_embedding.side_effect = IndexError("out of bounds")
-    mock_session_factory = MagicMock()
+    mock_session = MagicMock()
 
-    result = _resolve_best_person_name(999, mock_session_factory, mock_vs)
+    result = _resolve_best_person_name(999, mock_session, mock_vs)
     assert result is None
 
 
@@ -898,3 +901,45 @@ def test_bounding_box_colors_by_state(
     # Red box at unidentified face border (top edge y=10, center x=150)
     red = pixel_color(150, 10)
     assert red.red() > red.green() and red.red() > red.blue()
+
+
+def test_image_detail_dialog_with_exif_rotation(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store
+):
+    """Lines 350-357: Image with EXIF rotation triggers the transformation block."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "rotated.jpg"
+    # Create an image and save it with orientation metadata.
+    # Orientation 6 is Rotate 90 CW
+    img = PILImage.new("RGB", (100, 200), "blue")
+    exif = img.getexif()
+    exif[0x0112] = 6  # Orientation tag
+    img.save(img_path, exif=exif)
+
+    db_image = Image(id=900, file_path=str(img_path), file_size=1000)
+    db_image.faces = [
+        Face(
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=20,
+            bbox_h=20,
+            detection_confidence=0.9,
+            model_version="v1",
+            faiss_id=10,
+            state=FaceState.IDENTIFIED,
+        )
+    ]
+
+    dialog = ImageDetailDialog(db_image, mock_session_factory, mock_vector_store)
+    qtbot.add_widget(dialog)
+
+    # If lines 350-357 were executed, the pixmap dimensions should be
+    # swapped (100x200 -> 200x100)
+    # PIL (100, 200) -> QImageReader reads it.
+    # Orientation 6 is Rotate 90.
+    assert hasattr(dialog, "_original_pixmap")
+    pm = dialog._original_pixmap
+    # After 90 degree rotation, width should be 200 and height 100
+    assert pm.width() == 200
+    assert pm.height() == 100
