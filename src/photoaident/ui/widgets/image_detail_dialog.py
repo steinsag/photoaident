@@ -1,9 +1,116 @@
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy import select
 
-from photoaident.db.database import FaceState, Image as DBImage
+from photoaident.db.database import Face, FaceState, Image as DBImage, Person
 from photoaident.utils.file_manager import reveal_in_file_manager
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import sessionmaker
+
+    from photoaident.db.vector_store import VectorStore
+
+
+def _resolve_best_person_name(
+    faiss_id: int,
+    session_factory: "sessionmaker",
+    vector_store: "VectorStore",
+    threshold: float = 0.35,
+) -> tuple[str, float] | None:
+    """Find the best-matching identified person for an unidentified face embedding.
+
+    Args:
+        faiss_id: The FAISS index ID of the face to resolve.
+        session_factory: SQLAlchemy session factory.
+        vector_store: FAISS vector store.
+        threshold: Minimum similarity score to consider a match.
+
+    Returns:
+        A (person_name, score) tuple, or None if no match found.
+    """
+    try:
+        embedding = vector_store.get_embedding(faiss_id)
+    except IndexError:
+        return None
+
+    # Search for top-11 similar faces so we can exclude self
+    neighbors = vector_store.search(embedding, k=11, threshold=threshold)
+    neighbor_ids = [nid for nid, _ in neighbors if nid != faiss_id]
+    if not neighbor_ids:
+        return None
+
+    with session_factory() as session:
+        stmt = (
+            select(Face.faiss_id, Person.name)
+            .join(Face.person)
+            .where(
+                Face.faiss_id.in_(neighbor_ids),
+                Face.state == FaceState.IDENTIFIED,
+                Face.deleted_at.is_(None),
+            )
+        )
+        rows = session.execute(stmt).all()
+
+    if not rows:
+        return None
+
+    id_to_score = {nid: score for nid, score in neighbors if nid != faiss_id}
+    id_to_name = {row.faiss_id: row.name for row in rows}
+
+    best_id = max(id_to_name.keys(), key=lambda nid: id_to_score.get(nid, 0.0))
+    return id_to_name[best_id], id_to_score[best_id]
+
+
+class _FaceOverlayLabel(QtWidgets.QLabel):
+    """QLabel that shows a tooltip when the mouse hovers over a face bounding box."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._face_regions: list[tuple[QtCore.QRectF, str]] = []
+        self._original_size: QtCore.QSize = QtCore.QSize()
+        self.setMouseTracking(True)
+
+    def set_face_regions(
+        self,
+        regions: list[tuple[QtCore.QRectF, str]],
+        original_size: QtCore.QSize,
+    ) -> None:
+        """Set face bounding boxes (in original-image coords) and their tooltip text."""
+        self._face_regions = regions
+        self._original_size = original_size
+
+    def mouseMoveEvent(self, event: QtGui.QMouseEvent) -> None:
+        super().mouseMoveEvent(event)
+        if not self._face_regions or not self._original_size.isValid():
+            return
+
+        pm = self.pixmap()
+        if pm is None or pm.isNull():
+            return
+
+        pm_w = pm.width()
+        pm_h = pm.height()
+        if pm_w == 0 or pm_h == 0:
+            return
+
+        # Center-alignment offsets (label may be larger than the pixmap)
+        offset_x = (self.width() - pm_w) / 2
+        offset_y = (self.height() - pm_h) / 2
+
+        pos = event.position()
+        orig_x = (pos.x() - offset_x) / pm_w * self._original_size.width()
+        orig_y = (pos.y() - offset_y) / pm_h * self._original_size.height()
+
+        for rect, tooltip_text in self._face_regions:
+            if rect.contains(orig_x, orig_y):
+                QtWidgets.QToolTip.showText(
+                    event.globalPosition().toPoint(), tooltip_text, self
+                )
+                return
+
+        QtWidgets.QToolTip.hideText()
 
 
 class ImageDetailDialog(QtWidgets.QDialog):
@@ -14,11 +121,19 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     navigate_to_labelling = QtCore.Signal(int)  # image_id
 
-    def __init__(self, image: DBImage, parent=None):
+    def __init__(
+        self,
+        image: DBImage,
+        session_factory: "sessionmaker | None" = None,
+        vector_store: "VectorStore | None" = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Image Details"))
         self.setMinimumSize(800, 600)
         self.image_data = image
+        self._session_factory = session_factory
+        self._vector_store = vector_store
 
         self._setup_ui()
         self._load_image()
@@ -103,11 +218,56 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
-        self.image_label = QtWidgets.QLabel()
+        self.image_label = _FaceOverlayLabel()
         self.image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.scroll_area.setWidget(self.image_label)
 
         main_layout.addWidget(self.scroll_area, 1)
+
+    def _build_face_display_info(
+        self,
+    ) -> list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]]:
+        """Return (rect, color, tooltip) for every non-deleted face.
+
+        Color is green for identified/anonymous/matched-unidentified faces and
+        red only for truly unknown (unidentified with no FAISS match) faces.
+        """
+        _GREEN = QtCore.Qt.GlobalColor.green
+        _RED = QtCore.Qt.GlobalColor.red
+
+        result: list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]] = []
+        for face in self.image_data.faces:
+            if face.deleted_at is not None:
+                continue
+
+            rect = QtCore.QRectF(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h)
+
+            if face.state == FaceState.IDENTIFIED:
+                tooltip = (
+                    face.person.name if face.person is not None else self.tr("Unknown")
+                )
+                color = _GREEN
+            elif face.state == FaceState.ANONYMOUS:
+                tooltip = self.tr("Anonymous")
+                color = _GREEN
+            else:  # UNIDENTIFIED
+                if self._vector_store is not None and self._session_factory is not None:
+                    match = _resolve_best_person_name(
+                        face.faiss_id, self._session_factory, self._vector_store
+                    )
+                    if match is not None:
+                        name, score = match
+                        tooltip = f"{name} ({score:.0%})"
+                        color = _GREEN
+                    else:
+                        tooltip = self.tr("Unknown")
+                        color = _RED
+                else:
+                    tooltip = self.tr("Unknown")
+                    color = _RED
+
+            result.append((rect, color, tooltip))
+        return result
 
     def _load_image(self):
         file_path = Path(self.image_data.file_path)
@@ -132,23 +292,23 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         pixmap = QtGui.QPixmap.fromImage(qimage)
 
-        # Draw bounding boxes
-        if self.image_data.faces:
+        # Build display info first so colors reflect FAISS match results
+        face_display = self._build_face_display_info()
+
+        if face_display:
+            pen_width = max(2, pixmap.width() // 500)
             painter = QtGui.QPainter(pixmap)
-            pen = QtGui.QPen(QtCore.Qt.GlobalColor.red)
-            pen.setWidth(
-                max(2, pixmap.width() // 500)
-            )  # Scale pen width with image size
-            painter.setPen(pen)
-
-            for face in self.image_data.faces:
-                rect = QtCore.QRect(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h)
-                painter.drawRect(rect)
-
+            for rect, color, _ in face_display:
+                pen = QtGui.QPen(color)
+                pen.setWidth(pen_width)
+                painter.setPen(pen)
+                painter.drawRect(rect.toRect())
             painter.end()
 
-        # Scale pixmap to fit the view initially, but allow scrolling
-        # Actually, let's just show it scaled to fit the scroll area by default
+        # Register tooltip regions (rect + text only)
+        tooltip_regions = [(rect, tooltip) for rect, _, tooltip in face_display]
+        self.image_label.set_face_regions(tooltip_regions, pixmap.size())
+
         self._original_pixmap = pixmap
         self._update_image_display()
 

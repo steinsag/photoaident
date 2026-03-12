@@ -18,6 +18,8 @@ from photoaident.utils.image_utils import generate_thumbnail
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
+    from photoaident.db.vector_store import VectorStore
+
 logger = logging.getLogger(__name__)
 
 PAGE_SIZE = 30
@@ -258,9 +260,15 @@ class ThumbnailGrid(QtWidgets.QWidget):
     results_changed = QtCore.Signal(int)  # total result count, emitted on set_results()
     page_loaded = QtCore.Signal(int, int)  # (loaded_so_far, total)
 
-    def __init__(self, session_factory: "sessionmaker | None" = None, parent=None):
+    def __init__(
+        self,
+        session_factory: "sessionmaker | None" = None,
+        vector_store: "VectorStore | None" = None,
+        parent=None,
+    ):
         super().__init__(parent)
         self._session_factory = session_factory
+        self._vector_store = vector_store
 
         self.main_layout = QtWidgets.QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -302,11 +310,19 @@ class ThumbnailGrid(QtWidgets.QWidget):
             stmt = (
                 select(Image)
                 .where(Image.id == image_id)
-                .options(joinedload(Image.faces), joinedload(Image.metadata_rel))
+                .options(
+                    joinedload(Image.faces).joinedload(Face.person),
+                    joinedload(Image.metadata_rel),
+                )
             )
             image = session.execute(stmt).unique().scalar_one_or_none()
             if image:
-                dialog = ImageDetailDialog(image, self)
+                dialog = ImageDetailDialog(
+                    image,
+                    session_factory=self._session_factory,
+                    vector_store=self._vector_store,
+                    parent=self,
+                )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
                 dialog.exec()
 

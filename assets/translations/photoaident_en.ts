@@ -187,6 +187,14 @@
         <translation>Close</translation>
     </message>
     <message>
+        <source>Unknown</source>
+        <translation>Unknown</translation>
+    </message>
+    <message>
+        <source>Anonymous</source>
+        <translation>Anonymous</translation>
+    </message>
+    <message>
         <source>Image file not found: {path}</source>
         <translation>Image file not found: {path}</translation>
     </message>

@@ -4,7 +4,15 @@ import pytest
 from PySide6.QtCore import QLocale
 from sqlalchemy import create_engine
 
-from photoaident.db.database import get_engine, get_session_factory
+from photoaident.db.database import (
+    Face,
+    FaceState,
+    Image,
+    ImageMetadata,
+    TakenAtSource,
+    get_engine,
+    get_session_factory,
+)
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
@@ -70,6 +78,42 @@ def search_db(tmp_path):
     apply_migrations(f"sqlite:///{db_path}")
     engine = create_engine(f"sqlite:///{db_path}")
     return get_session_factory(engine)
+
+
+@pytest.fixture
+def sample_image_with_metadata(tmp_path):
+    """Create a temporary image file and a DB model for it."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "test_image.jpg"
+    PILImage.new("RGB", (1000, 800), color="red").save(img_path)
+
+    db_image = Image(
+        id=123,
+        file_path=str(img_path),
+        file_hash="fakehash",
+        file_size=1024,
+    )
+    db_image.metadata_rel = ImageMetadata(
+        width=1000,
+        height=800,
+        camera_make="TestCamera",
+        camera_model="Model X",
+        taken_at_source=TakenAtSource.FILESYSTEM,
+    )
+    db_image.faces = [
+        Face(
+            bbox_x=100,
+            bbox_y=100,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.9,
+            model_version="v1",
+            faiss_id=0,
+            state=FaceState.UNIDENTIFIED,
+        )
+    ]
+    return db_image
 
 
 @pytest.fixture(scope="session")

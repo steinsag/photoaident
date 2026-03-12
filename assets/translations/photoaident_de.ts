@@ -187,6 +187,14 @@
         <translation>Schließen</translation>
     </message>
     <message>
+        <source>Unknown</source>
+        <translation>Unbekannt</translation>
+    </message>
+    <message>
+        <source>Anonymous</source>
+        <translation>Anonym</translation>
+    </message>
+    <message>
         <source>Image file not found: {path}</source>
         <translation>Bilddatei nicht gefunden: {path}</translation>
     </message>
