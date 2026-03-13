@@ -26,33 +26,26 @@ Run the following to install all dependencies:
 
 PhotoAIdent automatically uses the best available execution provider in this priority order:
 
-1. **CUDA** (NVIDIA GPU) — included by default on Linux via `onnxruntime-gpu`
-2. **CoreML** (Apple Silicon / macOS) — included by default via `onnxruntime`
+1. **CUDA** (NVIDIA GPU) — installed by default on Linux via the `cuda` group
+2. **CoreML** (Apple Silicon / macOS) — included in the base `onnxruntime` package
 3. **OpenVINO** (Intel CPU/iGPU/NPU) — optional, see below
 4. **CPU** — always available as fallback
+
+`uv sync` installs the `cuda` group by default on Linux, so NVIDIA users need no
+extra steps. The status bar at the bottom of the window confirms which provider is active.
 
 ### Intel CPU / iGPU / NPU (OpenVINO)
 
 Users with Intel hardware (including the Intel N100 and other Alder/Raptor Lake
-processors with integrated NPU) can accelerate inference via OpenVINO.
-
-Because `onnxruntime-openvino` conflicts with `onnxruntime-gpu`, it must be
-installed manually in place of the default GPU package:
+processors with integrated NPU) should exclude the default `cuda` group and install
+`openvino` instead — the two packages conflict:
 
 ```bash
-uv pip uninstall onnxruntime-gpu
-uv pip install "onnxruntime-openvino>=1.24.0"
+uv sync --no-group cuda --group openvino
 ```
 
-Once installed, the app will automatically detect and use `OpenVINOExecutionProvider`.
-The status bar at the bottom of the window confirms which provider is active.
-
-To revert to the default CUDA-capable package:
-
-```bash
-uv pip uninstall onnxruntime-openvino
-uv pip install "onnxruntime-gpu>=1.24.0"
-```
+> **Note:** avoid running a plain `uv sync` afterwards, as it will reinstall the
+> `cuda` group and override the OpenVINO setup.
 
 ## Running the app
 

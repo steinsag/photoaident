@@ -11,8 +11,7 @@ license = { text = "Apache" }
 dependencies = [
     "pyside6>=6.10.2",
     "insightface>=0.7.3",
-    "onnxruntime-gpu>=1.24.0; sys_platform == 'linux'",
-    "onnxruntime>=1.24.0; sys_platform != 'linux'",
+    "onnxruntime>=1.24.0",
     "faiss-cpu>=1.9.0",
     "Pillow>=10.0.0",
     "numpy>=1.26.0,<3.0.0", # insightface ABI requirement
@@ -35,6 +34,12 @@ packages = ["src/photoaident"]
 sources = ["src"]
 
 [dependency-groups]
+cuda = [
+    "onnxruntime-gpu>=1.24.0; sys_platform == 'linux'",
+]
+openvino = [
+    "onnxruntime-openvino>=1.24.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 dev = [
     "black>=26.3.1",
     "pyinstaller>=6.19.0",
@@ -45,6 +50,9 @@ dev = [
     "ruff>=0.4.0",
     "ty>=0.0.18",
 ]
+
+[tool.uv]
+default-groups = ["dev", "cuda"]
 
 [tool.ruff]
 line-length = 88
