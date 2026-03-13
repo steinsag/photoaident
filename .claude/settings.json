@@ -13,7 +13,7 @@
           },
           {
             "type": "command",
-            "command": "uv run black --quiet ."
+            "command": "uv run black --quiet --target-version py312 ."
           }
         ]
       }

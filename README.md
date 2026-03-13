@@ -57,7 +57,7 @@ One command to auto-fix formatting/lints, run type checks, and tests:
 
       uv run scripts/verify.py
 
-This runs, in order: `black .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`, `pytest`.
+This runs, in order: `black --target-version py312 .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`, `pytest`.
 
 ## Translations (i18n)
 
@@ -86,11 +86,11 @@ translations when running the app via `uv run photoaident`.
 
 Check formatting:
 
-      uv run black --check .
+      uv run black --check --target-version py312 .
 
 Auto-format the code locally:
 
-      uv run black .
+      uv run black --target-version py312 .
 
 ## Linting (Ruff)
 
@@ -145,7 +145,7 @@ What it does:
 - Runs pyright: `uv run pyright src/ tests/`
 - Runs ty: `uv run ty check`
 - Runs Ruff lint: `uv run ruff check .`
-- Runs Black in check mode: `uv run black --check .`
+- Runs Black in check mode: `uv run black --check --target-version py312 .`
 - Blocks the commit if linting, formatting, or typing issues are found
 
 To bypass the hook: `git commit --no-verify`

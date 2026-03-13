@@ -180,7 +180,7 @@ uv run scripts/verify.py             # Format + lint + type check + translations
 uv run pytest                        # Tests only
 uv run pytest -m gpu                 # GPU integration tests only
 uv run ruff check --fix --quiet      # Lint (auto-fix)
-uv run black --quiet .               # Format
+uv run black --quiet --target-version py312 .               # Format
 uv run pyright --pythonversion 3.12 src/ tests/           # Type check (pyright)
 uv run ty check                      # Type check (ty)
 uv run alembic revision --autogenerate -m "description"  # New migration
