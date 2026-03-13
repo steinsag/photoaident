@@ -128,7 +128,7 @@
         <translation>CPU only</translation>
     </message>
     <message>
-        <source>GPU/NPU ready</source>
+        <source>GPU / NPU ready</source>
         <translation>GPU / NPU ready</translation>
     </message>
     <message>

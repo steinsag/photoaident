@@ -219,13 +219,18 @@ You are a senior Python engineer.
 
 ---
 
-## GPU / CUDA Notes
+## Hardware Acceleration Notes
 
-- Target: NVIDIA RTX, CUDA >= 13
-- ONNX Runtime GPU handles CUDA internally — no system `nvcc` needed
-- InsightFace selects `CUDAExecutionProvider` automatically when available
-- App works on CPU-only machines — indexing is slower but functional
-- GPU availability shown in the status bar at startup
+Execution providers are selected automatically in priority order (see `core/providers.py`):
+
+1. **CUDA** (`CUDAExecutionProvider`) — NVIDIA GPU; CUDA ≥ 13; no system `nvcc` needed
+2. **CoreML** (`CoreMLExecutionProvider`) — Apple Silicon / macOS
+3. **OpenVINO** (`OpenVINOExecutionProvider`) — Intel CPU / iGPU / NPU (e.g. N100)
+4. **CPU** (`CPUExecutionProvider`) — always available as fallback
+
+- App works on CPU-only machines — indexing is slower but fully functional
+- Active provider shown in the status bar at startup
+- Provider list lives in `src/photoaident/core/providers.py` — update there when adding new providers
 
 ---
 
