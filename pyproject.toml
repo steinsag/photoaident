@@ -12,7 +12,6 @@ dependencies = [
     "pyside6>=6.10.2",
     "insightface>=0.7.3",
     "onnxruntime-gpu>=1.24.0; sys_platform == 'linux'",
-    "onnxruntime-openvino>=1.24.0; sys_platform == 'linux'",
     "onnxruntime>=1.24.0; sys_platform != 'linux'",
     "faiss-cpu>=1.9.0",
     "Pillow>=10.0.0",
