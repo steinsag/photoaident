@@ -409,8 +409,7 @@ Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
         <source>Pan and zoom the map. The highlighted area defines the search region.</source>
-        <translation>Karte verschieben und zoomen. Der hervorgehobene Bereich definiert den Suchbereich.
-            </translation>
+        <translation>Karte verschieben und zoomen. Der hervorgehobene Bereich definiert den Suchbereich.</translation>
     </message>
 </context>
 <context>
