@@ -124,12 +124,12 @@
 <context>
     <name>GpuChecker</name>
     <message>
-        <source>GPU ready</source>
-        <translation>GPU bereit</translation>
-    </message>
-    <message>
         <source>CPU only</source>
         <translation>Nur CPU</translation>
+    </message>
+    <message>
+        <source>GPU/NPU ready</source>
+        <translation>GPU / NPU bereit</translation>
     </message>
     <message>
         <source>Import failed</source>
@@ -409,7 +409,8 @@ Möchten Sie wirklich fortfahren?</translation>
     </message>
     <message>
         <source>Pan and zoom the map. The highlighted area defines the search region.</source>
-        <translation>Karte verschieben und zoomen. Der hervorgehobene Bereich definiert den Suchbereich.</translation>
+        <translation>Karte verschieben und zoomen. Der hervorgehobene Bereich definiert den Suchbereich.
+            </translation>
     </message>
 </context>
 <context>

@@ -6,10 +6,11 @@ import onnxruntime
 from PIL import Image
 from insightface.app import FaceAnalysis
 
-# Ordered preference: CUDA (NVIDIA) → CoreML (Apple Silicon/macOS) → CPU
+# Ordered preference: CUDA (NVIDIA) → CoreML (macOS) → OpenVINO (Linux) → CPU
 _PREFERRED_PROVIDERS = [
     "CUDAExecutionProvider",
     "CoreMLExecutionProvider",
+    "OpenVINOExecutionProvider",
     "CPUExecutionProvider",
 ]
 

@@ -22,10 +22,17 @@ class GpuChecker(QtCore.QObject):
         try:
             __import__("insightface")
             providers = ort.get_available_providers()  # type: ignore
-            has_cuda = "CUDAExecutionProvider" in providers
+            has_gpu = any(
+                p in providers
+                for p in (
+                    "CUDAExecutionProvider",
+                    "CoreMLExecutionProvider",
+                    "OpenVINOExecutionProvider",
+                )
+            )
 
-            prefix = "✅" if has_cuda else "⚠️"
-            label = self.tr("GPU ready") if has_cuda else self.tr("CPU only")
+            prefix = "✅" if has_gpu else "⚠️"
+            label = self.tr("GPU/NPU ready") if has_gpu else self.tr("CPU only")
             msg = f"{prefix} {label} — {', '.join(providers)}"
 
         except Exception as e:
