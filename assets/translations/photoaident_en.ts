@@ -124,12 +124,12 @@
 <context>
     <name>GpuChecker</name>
     <message>
-        <source>GPU ready</source>
-        <translation>GPU ready</translation>
-    </message>
-    <message>
         <source>CPU only</source>
         <translation>CPU only</translation>
+    </message>
+    <message>
+        <source>GPU / NPU ready</source>
+        <translation>GPU / NPU ready</translation>
     </message>
     <message>
         <source>Import failed</source>

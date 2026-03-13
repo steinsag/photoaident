@@ -22,6 +22,31 @@ Run the following to install all dependencies:
 
     uv sync --python 3.12
 
+## Hardware acceleration
+
+PhotoAIdent automatically uses the best available execution provider in this priority order:
+
+1. **CUDA** (NVIDIA GPU) — installed by default on Linux via the `cuda` group
+2. **CoreML** (Apple Silicon / macOS) — included in the base `onnxruntime` package
+3. **OpenVINO** (Intel CPU/iGPU/NPU) — optional, see below
+4. **CPU** — always available as fallback
+
+`uv sync` installs the `cuda` group by default on Linux, so NVIDIA users need no
+extra steps. The status bar at the bottom of the window confirms which provider is active.
+
+### Intel CPU / iGPU / NPU (OpenVINO)
+
+Users with Intel hardware (including the Intel N100 and other Alder/Raptor Lake
+processors with integrated NPU) should exclude the default `cuda` group and install
+`openvino` instead — the two packages conflict:
+
+```bash
+uv sync --no-group cuda --group openvino
+```
+
+> **Note:** avoid running a plain `uv sync` afterwards, as it will reinstall the
+> `cuda` group and override the OpenVINO setup.
+
 ## Running the app
 
     uv run photoaident
@@ -32,7 +57,7 @@ One command to auto-fix formatting/lints, run type checks, and tests:
 
       uv run scripts/verify.py
 
-This runs, in order: `black .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`, `pytest`.
+This runs, in order: `black --target-version py312 .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`, `pytest`.
 
 ## Translations (i18n)
 
@@ -61,11 +86,11 @@ translations when running the app via `uv run photoaident`.
 
 Check formatting:
 
-      uv run black --check .
+      uv run black --check --target-version py312 .
 
 Auto-format the code locally:
 
-      uv run black .
+      uv run black --target-version py312 .
 
 ## Linting (Ruff)
 
@@ -120,7 +145,7 @@ What it does:
 - Runs pyright: `uv run pyright src/ tests/`
 - Runs ty: `uv run ty check`
 - Runs Ruff lint: `uv run ruff check .`
-- Runs Black in check mode: `uv run black --check .`
+- Runs Black in check mode: `uv run black --check --target-version py312 .`
 - Blocks the commit if linting, formatting, or typing issues are found
 
 To bypass the hook: `git commit --no-verify`

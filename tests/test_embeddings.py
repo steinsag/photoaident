@@ -4,44 +4,45 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from photoaident.core.embeddings import FaceEmbedder, _select_providers
+from photoaident.core.embeddings import FaceEmbedder
+from photoaident.core.providers import select_providers
 
 
 def test_select_providers_cuda_first():
     with patch(
-        "photoaident.core.embeddings.onnxruntime.get_available_providers",
+        "photoaident.core.providers.onnxruntime.get_available_providers",
         return_value=["CUDAExecutionProvider", "CPUExecutionProvider"],
     ):
-        providers = _select_providers()
+        providers = select_providers()
     assert providers[0] == "CUDAExecutionProvider"
     assert "CPUExecutionProvider" in providers
 
 
 def test_select_providers_coreml_fallback():
     with patch(
-        "photoaident.core.embeddings.onnxruntime.get_available_providers",
+        "photoaident.core.providers.onnxruntime.get_available_providers",
         return_value=["CoreMLExecutionProvider", "CPUExecutionProvider"],
     ):
-        providers = _select_providers()
+        providers = select_providers()
     assert providers[0] == "CoreMLExecutionProvider"
     assert "CPUExecutionProvider" in providers
 
 
 def test_select_providers_cpu_only():
     with patch(
-        "photoaident.core.embeddings.onnxruntime.get_available_providers",
+        "photoaident.core.providers.onnxruntime.get_available_providers",
         return_value=["CPUExecutionProvider"],
     ):
-        providers = _select_providers()
+        providers = select_providers()
     assert providers == ["CPUExecutionProvider"]
 
 
 def test_select_providers_excludes_unavailable():
     with patch(
-        "photoaident.core.embeddings.onnxruntime.get_available_providers",
+        "photoaident.core.providers.onnxruntime.get_available_providers",
         return_value=["CPUExecutionProvider"],
     ):
-        providers = _select_providers()
+        providers = select_providers()
     assert "CUDAExecutionProvider" not in providers
     assert "CoreMLExecutionProvider" not in providers
 
