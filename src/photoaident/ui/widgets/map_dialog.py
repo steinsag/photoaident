@@ -112,9 +112,8 @@ class MapLocationDialog(QtWidgets.QDialog):
                 logger.error("QML error: %s", err)
         elif status == QtQuickWidgets.QQuickWidget.Status.Ready:
             root_obj = self._quick_widget.rootObject()
-            if root_obj:
-                if self._pending_initial_bbox:
-                    self._apply_initial_bbox(root_obj, self._pending_initial_bbox)
+            if root_obj and self._pending_initial_bbox:
+                self._apply_initial_bbox(root_obj, self._pending_initial_bbox)
 
     @staticmethod
     def _apply_initial_bbox(root_obj: object, initial_bbox: GpsBoundingBox) -> None:

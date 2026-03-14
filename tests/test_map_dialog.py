@@ -57,7 +57,11 @@ def test_icon_path_pyinstaller_bundle(tmp_path):
 def test_build_bbox_valid():
     """Returns a GpsBoundingBox from valid coordinate values."""
     bbox = MapLocationDialog._build_bbox(10.0, 20.0, 30.0, 40.0)
-    assert bbox == GpsBoundingBox(south=10.0, west=20.0, north=30.0, east=40.0)
+    assert bbox is not None
+    assert bbox.south == pytest.approx(10.0)
+    assert bbox.west == pytest.approx(20.0)
+    assert bbox.north == pytest.approx(30.0)
+    assert bbox.east == pytest.approx(40.0)
 
 
 def test_build_bbox_invalid():
@@ -120,8 +124,8 @@ def test_on_qml_status_changed_ready_applies_initial_bbox(qtbot, tmp_app_paths):
 
     props = _setproperty_calls(mock_root)
     assert props["pendingBbox"] is True
-    assert props["south"] == 48.0
-    assert props["north"] == 52.0
+    assert props["south"] == pytest.approx(48.0)
+    assert props["north"] == pytest.approx(52.0)
 
 
 # --- _apply_initial_bbox ---
@@ -136,10 +140,10 @@ def test_apply_initial_bbox_pre_populates_extraction_properties():
     MapLocationDialog._apply_initial_bbox(mock_root, BBOX_GERMANY)
 
     props = _setproperty_calls(mock_root)
-    assert props["south"] == 48.0
-    assert props["west"] == 10.0
-    assert props["north"] == 52.0
-    assert props["east"] == 14.0
+    assert props["south"] == pytest.approx(48.0)
+    assert props["west"] == pytest.approx(10.0)
+    assert props["north"] == pytest.approx(52.0)
+    assert props["east"] == pytest.approx(14.0)
 
 
 def test_apply_initial_bbox_sets_pending_bbox_trigger_last():
@@ -149,10 +153,10 @@ def test_apply_initial_bbox_sets_pending_bbox_trigger_last():
 
     props = _setproperty_calls(mock_root)
     assert props["pendingBbox"] is True
-    assert props["pendingBboxSouth"] == 48.0
-    assert props["pendingBboxWest"] == 10.0
-    assert props["pendingBboxNorth"] == 52.0
-    assert props["pendingBboxEast"] == 14.0
+    assert props["pendingBboxSouth"] == pytest.approx(48.0)
+    assert props["pendingBboxWest"] == pytest.approx(10.0)
+    assert props["pendingBboxNorth"] == pytest.approx(52.0)
+    assert props["pendingBboxEast"] == pytest.approx(14.0)
     last_call = mock_root.setProperty.call_args_list[-1]
     assert last_call.args[0] == "pendingBbox"
 
@@ -171,10 +175,10 @@ def test_apply_initial_bbox_antimeridian_passes_raw_coords(bbox):
     MapLocationDialog._apply_initial_bbox(mock_root, bbox)
 
     props = _setproperty_calls(mock_root)
-    assert props["south"] == bbox.south
-    assert props["west"] == bbox.west
-    assert props["north"] == bbox.north
-    assert props["east"] == bbox.east
+    assert props["south"] == pytest.approx(bbox.south)
+    assert props["west"] == pytest.approx(bbox.west)
+    assert props["north"] == pytest.approx(bbox.north)
+    assert props["east"] == pytest.approx(bbox.east)
 
 
 # --- _on_accept ---
