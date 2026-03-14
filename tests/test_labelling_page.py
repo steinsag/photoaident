@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -1132,3 +1133,90 @@ def test_compute_cluster_scores_near_zero_mean_norm(
 
     # Mean norm is ~0 → cluster skipped
     assert "adult" not in scores
+
+
+def _insert_face_with_taken_at(
+    session_factory, taken_at: datetime, file_path: str = "/path/to/img.jpg"
+) -> int:
+    """Insert an unidentified face whose image metadata has a taken_at timestamp."""
+    with session_factory() as session:
+        img = Image(file_path=file_path, file_size=1000, file_hash="tsat123")
+        session.add(img)
+        session.flush()
+
+        meta = ImageMetadata(
+            image_id=img.id,
+            taken_at=taken_at,
+            taken_at_source=TakenAtSource.EXIF,
+            width=640,
+            height=480,
+        )
+        session.add(meta)
+        session.flush()
+
+        face = Face(
+            image_id=img.id,
+            faiss_id=1,
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=40,
+            bbox_h=40,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        session.add(face)
+        session.commit()
+        return face.id
+
+
+# ===========================================================================
+# _face_info_label content
+# ===========================================================================
+
+
+def test_face_info_label_shows_path_and_taken_at(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """_face_info_label shows the image file path and formatted taken_at date."""
+    taken_at = datetime(2023, 6, 15, 10, 30, tzinfo=timezone.utc)
+    _insert_face_with_taken_at(
+        session_factory, taken_at, file_path="/photos/summer.jpg"
+    )
+
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    label_text = page._face_info_label.text()
+    assert "/photos/summer.jpg" in label_text
+    assert "2023-06-15" in label_text
+    assert "10:30" in label_text
+
+
+def test_face_info_label_shows_unknown_date_when_no_taken_at(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """_face_info_label shows 'Unknown date' when image metadata has no taken_at."""
+    # _insert_face() creates metadata without taken_at → None
+    _insert_face(session_factory, file_path="/photos/nodatephoto.jpg")
+
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    label_text = page._face_info_label.text()
+    assert "/photos/nodatephoto.jpg" in label_text
+    assert "Unknown date" in label_text
+
+
+def test_face_info_label_cleared_in_empty_state(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """_face_info_label is cleared when the page transitions to the empty state."""
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
+    qtbot.addWidget(page)
+    # No faces → empty state shown immediately on refresh
+    page.refresh()
+
+    assert page._face_info_label.text() == ""
