@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtWidgets, QtQuickWidgets
 
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.paths import AppPaths
+from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +29,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Select Location"))
         self.resize(1024, 768)
+        restore_widget_geometry(self, paths.window_state_file)
 
         self._selected_bbox: Optional[GpsBoundingBox] = None
         self._paths = paths
@@ -153,6 +155,11 @@ class MapLocationDialog(QtWidgets.QDialog):
             root_obj.property("north"),
             root_obj.property("east"),
         )
+
+    def done(self, result: int) -> None:
+        """Save geometry before closing."""
+        save_widget_geometry(self, self._paths.window_state_file)
+        super().done(result)
 
     def _on_accept(self) -> None:
         self._selected_bbox = self._extract_bbox()

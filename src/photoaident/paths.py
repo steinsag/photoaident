@@ -65,6 +65,11 @@ class AppPaths:
         return self.config / "config.toml"
 
     @property
+    def window_state_file(self) -> Path:
+        """Path to the INI file that persists window geometry."""
+        return self.config / "window_state.ini"
+
+    @property
     def translations_dir(self) -> Path:
         """Directory for translation files."""
         # Use the root assets directory for translations
