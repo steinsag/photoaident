@@ -1,7 +1,8 @@
 import inspect
 import threading
 from pathlib import Path
-from typing import cast
+from typing import cast, Any
+
 import faiss
 import numpy as np
 import pytest
@@ -198,7 +199,7 @@ def test_concurrent_access_is_serialized(tmp_path):
 
     # Replace the lock with our instrumented version
     instrumented_lock = _InstrumentedLock()
-    store._lock = cast(threading.Lock, instrumented_lock)
+    store._lock = cast(Any, instrumented_lock)
 
     errors: list[str] = []
     errors_lock = threading.Lock()
