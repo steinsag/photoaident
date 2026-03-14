@@ -105,9 +105,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         # Then, best-effort restore of the window state. Any failure here is
         # treated as non-fatal for geometry; we ignore the return value.
-        restore_widget_geometry(
-            self, self._paths.window_state_file, restore_state=True
-        )
+        restore_widget_geometry(self, self._paths.window_state_file, restore_state=True)
 
         if not geometry_restored:
             self.showMaximized()
