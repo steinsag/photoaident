@@ -109,12 +109,14 @@ Item {
 
     function zoomIn() {
         _consumePendingBbox()
-        map.zoomLevel = Math.min(map.maximumZoomLevel, map.zoomLevel + 1)
+        var maxZoom = map.maximumZoomLevel > 0 ? map.maximumZoomLevel : 19
+        map.zoomLevel = Math.min(maxZoom, map.zoomLevel + 1)
     }
 
     function zoomOut() {
         _consumePendingBbox()
-        map.zoomLevel = Math.max(map.minimumZoomLevel, map.zoomLevel - 1)
+        var minZoom = map.minimumZoomLevel > 0 ? map.minimumZoomLevel : 0
+        map.zoomLevel = Math.max(minZoom, map.zoomLevel - 1)
     }
 
     Plugin {
