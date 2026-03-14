@@ -205,7 +205,7 @@ def test_concurrent_access_is_serialized(tmp_path):
 
     # Replace the lock with our instrumented version
     instrumented_lock = _InstrumentedLock()
-    object.__setattr__(store, "_lock", instrumented_lock)
+    store._lock = instrumented_lock
 
     errors: list[str] = []
     errors_lock = threading.Lock()
