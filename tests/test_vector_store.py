@@ -146,16 +146,13 @@ def test_all_public_methods_are_locked():
 
 
 class _InstrumentedLock:
-    """Drop-in replacement for ``threading.Lock`` that records overlapping acquires.
+    """Drop-in replacement for ``threading.Lock`` that records peak concurrent holders.
 
-    When a thread enters ``__enter__``, if another thread already holds the lock
-    the real lock serializes them (correct behaviour). But if the lock were
-    *removed*, two threads could enter simultaneously — this class makes that
-    overlap window visible by tracking a holder count (``_holders``) under a
-    separate guard lock (``_guard``), independent of the real lock.
-
-    The real lock is still used so the test exercises the actual serialization
-    guarantee, and ``max_holders`` records the peak concurrent holder count.
+    Wraps a real ``threading.Lock`` so the test exercises actual serialization.
+    After each successful ``acquire()``, a separate ``_guard`` lock protects an
+    atomic bump of ``_holders``; ``max_holders`` captures the peak.  With the
+    real lock in place, ``max_holders`` should always be 1 — proving that all
+    ``VectorStore`` methods are properly serialized.
     """
 
     def __init__(self):

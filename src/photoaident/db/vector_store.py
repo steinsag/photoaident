@@ -6,7 +6,6 @@ from typing import Any, Callable, Concatenate, List, ParamSpec, Tuple, TypeVar
 import numpy as np
 from faiss import IndexFlatIP, read_index, write_index
 
-
 P = ParamSpec("P")
 R = TypeVar("R")
 
@@ -17,9 +16,7 @@ def _locked(
     """Decorator that acquires self._lock for the duration of the method."""
 
     @functools.wraps(method)
-    def wrapper(
-        self: "VectorStore", *args: P.args, **kwargs: P.kwargs
-    ) -> R:
+    def wrapper(self: "VectorStore", *args: P.args, **kwargs: P.kwargs) -> R:
         with self._lock:
             return method(self, *args, **kwargs)
 
@@ -60,7 +57,7 @@ class VectorStore:
             embedding = embedding.reshape(1, -1)
         elif embedding.ndim != 2:
             raise ValueError(
-                f"Embedding must be a 1D or 2D array; got {embedding.ndim}D array instead."
+                f"Embedding must be a 1D or 2D array; got {embedding.ndim}D."
             )
 
         if embedding.shape[1] != self.dimension:
@@ -91,7 +88,7 @@ class VectorStore:
             query_embedding = query_embedding.reshape(1, -1)
         elif query_embedding.ndim != 2:
             raise ValueError(
-                f"Query embedding must be a 1D or 2D array; got {query_embedding.ndim}D array instead."
+                f"Query embedding must be 1D or 2D; got {query_embedding.ndim}D."
             )
 
         if query_embedding.shape[1] != self.dimension:
