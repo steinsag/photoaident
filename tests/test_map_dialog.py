@@ -226,18 +226,18 @@ def test_zoom_buttons_exist(map_dialog):
 
 
 @pytest.mark.parametrize(
-    "method,qml_func",
-    [("_on_zoom_in", "zoomIn"), ("_on_zoom_out", "zoomOut")],
+    "method,expected_delta",
+    [("_on_zoom_in", 1), ("_on_zoom_out", -1)],
     ids=["zoom-in", "zoom-out"],
 )
-def test_zoom_calls_qml_function(map_dialog, method, qml_func):
-    """Zoom handler calls the corresponding QML function on the root object."""
+def test_zoom_sets_pending_zoom_delta(map_dialog, method, expected_delta):
+    """Zoom handler sets pendingZoomDelta on the QML root object."""
     mock_root = MagicMock()
     _mock_quick_widget(map_dialog, root_obj=mock_root)
 
     getattr(map_dialog, method)()
 
-    getattr(mock_root, qml_func).assert_called_once_with()
+    mock_root.setProperty.assert_called_once_with("pendingZoomDelta", expected_delta)
 
 
 @pytest.mark.parametrize(
