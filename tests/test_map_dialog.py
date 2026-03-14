@@ -175,3 +175,73 @@ def test_on_accept_stores_selected_bbox(qtbot, tmp_app_paths):
         dialog._on_accept()
 
     assert dialog.selected_bbox() == expected
+
+
+# --- zoom buttons ---
+
+
+def test_zoom_buttons_exist(qtbot, tmp_app_paths):
+    """Dialog has zoom-in and zoom-out buttons."""
+    dialog = MapLocationDialog(tmp_app_paths)
+    qtbot.addWidget(dialog)
+
+    assert hasattr(dialog, "_zoom_in_btn")
+    assert hasattr(dialog, "_zoom_out_btn")
+    assert dialog._zoom_in_btn.text() == "Zoom in"
+    assert dialog._zoom_out_btn.text() == "Zoom out"
+
+
+def test_on_zoom_in_calls_qml_zoom_in(qtbot, tmp_app_paths):
+    """_on_zoom_in calls zoomIn() on the QML root object."""
+    dialog = MapLocationDialog(tmp_app_paths)
+    qtbot.addWidget(dialog)
+
+    mock_root = MagicMock()
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.rootObject.return_value = mock_root
+
+    dialog._on_zoom_in()
+
+    mock_root.zoomIn.assert_called_once_with()
+
+
+def test_on_zoom_out_calls_qml_zoom_out(qtbot, tmp_app_paths):
+    """_on_zoom_out calls zoomOut() on the QML root object."""
+    dialog = MapLocationDialog(tmp_app_paths)
+    qtbot.addWidget(dialog)
+
+    mock_root = MagicMock()
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.rootObject.return_value = mock_root
+
+    dialog._on_zoom_out()
+
+    mock_root.zoomOut.assert_called_once_with()
+
+
+def test_on_zoom_in_noop_when_no_root_object(qtbot, tmp_app_paths):
+    """_on_zoom_in is a no-op when rootObject() returns None."""
+    dialog = MapLocationDialog(tmp_app_paths)
+    qtbot.addWidget(dialog)
+
+    mock_root = MagicMock()
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.rootObject.return_value = None
+
+    dialog._on_zoom_in()
+
+    mock_root.zoomIn.assert_not_called()
+
+
+def test_on_zoom_out_noop_when_no_root_object(qtbot, tmp_app_paths):
+    """_on_zoom_out is a no-op when rootObject() returns None."""
+    dialog = MapLocationDialog(tmp_app_paths)
+    qtbot.addWidget(dialog)
+
+    mock_root = MagicMock()
+    dialog._quick_widget = MagicMock()
+    dialog._quick_widget.rootObject.return_value = None
+
+    dialog._on_zoom_out()
+
+    mock_root.zoomOut.assert_not_called()

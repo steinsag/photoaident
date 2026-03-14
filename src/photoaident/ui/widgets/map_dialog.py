@@ -1,15 +1,27 @@
 import logging
 import math
+import sys
 from pathlib import Path
 from typing import Optional
 
-from PySide6 import QtCore, QtWidgets, QtQuickWidgets
+from PySide6 import QtCore, QtGui, QtWidgets, QtQuickWidgets
 
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.paths import AppPaths
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 
 logger = logging.getLogger(__name__)
+
+
+def _icon_path(name: str) -> str:
+    """Return the path to an icon, works for dev and PyInstaller bundles."""
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass is not None:
+        return str(Path(meipass) / "assets" / "icons" / name)
+    # map_dialog.py lives at src/photoaident/ui/widgets/ — go up 5 levels
+    return str(
+        Path(__file__).parent.parent.parent.parent.parent / "assets" / "icons" / name
+    )
 
 
 class MapLocationDialog(QtWidgets.QDialog):
@@ -40,6 +52,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         self._setup_instruction_label(layout)
         self._setup_map_widget(layout, initial_bbox)
+        self._setup_zoom_buttons(layout)
         self._setup_button_box(layout)
 
     def _setup_instruction_label(self, layout: QtWidgets.QVBoxLayout) -> None:
@@ -119,6 +132,33 @@ class MapLocationDialog(QtWidgets.QDialog):
         root_obj.setProperty("initialLat", center_lat)  # type: ignore[attr-defined]
         root_obj.setProperty("initialLon", center_lon)  # type: ignore[attr-defined]
         root_obj.setProperty("initialZoom", zoom)  # type: ignore[attr-defined]
+
+    def _setup_zoom_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
+        zoom_layout = QtWidgets.QHBoxLayout()
+        zoom_layout.addStretch()
+
+        self._zoom_out_btn = QtWidgets.QPushButton(self.tr("Zoom out"))
+        self._zoom_out_btn.setIcon(QtGui.QIcon(_icon_path("zoom-out.svg")))
+        self._zoom_out_btn.clicked.connect(self._on_zoom_out)
+        zoom_layout.addWidget(self._zoom_out_btn)
+
+        self._zoom_in_btn = QtWidgets.QPushButton(self.tr("Zoom in"))
+        self._zoom_in_btn.setIcon(QtGui.QIcon(_icon_path("zoom-in.svg")))
+        self._zoom_in_btn.clicked.connect(self._on_zoom_in)
+        zoom_layout.addWidget(self._zoom_in_btn)
+
+        zoom_layout.addStretch()
+        layout.addLayout(zoom_layout)
+
+    def _on_zoom_in(self) -> None:
+        root_obj = self._quick_widget.rootObject()
+        if root_obj:
+            root_obj.zoomIn()  # type: ignore[attr-defined]
+
+    def _on_zoom_out(self) -> None:
+        root_obj = self._quick_widget.rootObject()
+        if root_obj:
+            root_obj.zoomOut()  # type: ignore[attr-defined]
 
     def _setup_button_box(self, layout: QtWidgets.QVBoxLayout) -> None:
         self._button_box = QtWidgets.QDialogButtonBox(

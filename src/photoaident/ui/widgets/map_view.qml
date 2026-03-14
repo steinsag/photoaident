@@ -22,6 +22,14 @@ Item {
     property double north: 0.0
     property double east: 0.0
 
+    function zoomIn() {
+        map.zoomLevel = Math.min(map.maximumZoomLevel, map.zoomLevel + 1)
+    }
+
+    function zoomOut() {
+        map.zoomLevel = Math.max(map.minimumZoomLevel, map.zoomLevel - 1)
+    }
+
     Plugin {
         id: mapPlugin
         name: "osm"
@@ -39,28 +47,52 @@ Item {
         center: QtPositioning.coordinate(root.initialLat, root.initialLon)
         zoomLevel: root.initialZoom
 
-        // Explicit drag-to-pan: MapGestureArea is unreliable for mouse events
-        // inside QQuickWidget on desktop, so we implement pan manually.
-        MouseArea {
-            anchors.fill: parent
-            property real lastX: 0
-            property real lastY: 0
-            cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        // DragHandler cooperates with other pointer handlers (unlike MouseArea)
+        // so pinch and wheel events are not accidentally consumed.
+        DragHandler {
+            id: dragHandler
+            target: null
+            cursorShape: active ? Qt.ClosedHandCursor : Qt.OpenHandCursor
 
-            onPressed: (mouse) => {
-                lastX = mouse.x
-                lastY = mouse.y
+            property real prevX: 0
+            property real prevY: 0
+
+            onActiveChanged: {
+                if (active) {
+                    prevX = 0
+                    prevY = 0
+                }
             }
 
-            onPositionChanged: (mouse) => {
-                if (pressed) {
-                    var dx = mouse.x - lastX
-                    var dy = mouse.y - lastY
-                    map.center = map.toCoordinate(
-                        Qt.point(map.width / 2 - dx, map.height / 2 - dy))
-                    lastX = mouse.x
-                    lastY = mouse.y
+            onTranslationChanged: {
+                if (!active) return
+                var dx = translation.x - prevX
+                var dy = translation.y - prevY
+                map.center = map.toCoordinate(
+                    Qt.point(map.width / 2 - dx, map.height / 2 - dy))
+                prevX = translation.x
+                prevY = translation.y
+            }
+        }
+
+        // PinchHandler for pinch-to-zoom on touch screens and trackpads
+        PinchHandler {
+            id: pinchHandler
+            target: null
+            property real startZoom: 0
+
+            onActiveChanged: {
+                if (active) {
+                    startZoom = map.zoomLevel
                 }
+            }
+
+            onActiveScaleChanged: {
+                if (!active) return
+                map.zoomLevel = Math.max(
+                    map.minimumZoomLevel,
+                    Math.min(map.maximumZoomLevel,
+                             startZoom + Math.log2(activeScale)))
             }
         }
 
@@ -68,7 +100,7 @@ Item {
         // without trying to transform the map item itself.
         WheelHandler {
             id: wheelHandler
-            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+            acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.TouchScreen
             onWheel: (event) => {
                 map.zoomLevel = Math.max(
                     map.minimumZoomLevel,
