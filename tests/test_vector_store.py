@@ -150,9 +150,9 @@ class _InstrumentedLock:
 
     When a thread enters ``__enter__``, if another thread already holds the lock
     the real lock serializes them (correct behaviour). But if the lock were
-    *removed*, two threads could enter simultaneously — this class detects that
-    scenario by tracking an ``_active`` flag *without* the real lock so the
-    overlap window is visible.
+    *removed*, two threads could enter simultaneously — this class makes that
+    overlap window visible by tracking a holder count (``_holders``) under a
+    separate guard lock (``_guard``), independent of the real lock.
 
     The real lock is still used so the test exercises the actual serialization
     guarantee, and ``max_holders`` records the peak concurrent holder count.
