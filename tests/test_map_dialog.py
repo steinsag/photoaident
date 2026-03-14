@@ -8,6 +8,7 @@ from pathlib import Path
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.ui.widgets.map_dialog import MapLocationDialog, _icon_path
 
+
 @pytest.fixture
 def map_dialog(qtbot, tmp_app_paths):
     """A MapLocationDialog with no initial bbox, registered with qtbot.

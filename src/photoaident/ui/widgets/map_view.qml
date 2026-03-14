@@ -12,6 +12,15 @@ Item {
     property double initialLon: 10.0
     property int initialZoom: 5
 
+    // Pending zoom: Python sets pendingZoomDelta to +1 (in) or -1 (out) via
+    // setProperty().  The handler calls the appropriate zoom function and resets
+    // the delta to 0 so subsequent clicks are re-detected as a change.
+    property int pendingZoomDelta: 0
+    onPendingZoomDeltaChanged: {
+        if (pendingZoomDelta > 0)      { zoomIn();  pendingZoomDelta = 0 }
+        else if (pendingZoomDelta < 0) { zoomOut(); pendingZoomDelta = 0 }
+    }
+
     // Pending bbox: Python sets these via setProperty(), then sets pendingBbox=true
     // to trigger the map view to fit.  Using setProperty() (a reliable C++ API)
     // avoids the ambiguity of calling QML JavaScript functions across the boundary.
