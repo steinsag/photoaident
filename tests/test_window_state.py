@@ -1,13 +1,7 @@
 """Tests for photoaident.ui.window_state — save/restore widget geometry helpers."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
 from PySide6 import QtWidgets
 
-from photoaident.db.database import Image
-from photoaident.db.vector_store import VectorStore
-from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 
 # ===========================================================================
@@ -161,39 +155,3 @@ def test_different_widget_classes_separate_keys(qtbot, tmp_path):
     assert label2.height() == 150
     assert push_btn2.width() == 400
     assert push_btn2.height() == 50
-
-
-# ===========================================================================
-# none_path_skips_gracefully
-# ===========================================================================
-
-
-def _make_db_image(tmp_path: Path) -> Image:
-    """Build a minimal Image ORM object pointing at a real JPEG on disk."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "sample.jpg"
-    PILImage.new("RGB", (100, 100), "white").save(img_path)
-
-    db_image = Image(id=1, file_path=str(img_path), file_size=1000)
-    db_image.faces = []
-    return db_image
-
-
-def test_none_path_skips_gracefully(qtbot, tmp_path):
-    """ImageDetailDialog with window_state_file=None does not raise on done()."""
-    db_image = _make_db_image(tmp_path)
-    mock_sf = MagicMock()
-    mock_vs = MagicMock(spec=VectorStore)
-
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory=mock_sf,
-        vector_store=mock_vs,
-        window_state_file=None,
-    )
-    qtbot.addWidget(dialog)
-
-    # Patch super().done() to prevent native dialog interaction on macOS.
-    with patch.object(QtWidgets.QDialog, "done", return_value=None):
-        dialog.done(0)  # must not raise

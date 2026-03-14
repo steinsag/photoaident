@@ -319,7 +319,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
                     image,
                     self._session_factory,
                     self._vector_store,
-                    window_state_file=self._paths.window_state_file,
+                    self._paths,
                     parent=self,
                 )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
