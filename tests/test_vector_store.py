@@ -232,6 +232,8 @@ def test_concurrent_access_is_serialized(tmp_path):
         t.start()
     for t in threads:
         t.join(timeout=10)
+    for t in threads:
+        assert not t.is_alive(), "Worker thread did not finish within timeout"
 
     assert not errors, f"Thread errors: {errors}"
     # The instrumented lock proves all methods acquire it (max_holders == 1
