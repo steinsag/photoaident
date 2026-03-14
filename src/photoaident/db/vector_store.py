@@ -50,6 +50,10 @@ class VectorStore:
         # Ensure it's 2D for FAISS
         if embedding.ndim == 1:
             embedding = embedding.reshape(1, -1)
+        elif embedding.ndim != 2:
+            raise ValueError(
+                f"Embedding must be a 1D or 2D array; got {embedding.ndim}D array instead."
+            )
 
         if embedding.shape[1] != self.dimension:
             raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
@@ -77,6 +81,10 @@ class VectorStore:
         """
         if query_embedding.ndim == 1:
             query_embedding = query_embedding.reshape(1, -1)
+        elif query_embedding.ndim != 2:
+            raise ValueError(
+                f"Query embedding must be a 1D or 2D array; got {query_embedding.ndim}D array instead."
+            )
 
         if query_embedding.shape[1] != self.dimension:
             raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
