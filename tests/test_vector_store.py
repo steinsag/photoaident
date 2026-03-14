@@ -165,16 +165,11 @@ class _InstrumentedLock:
         self.max_holders = 0
 
     def __enter__(self):
-        self._real.acquire()
-        with self._guard:
-            self._holders += 1
-            self.max_holders = max(self.max_holders, self._holders)
+        self.acquire()
         return self
 
     def __exit__(self, *args):
-        with self._guard:
-            self._holders -= 1
-        self._real.release()
+        self.release()
 
     def acquire(self, *args, **kwargs):
         result = self._real.acquire(*args, **kwargs)
@@ -205,7 +200,7 @@ def test_concurrent_access_is_serialized(tmp_path):
 
     # Replace the lock with our instrumented version
     instrumented_lock = _InstrumentedLock()
-    store._lock = instrumented_lock
+    store._lock = instrumented_lock  # type: ignore[assignment]
 
     errors: list[str] = []
     errors_lock = threading.Lock()
