@@ -84,6 +84,17 @@ class MapLocationDialog(QtWidgets.QDialog):
         # Store for use by the status handler (may fire after setSource returns).
         self._pending_initial_bbox = initial_bbox
 
+        # Create the tiles directory before QML initialises the OSM plugin so
+        # the network disk-cache path is valid from the very first tile fetch.
+        self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Inject cachePath before setSource so the Plugin sees a valid directory
+        # during its one-time initialisation (PluginParameter bindings are not
+        # reactive after the plugin is already resolved).
+        self._quick_widget.setInitialProperties(
+            {"cachePath": str(self._paths.tiles_dir)}
+        )
+
         # Connect before setSource so we catch both synchronous and asynchronous
         # status transitions (Loading → Ready / Error).
         self._quick_widget.statusChanged.connect(self._on_qml_status_changed)
@@ -103,9 +114,6 @@ class MapLocationDialog(QtWidgets.QDialog):
         elif status == QtQuickWidgets.QQuickWidget.Status.Ready:
             root_obj = self._quick_widget.rootObject()
             if root_obj:
-                # Create the directory before QML tries to write to it.
-                self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
-                root_obj.setProperty("cachePath", str(self._paths.tiles_dir))
                 if self._pending_initial_bbox:
                     self._apply_initial_bbox(root_obj, self._pending_initial_bbox)
 
