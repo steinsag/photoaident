@@ -24,11 +24,20 @@ Item {
     // Trigger immediately when Python sets pendingBbox = true.
     onPendingBboxChanged: { if (pendingBbox) _applyPendingBboxIfReady() }
 
+    // Clear the pending bbox flag.  Called when the user starts interacting
+    // with the map (pan/zoom), so that subsequent resize events no longer
+    // fight with the user's chosen view.
+    function _consumePendingBbox() {
+        pendingBbox = false
+    }
+
     // Apply the pending bbox once the map is sized.  Safe to call repeatedly —
-    // clears the flag on the first successful application.
+    // keeps re-applying on every resize until the user interacts with the map,
+    // which calls _consumePendingBbox().  This avoids the zoom-drift bug where
+    // the bbox was applied at preliminary widget dimensions and never corrected
+    // once the layout settled.
     function _applyPendingBboxIfReady() {
         if (!pendingBbox || map.width <= 0 || map.height <= 0) return
-        pendingBbox = false
 
         var south = pendingBboxSouth
         var west  = pendingBboxWest
@@ -89,10 +98,12 @@ Item {
     property double east: 0.0
 
     function zoomIn() {
+        _consumePendingBbox()
         map.zoomLevel = Math.min(map.maximumZoomLevel, map.zoomLevel + 1)
     }
 
     function zoomOut() {
+        _consumePendingBbox()
         map.zoomLevel = Math.max(map.minimumZoomLevel, map.zoomLevel - 1)
     }
 
@@ -127,6 +138,7 @@ Item {
                 if (active) {
                     prevX = 0
                     prevY = 0
+                    root._consumePendingBbox()
                 }
             }
 
@@ -150,6 +162,7 @@ Item {
             onActiveChanged: {
                 if (active) {
                     startZoom = map.zoomLevel
+                    root._consumePendingBbox()
                 }
             }
 
@@ -168,6 +181,7 @@ Item {
             id: wheelHandler
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad | PointerDevice.TouchScreen
             onWheel: (event) => {
+                root._consumePendingBbox()
                 map.zoomLevel = Math.max(
                     map.minimumZoomLevel,
                     Math.min(map.maximumZoomLevel,
@@ -183,6 +197,10 @@ Item {
         onHeightChanged: { updateBbox(); root._applyPendingBboxIfReady() }
 
         function updateBbox() {
+            // Skip extraction while a pending bbox is being (re-)applied — the
+            // map centre/zoom are still converging and extracting now would
+            // overwrite the initial bbox with a transient intermediate value.
+            if (root.pendingBbox) return
             // Use the inner 70% of the viewport as the search area.
             // Qt.point() constructs new value-type objects to avoid mutating
             // the result of fromCoordinate() in place (unreliable across versions).
