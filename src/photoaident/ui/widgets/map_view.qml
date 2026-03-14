@@ -79,9 +79,10 @@ Item {
         //                              and  height*0.7*2π/(256*2^z)  Mercator units.
         // When the bbox was produced by this dialog both equations yield z exactly,
         // so zLon == zLat == original zoom and min(zLon, zLat) is stable.
-        var zLon = lonSpan  > 0 ? Math.log2(map.width  * 0.7 * 360         / (256 * lonSpan))  : 20
-        var zLat = mercSpan > 0 ? Math.log2(map.height * 0.7 * 2 * Math.PI / (256 * mercSpan)) : 20
-        var zoom = Math.max(2, Math.min(15, Math.min(zLon, zLat)))
+        var zLon = lonSpan  > 0 ? Math.log2(map.width  * 0.7 * 360         / (256 * lonSpan))  : 14
+        var zLat = mercSpan > 0 ? Math.log2(map.height * 0.7 * 2 * Math.PI / (256 * mercSpan)) : 14
+        var maxZoom = map.maximumZoomLevel > 0 ? map.maximumZoomLevel : 15
+        var zoom = Math.max(2, Math.min(maxZoom, Math.min(zLon, zLat)))
 
         map.center    = QtPositioning.coordinate(centerLat, centerLon)
         map.zoomLevel = zoom

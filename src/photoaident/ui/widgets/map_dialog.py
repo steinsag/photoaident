@@ -170,12 +170,14 @@ class MapLocationDialog(QtWidgets.QDialog):
     def _on_zoom_in(self) -> None:
         root_obj = self._quick_widget.rootObject()
         if root_obj:
-            root_obj.zoomIn()  # type: ignore[attr-defined]
+            # Trigger zoom via a QML property instead of calling JS functions directly
+            root_obj.setProperty("pendingZoomDelta", 1)
 
     def _on_zoom_out(self) -> None:
         root_obj = self._quick_widget.rootObject()
         if root_obj:
-            root_obj.zoomOut()  # type: ignore[attr-defined]
+            # Trigger zoom via a QML property instead of calling JS functions directly
+            root_obj.setProperty("pendingZoomDelta", -1)
 
     def _setup_button_box(self, layout: QtWidgets.QVBoxLayout) -> None:
         self._button_box = QtWidgets.QDialogButtonBox(
