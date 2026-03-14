@@ -107,8 +107,12 @@ class BrowsePage(QtWidgets.QWidget):
 
         self._hint_label.setVisible(False)
 
-        # If same root and columns already built, keep current position
+        # If same root and columns already built, keep current position but
+        # refresh the grid in case new images were indexed since last visit.
         if self._current_root == root and self._columns:
+            folder = self._selected_path or root
+            self._load_images_for_folder(folder)
+            self._columns[-1].setFocus()
             return
 
         self._current_root = root
