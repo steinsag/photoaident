@@ -257,6 +257,10 @@ Please close it before starting a new one.</translation>
         <translation>Confirm</translation>
     </message>
     <message>
+        <source>Unknown date</source>
+        <translation>Unknown date</translation>
+    </message>
+    <message>
         <source>All done! No unidentified faces remain.</source>
         <translation>All done! No unidentified faces remain.</translation>
     </message>

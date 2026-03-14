@@ -1,3 +1,4 @@
+import html
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -41,6 +42,7 @@ class FaceData:
     image_path: Path
     bbox: tuple[int, int, int, int]
     faiss_id: int
+    taken_at: Optional[datetime]
 
 
 class LabellingPage(QtWidgets.QWidget):
@@ -79,12 +81,22 @@ class LabellingPage(QtWidgets.QWidget):
         self._image_preview.setMinimumSize(300, 300)
         top_layout.addWidget(self._image_preview, stretch=1)
 
+        right_col = QtWidgets.QVBoxLayout()
+        right_col.setSpacing(6)
+
+        self._face_info_label = QtWidgets.QLabel()
+        self._face_info_label.setWordWrap(True)
+        right_col.addWidget(self._face_info_label)
+        right_col.addStretch()
+
+        face_and_buttons_row = QtWidgets.QHBoxLayout()
+        face_and_buttons_row.setSpacing(8)
+
         self._face_crop = FaceCropWidget()
-        top_layout.addWidget(self._face_crop)
+        face_and_buttons_row.addWidget(self._face_crop)
 
         btn_col = QtWidgets.QVBoxLayout()
         btn_col.setSpacing(6)
-        btn_col.addStretch()
 
         self.skip_image_btn = QtWidgets.QPushButton(self.tr("Skip Image"))
         self.skip_image_btn.clicked.connect(self._skip_image)
@@ -99,7 +111,9 @@ class LabellingPage(QtWidgets.QWidget):
         btn_col.addWidget(self.anonymous_btn)
 
         btn_col.addStretch()
-        top_layout.addLayout(btn_col)
+        face_and_buttons_row.addLayout(btn_col)
+        right_col.addLayout(face_and_buttons_row)
+        top_layout.addLayout(right_col)
 
         root_layout.addLayout(top_layout)
 
@@ -207,6 +221,17 @@ class LabellingPage(QtWidgets.QWidget):
                 exc_info=True,
             )
 
+        if face_data.taken_at is not None:
+            taken_str = face_data.taken_at.strftime("%Y-%m-%d %H:%M")
+        else:
+            taken_str = self.tr("Unknown date")
+        path_escaped = html.escape(str(face_data.image_path))
+        taken_escaped = html.escape(taken_str)
+        self._face_info_label.setText(
+            f"<b>{html.escape(self.tr('File Path'))}:</b> {path_escaped}<br>"
+            f"<b>{html.escape(self.tr('Taken At'))}:</b> {taken_escaped}"
+        )
+
         self._image_preview.load(face_data.image_path, face_data.bbox)
         self._face_crop.load(face_data.crop_path)
         self._set_buttons_enabled(True)
@@ -270,12 +295,14 @@ class LabellingPage(QtWidgets.QWidget):
         if face is None:
             return None
         face_id = face.id
+        metadata = face.image.metadata_rel
         return FaceData(
             face_id=face_id,
             crop_path=self.paths.face_crops_dir / f"{face_id}.jpg",
             image_path=Path(face.image.file_path),
             bbox=(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h),
             faiss_id=face.faiss_id,
+            taken_at=metadata.taken_at if metadata is not None else None,
         )
 
     # ------------------------------------------------------------------
@@ -436,6 +463,7 @@ class LabellingPage(QtWidgets.QWidget):
                 "All remaining faces skipped this session. "
                 "Restart the app to review them again."
             )
+        self._face_info_label.clear()
         self._image_preview.clear()
         self._face_crop.clear()
         self._face_crop.setText(msg)
