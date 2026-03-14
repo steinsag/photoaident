@@ -3,10 +3,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from PySide6 import QtQuickWidgets, QtWidgets
+from pathlib import Path
 
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.ui.widgets.map_dialog import MapLocationDialog, _icon_path
-
 
 @pytest.fixture
 def map_dialog(qtbot, tmp_app_paths):
@@ -39,7 +39,7 @@ def _mock_quick_widget(dialog: MapLocationDialog, root_obj: object = None) -> No
 def test_icon_path_dev_mode():
     """Returns the repo-relative assets/icons path in dev mode."""
     result = _icon_path("zoom-in.svg")
-    assert result.endswith("assets/icons/zoom-in.svg")
+    assert Path(result).parts[-3:] == ("assets", "icons", "zoom-in.svg")
 
 
 def test_icon_path_pyinstaller_bundle(tmp_path):
