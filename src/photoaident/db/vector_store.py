@@ -1,3 +1,4 @@
+import threading
 from pathlib import Path
 from typing import Any, List, Tuple
 
@@ -10,12 +11,16 @@ class VectorStore:
 
     IndexFlatIP uses Inner Product similarity, which for L2-normalized vectors
     is equivalent to cosine similarity.
+
+    All public methods are guarded by a lock so the store can be safely shared
+    between the indexing background thread and the UI thread.
     """
 
     DEFAULT_DIMENSION = 512
 
     def __init__(self, dimension: int = DEFAULT_DIMENSION):
         self.dimension = dimension
+        self._lock = threading.Lock()
         # IndexFlatIP does not support IDs by default, but it returns the 0-indexed
         # position which acts as the faiss_id.
         self.index: Any = IndexFlatIP(self.dimension)
@@ -39,9 +44,9 @@ class VectorStore:
         # Ensure float32
         embedding = embedding.astype(np.float32)
 
-        # Before adding, get current count
-        faiss_id = self.index.ntotal
-        self.index.add(embedding)
+        with self._lock:
+            faiss_id = self.index.ntotal
+            self.index.add(embedding)
         return faiss_id
 
     def search(
@@ -57,22 +62,20 @@ class VectorStore:
         Returns:
             A list of tuples (faiss_id, similarity_score) sorted by similarity.
         """
-        if self.index.ntotal == 0:
-            return []
-
         if query_embedding.ndim == 1:
             query_embedding = query_embedding.reshape(1, -1)
 
         query_embedding = query_embedding.astype(np.float32)
 
-        # FAISS search expects k > 0
         if k <= 0:
             return []
 
-        # Clip k to current index size
-        actual_k = min(k, self.index.ntotal)
+        with self._lock:
+            if self.index.ntotal == 0:
+                return []
 
-        distances, indices = self.index.search(query_embedding, actual_k)
+            actual_k = min(k, self.index.ntotal)
+            distances, indices = self.index.search(query_embedding, actual_k)
 
         results = []
         for dist, idx in zip(distances[0], indices[0]):
@@ -90,15 +93,15 @@ class VectorStore:
         Returns:
             The embedding as a numpy array.
         """
-        if faiss_id < 0 or faiss_id >= self.index.ntotal:
-            raise IndexError(f"faiss_id {faiss_id} is out of bounds.")
-
-        # IndexFlatIP supports reconstruct to get back the vector
-        return self.index.reconstruct(faiss_id)
+        with self._lock:
+            if faiss_id < 0 or faiss_id >= self.index.ntotal:
+                raise IndexError(f"faiss_id {faiss_id} is out of bounds.")
+            return self.index.reconstruct(faiss_id)
 
     def reset(self) -> None:
         """Clears all embeddings from the index."""
-        self.index.reset()
+        with self._lock:
+            self.index.reset()
 
     def save(self, path: Path) -> None:
         """Saves the FAISS index to a file.
@@ -107,7 +110,8 @@ class VectorStore:
             path: Path to the .index file.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        write_index(self.index, str(path))
+        with self._lock:
+            write_index(self.index, str(path))
 
     def load(self, path: Path) -> None:
         """Loads a FAISS index from a file.
@@ -118,9 +122,11 @@ class VectorStore:
         if not path.exists():
             raise FileNotFoundError(f"Index file not found: {path}")
 
-        self.index = read_index(str(path))
-        if self.index.d != self.dimension:
+        loaded = read_index(str(path))
+        if loaded.d != self.dimension:
             raise ValueError(
-                f"Loaded index dimension {self.index.d} "
+                f"Loaded index dimension {loaded.d} "
                 f"does not match {self.dimension}."
             )
+        with self._lock:
+            self.index = loaded
