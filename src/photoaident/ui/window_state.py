@@ -44,7 +44,9 @@ def restore_widget_geometry(
 
     Returns:
         True if saved geometry was found and successfully applied (and state
-        if requested), False otherwise.
+        if requested). This includes the case where the geometry had to be
+        adjusted to keep the widget visible on a screen. Returns False if no
+        geometry was found or restoration failed.
     """
     settings = QtCore.QSettings(str(ini_path), QtCore.QSettings.Format.IniFormat)
     settings.beginGroup(type(widget).__name__)
@@ -67,8 +69,8 @@ def restore_widget_geometry(
         for screen in QtWidgets.QApplication.screens()
     )
     if not on_any_screen:
-        # Move the widget into the primary screen so it remains visible even if
-        # callers ignore the return value.
+        # Move the widget into the primary screen so it remains visible. This
+        # is treated as a successful restore with adjusted geometry.
         primary_screen = QtWidgets.QApplication.primaryScreen()
         if primary_screen is not None:
             available = primary_screen.availableGeometry()
@@ -76,7 +78,7 @@ def restore_widget_geometry(
             center_pos = available.center() - widget.rect().center()
             widget.move(center_pos)
         settings.endGroup()
-        return False
+        return True
 
     if restore_state and isinstance(widget, QtWidgets.QMainWindow):
         state = settings.value("state")

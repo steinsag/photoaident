@@ -243,8 +243,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._resolved_names: dict[int, tuple[str, float] | None] = {}
 
         self._setup_ui()
-        self._load_image()
         restore_widget_geometry(self, self._paths.window_state_file)
+        self._load_image()
 
     def _format_file_size(self, size_bytes: int) -> str:
         """Format file size in bytes to a human-readable string."""
