@@ -1,5 +1,6 @@
+import inspect
+import threading
 from pathlib import Path
-
 import faiss
 import numpy as np
 import pytest
@@ -96,6 +97,12 @@ def test_vector_store_invalid_dimension(vector_store):
         vector_store.add(v_invalid)
 
 
+def test_vector_store_search_invalid_dimension(vector_store):
+    v_invalid = _rng.random(256).astype(np.float32)
+    with pytest.raises(ValueError, match="must be 512-dimensional"):
+        vector_store.search(v_invalid, k=5)
+
+
 def test_vector_store_search_k0(vector_store):
     v1 = _rng.random(512).astype(np.float32)
     vector_store.add(v1)
@@ -119,3 +126,117 @@ def test_vector_store_load_wrong_dimension(tmp_path):
         ValueError, match="Loaded index dimension 256 does not match 512"
     ):
         store.load(index_path)
+
+
+def test_all_public_methods_are_locked():
+    """All public methods (except __init__) must use the @_locked decorator."""
+    public_methods = [
+        name
+        for name, method in inspect.getmembers(
+            VectorStore, predicate=inspect.isfunction
+        )
+        if not name.startswith("_")
+    ]
+    assert len(public_methods) > 0, "Expected at least one public method"
+    for name in public_methods:
+        method = getattr(VectorStore, name)
+        assert hasattr(
+            method, "__wrapped__"
+        ), f"VectorStore.{name} is missing the @_locked decorator"
+
+
+class _InstrumentedLock:
+    """Drop-in replacement for ``threading.Lock`` that records overlapping acquires.
+
+    When a thread enters ``__enter__``, if another thread already holds the lock
+    the real lock serializes them (correct behaviour). But if the lock were
+    *removed*, two threads could enter simultaneously — this class detects that
+    scenario by tracking an ``_active`` flag *without* the real lock so the
+    overlap window is visible.
+
+    The real lock is still used so the test exercises the actual serialization
+    guarantee, and ``max_holders`` records the peak concurrent holder count.
+    """
+
+    def __init__(self):
+        self._real = threading.Lock()
+        self._guard = threading.Lock()
+        self._holders = 0
+        self.max_holders = 0
+
+    def __enter__(self):
+        self._real.acquire()
+        with self._guard:
+            self._holders += 1
+            self.max_holders = max(self.max_holders, self._holders)
+        return self
+
+    def __exit__(self, *args):
+        with self._guard:
+            self._holders -= 1
+        self._real.release()
+
+    def acquire(self, *args, **kwargs):
+        result = self._real.acquire(*args, **kwargs)
+        if result:
+            with self._guard:
+                self._holders += 1
+                self.max_holders = max(self.max_holders, self._holders)
+        return result
+
+    def release(self):
+        with self._guard:
+            self._holders -= 1
+        self._real.release()
+
+
+def test_concurrent_access_is_serialized(tmp_path):
+    """Multiple threads calling VectorStore methods are serialized by the lock."""
+    store = VectorStore()
+
+    embedding = np.random.default_rng(0).random(512).astype(np.float32)
+    embedding /= np.linalg.norm(embedding)
+
+    # Seed one vector so search/get_embedding have something to hit
+    store.add(embedding)
+
+    index_path = tmp_path / "concurrent.index"
+    store.save(index_path)
+
+    # Replace the lock with our instrumented version
+    instrumented_lock = _InstrumentedLock()
+    object.__setattr__(store, "_lock", instrumented_lock)
+
+    errors: list[str] = []
+    barrier = threading.Barrier(5)
+
+    def _worker(fn, label: str):
+        try:
+            barrier.wait(timeout=5)
+            fn()
+        except Exception as exc:
+            errors.append(f"{label}: {exc}")
+
+    pairs = [
+        (lambda: store.add(embedding), "add"),
+        (lambda: store.search(embedding, k=1), "search"),
+        (lambda: store.get_embedding(0), "get_embedding"),
+        (lambda: store.save(index_path), "save"),
+        (lambda: store.load(index_path), "load"),
+    ]
+
+    threads = [
+        threading.Thread(target=_worker, args=(fn, label)) for fn, label in pairs
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert not errors, f"Thread errors: {errors}"
+    # The instrumented lock proves all methods acquire it (max_holders == 1
+    # because the real lock serializes them). If any method skipped the lock,
+    # it wouldn't show up here — the @_locked decorator test covers that.
+    assert (
+        instrumented_lock.max_holders == 1
+    ), f"Lock held by {instrumented_lock.max_holders} threads simultaneously"

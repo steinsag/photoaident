@@ -1,9 +1,21 @@
+import functools
 import threading
 from pathlib import Path
 from typing import Any, List, Tuple
 
 import numpy as np
 from faiss import IndexFlatIP, read_index, write_index
+
+
+def _locked(method):
+    """Decorator that acquires self._lock for the duration of the method."""
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 
 class VectorStore:
@@ -25,6 +37,7 @@ class VectorStore:
         # position which acts as the faiss_id.
         self.index: Any = IndexFlatIP(self.dimension)
 
+    @_locked
     def add(self, embedding: np.ndarray) -> int:
         """Adds an embedding to the index and returns its faiss_id.
 
@@ -44,11 +57,11 @@ class VectorStore:
         # Ensure float32
         embedding = embedding.astype(np.float32)
 
-        with self._lock:
-            faiss_id = self.index.ntotal
-            self.index.add(embedding)
+        faiss_id = self.index.ntotal
+        self.index.add(embedding)
         return faiss_id
 
+    @_locked
     def search(
         self, query_embedding: np.ndarray, k: int, threshold: float = 0.0
     ) -> List[Tuple[int, float]]:
@@ -65,17 +78,19 @@ class VectorStore:
         if query_embedding.ndim == 1:
             query_embedding = query_embedding.reshape(1, -1)
 
+        if query_embedding.shape[1] != self.dimension:
+            raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
+
         query_embedding = query_embedding.astype(np.float32)
 
         if k <= 0:
             return []
 
-        with self._lock:
-            if self.index.ntotal == 0:
-                return []
+        if self.index.ntotal == 0:
+            return []
 
-            actual_k = min(k, self.index.ntotal)
-            distances, indices = self.index.search(query_embedding, actual_k)
+        actual_k = min(k, self.index.ntotal)
+        distances, indices = self.index.search(query_embedding, actual_k)
 
         results = []
         for dist, idx in zip(distances[0], indices[0]):
@@ -84,6 +99,7 @@ class VectorStore:
 
         return results
 
+    @_locked
     def get_embedding(self, faiss_id: int) -> np.ndarray:
         """Retrieves an embedding by its faiss_id.
 
@@ -93,16 +109,16 @@ class VectorStore:
         Returns:
             The embedding as a numpy array.
         """
-        with self._lock:
-            if faiss_id < 0 or faiss_id >= self.index.ntotal:
-                raise IndexError(f"faiss_id {faiss_id} is out of bounds.")
-            return self.index.reconstruct(faiss_id)
+        if faiss_id < 0 or faiss_id >= self.index.ntotal:
+            raise IndexError(f"faiss_id {faiss_id} is out of bounds.")
+        return self.index.reconstruct(faiss_id)
 
+    @_locked
     def reset(self) -> None:
         """Clears all embeddings from the index."""
-        with self._lock:
-            self.index.reset()
+        self.index.reset()
 
+    @_locked
     def save(self, path: Path) -> None:
         """Saves the FAISS index to a file.
 
@@ -110,9 +126,9 @@ class VectorStore:
             path: Path to the .index file.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        with self._lock:
-            write_index(self.index, str(path))
+        write_index(self.index, str(path))
 
+    @_locked
     def load(self, path: Path) -> None:
         """Loads a FAISS index from a file.
 
@@ -128,5 +144,4 @@ class VectorStore:
                 f"Loaded index dimension {loaded.d} "
                 f"does not match {self.dimension}."
             )
-        with self._lock:
-            self.index = loaded
+        self.index = loaded
