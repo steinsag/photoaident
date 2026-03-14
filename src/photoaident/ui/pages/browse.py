@@ -40,6 +40,7 @@ class BrowsePage(QtWidgets.QWidget):
 
         self._columns: list[QtWidgets.QListWidget] = []
         self._selected_path: Path | None = None
+        self._current_root: Path | None = None
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -83,12 +84,17 @@ class BrowsePage(QtWidgets.QWidget):
         layout.addWidget(self._hint_label)
 
     def refresh(self) -> None:
-        """Called when this page becomes active. Reloads from collection root."""
+        """Called when this page becomes active. Reloads from collection root.
+
+        Skips rebuilding when the collection root hasn't changed and columns
+        already exist, preserving the user's folder position across page switches.
+        """
         collection_path = self.settings.collection_path
         if not collection_path:
             self._clear_columns()
             self.grid.set_results([])
             self._hint_label.setVisible(True)
+            self._current_root = None
             return
 
         root = Path(collection_path)
@@ -96,9 +102,16 @@ class BrowsePage(QtWidgets.QWidget):
             self._clear_columns()
             self.grid.set_results([])
             self._hint_label.setVisible(True)
+            self._current_root = None
             return
 
         self._hint_label.setVisible(False)
+
+        # If same root and columns already built, keep current position
+        if self._current_root == root and self._columns:
+            return
+
+        self._current_root = root
         self._rebuild_root_column(root)
         if self._columns:
             self._columns[0].setFocus()

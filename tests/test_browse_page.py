@@ -294,13 +294,19 @@ def test_browse_page_nonexistent_collection(tmp_app_paths, qtbot):
 
 
 def test_browse_page_clear_columns_removes_existing(tmp_app_paths, qtbot):
-    """A second refresh() exercises the deletion loop inside _clear_columns."""
+    """Changing collection root exercises the deletion loop inside _clear_columns."""
     collection = _make_collection_dir(tmp_app_paths)
     (collection / "sub").mkdir()
 
     page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
     page.refresh()
     assert len(page._columns) == 2
+
+    # Change root to force a full rebuild (same root would short-circuit)
+    new_collection = tmp_app_paths.thumbs_dir / "other_photos"
+    new_collection.mkdir()
+    (new_collection / "child").mkdir()
+    page.settings.collection_path = str(new_collection)
     page.refresh()
     assert len(page._columns) == 2
 
@@ -808,6 +814,97 @@ def test_navigate_right_expands_into_subfolder(tmp_app_paths, qtbot):
         page._columns[2].item(row).text() for row in range(page._columns[2].count())
     ]
     assert "grand" in grand_items
+
+
+# ===========================================================================
+# refresh() preserves folder selection across page switches
+# ===========================================================================
+
+
+def test_refresh_preserves_folder_selection(tmp_app_paths, qtbot):
+    """Second refresh() with same root preserves columns and grid results."""
+    collection = _make_collection_dir(tmp_app_paths)
+
+    sub = collection / "sub"
+    sub.mkdir()
+
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+    engine = get_engine(str(tmp_app_paths.db_path))
+    session_factory = get_session_factory(engine)
+
+    with session_factory() as session:
+        session.add(Image(file_path=str(sub / "img.jpg"), file_size=100))
+        session.commit()
+
+    settings = Settings(collection_path=str(collection))
+    vector_store = VectorStore()
+    page = BrowsePage(session_factory, tmp_app_paths, settings, vector_store)
+    qtbot.addWidget(page)
+    page.refresh()
+
+    # Navigate into "sub"
+    col1 = page._columns[1]
+    col1.itemClicked.emit(col1.item(0))
+    QtCore.QCoreApplication.processEvents()
+
+    columns_before = len(page._columns)
+    grid_results_before = len(page.grid._all_results or [])
+    selected_before = page._selected_path
+
+    # Simulate switching away and back
+    page.refresh()
+
+    assert len(page._columns) == columns_before
+    assert len(page.grid._all_results or []) == grid_results_before
+    assert page._selected_path == selected_before
+
+
+# ===========================================================================
+# refresh() rebuilds when collection path changes
+# ===========================================================================
+
+
+def test_refresh_rebuilds_when_collection_path_changes(tmp_app_paths, qtbot):
+    """Changing collection_path between refreshes rebuilds columns from new root."""
+    collection1 = _make_collection_dir(tmp_app_paths)
+    (collection1 / "folder_a").mkdir()
+
+    collection2 = tmp_app_paths.thumbs_dir / "other"
+    collection2.mkdir()
+    (collection2 / "folder_x").mkdir()
+
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection1))
+    page.refresh()
+
+    # Column 1 should have "folder_a"
+    assert page._columns[1].item(0).text() == "folder_a"
+
+    # Switch collection path
+    page.settings.collection_path = str(collection2)
+    page.refresh()
+
+    # Column 1 should now have "folder_x"
+    assert page._columns[1].item(0).text() == "folder_x"
+    assert page._current_root == collection2
+
+
+# ===========================================================================
+# refresh() resets _current_root when collection is cleared
+# ===========================================================================
+
+
+def test_refresh_resets_root_when_collection_cleared(tmp_app_paths, qtbot):
+    """Clearing collection_path resets _current_root to None."""
+    collection = _make_collection_dir(tmp_app_paths)
+
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
+    page.refresh()
+    assert page._current_root is not None
+
+    page.settings.collection_path = ""
+    page.refresh()
+    assert page._current_root is None
+    assert len(page._columns) == 0
 
 
 def _make_collection_dir(tmp_app_paths: AppPaths) -> Path:
