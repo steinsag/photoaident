@@ -43,7 +43,8 @@ def restore_widget_geometry(
             ``restoreState()`` (toolbar/dock positions).
 
     Returns:
-        True if saved geometry was found and applied, False otherwise.
+        True if saved geometry was found and successfully applied (and state
+        if requested), False otherwise.
     """
     settings = QtCore.QSettings(str(ini_path), QtCore.QSettings.Format.IniFormat)
     settings.beginGroup(type(widget).__name__)
@@ -52,7 +53,10 @@ def restore_widget_geometry(
         settings.endGroup()
         return False
 
-    widget.restoreGeometry(geometry)
+    geometry_restored = bool(widget.restoreGeometry(geometry))
+    if not geometry_restored:
+        settings.endGroup()
+        return False
 
     # Guard against the window being restored off-screen (e.g. after an
     # external monitor is disconnected).  frameGeometry() reflects the stored
@@ -69,6 +73,9 @@ def restore_widget_geometry(
     if restore_state and isinstance(widget, QtWidgets.QMainWindow):
         state = settings.value("state")
         if state:
-            widget.restoreState(state)
+            state_restored = bool(widget.restoreState(state))
+            if not state_restored:
+                settings.endGroup()
+                return False
     settings.endGroup()
     return True

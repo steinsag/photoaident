@@ -5,7 +5,6 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
 from photoaident.db.database import Face, FaceState, Image as DBImage, Person
-from photoaident.paths import AppPaths
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import get_exif_transform
@@ -14,6 +13,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
     from photoaident.db.vector_store import VectorStore
+    from photoaident.paths import AppPaths
 
 
 def _resolve_batch_person_names(
