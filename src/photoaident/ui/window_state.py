@@ -77,12 +77,10 @@ def restore_widget_geometry(
             # Center the widget within the primary screen's available geometry.
             center_pos = available.center() - widget.rect().center()
             widget.move(center_pos)
-        settings.endGroup()
-        return True
 
     if restore_state and isinstance(widget, QtWidgets.QMainWindow):
         state = settings.value("state")
-        if state:
+        if state is not None:
             state_restored = bool(widget.restoreState(state))
             if not state_restored:
                 settings.endGroup()

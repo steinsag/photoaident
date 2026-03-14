@@ -88,11 +88,21 @@ def test_mainwindow_state_save_restore(qtbot, tmp_path):
     qtbot.addWidget(window)
     window.resize(1024, 768)
 
+    # Add a toolbar so that QMainWindow.saveState() has meaningful, non-empty data.
+    toolbar = window.addToolBar("Main")
+    toolbar.setObjectName("mainToolbar")
+    toolbar.addAction("Test Action")
+
     save_widget_geometry(window, ini_path, save_state=True)
 
     window2 = QtWidgets.QMainWindow()
     qtbot.addWidget(window2)
     window2.resize(300, 200)
+
+    # Add a matching toolbar so restoreState can apply the saved layout.
+    toolbar2 = window2.addToolBar("Main")
+    toolbar2.setObjectName("mainToolbar")
+    toolbar2.addAction("Test Action")
 
     result = restore_widget_geometry(window2, ini_path, restore_state=True)
 
@@ -100,6 +110,8 @@ def test_mainwindow_state_save_restore(qtbot, tmp_path):
     # The restored window must have taken on the saved dimensions.
     assert window2.width() == 1024
     assert window2.height() == 768
+    # And the main window state (e.g. toolbar positions) must also round-trip.
+    assert window2.saveState() == window.saveState()
 
 
 # ===========================================================================

@@ -95,10 +95,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self._vector_store.load(self._paths.faiss_path)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
-        if not restore_widget_geometry(
+
+        # First, try to restore only the window geometry. This ensures that a
+        # failure in restoring the window state (toolbars/docks, etc.) does not
+        # cause us to override a successfully restored geometry with showMaximized().
+        geometry_restored = restore_widget_geometry(
+            self, self._paths.window_state_file, restore_state=False
+        )
+
+        # Then, best-effort restore of the window state. Any failure here is
+        # treated as non-fatal for geometry; we ignore the return value.
+        restore_widget_geometry(
             self, self._paths.window_state_file, restore_state=True
-        ):
+        )
+
+        if not geometry_restored:
             self.showMaximized()
+
         self._set_app_icon()
 
         # Status bar
