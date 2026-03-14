@@ -1,5 +1,4 @@
 import logging
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -8,19 +7,9 @@ from PySide6 import QtCore, QtGui, QtWidgets, QtQuickWidgets
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.paths import AppPaths
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
+from photoaident.utils.resource_path import icon_path as _icon_path
 
 logger = logging.getLogger(__name__)
-
-
-def _icon_path(name: str) -> str:
-    """Return the path to an icon, works for dev and PyInstaller bundles."""
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass is not None:
-        return str(Path(meipass) / "assets" / "icons" / name)
-    # map_dialog.py lives at src/photoaident/ui/widgets/ — go up 5 levels
-    return str(
-        Path(__file__).parent.parent.parent.parent.parent / "assets" / "icons" / name
-    )
 
 
 class MapLocationDialog(QtWidgets.QDialog):

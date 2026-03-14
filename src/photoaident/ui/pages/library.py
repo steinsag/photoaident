@@ -13,6 +13,7 @@ from photoaident.ui.widgets.date_filter_dialog import (
 )
 from photoaident.ui.widgets.map_dialog import MapLocationDialog
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
+from photoaident.utils.resource_path import get_resource_path
 
 ASPECT_RATIO_WORLD_MAP_ICON = 1.97
 
@@ -83,7 +84,6 @@ class LibraryPage(QtWidgets.QWidget):
         self.filter_panel.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
         self.filter_panel.setFixedWidth(220)
         panel_layout = QtWidgets.QVBoxLayout(self.filter_panel)
-        from photoaident.app import get_resource_path
 
         # --- Location section ---
         self._add_header(self.tr("Location"), panel_layout)

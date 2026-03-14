@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -16,6 +15,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
+from photoaident.utils.resource_path import get_resource_path
 from photoaident.ui.about_dialog import AboutDialog
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.ui.onboarding_dialog import OnboardingDialog
@@ -30,20 +30,6 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from photoaident.paths import AppPaths
-
-
-def get_resource_path(relative_path: str) -> str:
-    """Get absolute path to resource, works for dev and for PyInstaller"""
-    if hasattr(sys, "_MEIPASS"):
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        return os.path.join(getattr(sys, "_MEIPASS"), relative_path)
-
-    # In development, resources are in project_root/assets.
-    # project_root is two levels up from this file (src/photoaident/app.py)
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    )
-    return os.path.join(project_root, relative_path)
 
 
 def load_translations(app: QtWidgets.QApplication):

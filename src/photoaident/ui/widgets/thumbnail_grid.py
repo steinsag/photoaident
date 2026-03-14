@@ -1,5 +1,4 @@
 import logging
-import sys
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -14,6 +13,7 @@ from photoaident.db.database import Face, FaceState, Image
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import generate_thumbnail
+from photoaident.utils.resource_path import icon_path as _icon_path
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -29,17 +29,6 @@ _THUMBNAIL_MAX_SIZE = 150  # max dimension for thumbnail scaling
 _THUMBNAIL_WIDGET_SIZE = 160  # fixed widget/overlay size (px)
 _THUMBNAIL_GRID_SPACING = 10  # spacing between thumbnail widgets in the grid
 _SCROLL_AREA_MARGIN = 20  # reserved for scrollbar in column width calc
-
-
-def _icon_path(name: str) -> str:
-    """Return the path to an icon, works for dev and PyInstaller bundles."""
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass is not None:
-        return str(Path(meipass) / "assets" / "icons" / name)
-    # thumbnail_grid.py lives at src/photoaident/ui/widgets/ — go up 5 levels
-    return str(
-        Path(__file__).parent.parent.parent.parent.parent / "assets" / "icons" / name
-    )
 
 
 def _has_unidentified_faces(session_factory: "sessionmaker", image_id: int) -> bool:
