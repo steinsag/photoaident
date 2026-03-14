@@ -25,6 +25,7 @@ def save_widget_geometry(
     if save_state and isinstance(widget, QtWidgets.QMainWindow):
         settings.setValue("state", widget.saveState())
     settings.endGroup()
+    settings.sync()
 
 
 def restore_widget_geometry(
