@@ -1,17 +1,25 @@
 import functools
 import threading
 from pathlib import Path
-from typing import Any, List, Tuple
+from typing import Any, Callable, Concatenate, List, ParamSpec, Tuple, TypeVar
 
 import numpy as np
 from faiss import IndexFlatIP, read_index, write_index
 
 
-def _locked(method):
+P = ParamSpec("P")
+R = TypeVar("R")
+
+
+def _locked(
+    method: Callable[Concatenate["VectorStore", P], R],
+) -> Callable[Concatenate["VectorStore", P], R]:
     """Decorator that acquires self._lock for the duration of the method."""
 
     @functools.wraps(method)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(
+        self: "VectorStore", *args: P.args, **kwargs: P.kwargs
+    ) -> R:
         with self._lock:
             return method(self, *args, **kwargs)
 
