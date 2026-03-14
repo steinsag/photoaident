@@ -257,6 +257,10 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
         <translation>Bestätigen</translation>
     </message>
     <message>
+        <source>Unknown date</source>
+        <translation>Unbekanntes Datum</translation>
+    </message>
+    <message>
         <source>All done! No unidentified faces remain.</source>
         <translation>Fertig! Keine unbekannten Gesichter mehr vorhanden.</translation>
     </message>
