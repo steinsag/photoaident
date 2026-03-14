@@ -107,10 +107,12 @@ def test_mainwindow_state_save_restore(qtbot, tmp_path):
 # ===========================================================================
 
 
-def test_restore_returns_false_when_off_screen(qtbot, tmp_path):
-    """restore_widget_geometry returns False when the restored frame is off all screens.
+def test_restore_moves_widget_on_screen_when_off_screen(qtbot, tmp_path):
+    """restore_widget_geometry returns True and repositions the widget when off-screen.
 
-    This simulates the external-monitor-disconnected scenario.
+    This simulates the external-monitor-disconnected scenario: the saved
+    position is unreachable, so the helper centres the widget on the primary
+    screen and still reports a successful restore.
     """
     ini_path = tmp_path / "offscreen.ini"
 
@@ -129,7 +131,8 @@ def test_restore_returns_false_when_off_screen(qtbot, tmp_path):
     with patch.object(QtWidgets.QApplication, "screens", return_value=[mock_screen]):
         result = restore_widget_geometry(widget2, ini_path)
 
-    assert result is False
+    # Off-screen geometry is adjusted (widget recentred) — still a successful restore.
+    assert result is True
 
 
 def test_mainwindow_state_not_saved_for_plain_widget(qtbot, tmp_path):
