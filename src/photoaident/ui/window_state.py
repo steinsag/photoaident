@@ -67,6 +67,14 @@ def restore_widget_geometry(
         for screen in QtWidgets.QApplication.screens()
     )
     if not on_any_screen:
+        # Move the widget into the primary screen so it remains visible even if
+        # callers ignore the return value.
+        primary_screen = QtWidgets.QApplication.primaryScreen()
+        if primary_screen is not None:
+            available = primary_screen.availableGeometry()
+            # Center the widget within the primary screen's available geometry.
+            center_pos = available.center() - widget.rect().center()
+            widget.move(center_pos)
         settings.endGroup()
         return False
 
