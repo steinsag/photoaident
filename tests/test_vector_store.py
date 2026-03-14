@@ -208,6 +208,7 @@ def test_concurrent_access_is_serialized(tmp_path):
     object.__setattr__(store, "_lock", instrumented_lock)
 
     errors: list[str] = []
+    errors_lock = threading.Lock()
     barrier = threading.Barrier(5)
 
     def _worker(fn, label: str):
@@ -215,7 +216,8 @@ def test_concurrent_access_is_serialized(tmp_path):
             barrier.wait(timeout=5)
             fn()
         except Exception as exc:
-            errors.append(f"{label}: {exc}")
+            with errors_lock:
+                errors.append(f"{label}: {exc}")
 
     pairs = [
         (lambda: store.add(embedding), "add"),
