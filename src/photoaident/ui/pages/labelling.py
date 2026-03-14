@@ -1,3 +1,4 @@
+import html
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -224,9 +225,11 @@ class LabellingPage(QtWidgets.QWidget):
             taken_str = face_data.taken_at.strftime("%Y-%m-%d %H:%M")
         else:
             taken_str = self.tr("Unknown date")
+        path_escaped = html.escape(str(face_data.image_path))
+        taken_escaped = html.escape(taken_str)
         self._face_info_label.setText(
-            f"<b>{self.tr('File Path')}:</b> {face_data.image_path}<br>"
-            f"<b>{self.tr('Taken At')}:</b> {taken_str}"
+            f"<b>{html.escape(self.tr('File Path'))}:</b> {path_escaped}<br>"
+            f"<b>{html.escape(self.tr('Taken At'))}:</b> {taken_escaped}"
         )
 
         self._image_preview.load(face_data.image_path, face_data.bbox)
