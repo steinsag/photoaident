@@ -138,8 +138,6 @@ class LabellingPage(QtWidgets.QWidget):
         right_layout.addWidget(self._cluster_widget, stretch=1)
 
         confirm_row = QtWidgets.QHBoxLayout()
-        confirm_row.addStretch()
-
         self._cancel_btn = QtWidgets.QPushButton(self.tr("Cancel"))
         self._cancel_btn.clicked.connect(self._on_cancel)
         confirm_row.addWidget(self._cancel_btn)
@@ -147,6 +145,7 @@ class LabellingPage(QtWidgets.QWidget):
         self.confirm_btn = QtWidgets.QPushButton(self.tr("Confirm"))
         self.confirm_btn.clicked.connect(self._on_confirm)
         confirm_row.addWidget(self.confirm_btn)
+        confirm_row.addStretch()
 
         right_layout.addLayout(confirm_row)
         group_layout.addWidget(right_panel, stretch=1)
