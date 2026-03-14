@@ -248,7 +248,7 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
         session.commit()
         img_id = img.id
 
-    grid = ThumbnailGrid(session_factory, VectorStore())
+    grid = ThumbnailGrid(session_factory, VectorStore(), tmp_app_paths)
     qtbot.addWidget(grid)
 
     grid.add_thumbnail(img_id, str(sample_image), tmp_app_paths.thumbs_dir / "t.jpg")
@@ -264,30 +264,42 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
     assert received == [img_id]
 
 
-def test_thumbnail_grid_init(qtbot, mock_session_factory, mock_vector_store):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+def test_thumbnail_grid_init(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
     assert len(grid.thumbnails) == 0
 
 
 def test_thumbnail_grid_add_thumbnail(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     thumb_path = tmp_path / "thumb_grid.jpg"
     grid.add_thumbnail(1, str(sample_image), thumb_path)
 
     assert len(grid.thumbnails) == 1
-    # Check if widget was added to layout
+    # Check if the widget was added to layout
     assert grid.grid_layout.count() == 1
 
 
 def test_thumbnail_grid_clear(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     grid.add_thumbnail(1, str(sample_image), tmp_path / "t1.jpg")
@@ -303,9 +315,14 @@ def test_thumbnail_grid_clear(
 
 
 def test_thumbnail_grid_resize(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     grid.show()  # Need to show to have a valid width
     qtbot.addWidget(grid)
 
@@ -360,9 +377,14 @@ def test_thumbnail_grid_resize(
 
 
 def test_set_results_loads_first_page_only(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -376,9 +398,14 @@ def test_set_results_loads_first_page_only(
 
 
 def test_set_results_fewer_than_page_size(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -390,8 +417,10 @@ def test_set_results_fewer_than_page_size(
     assert grid._hint_label.isHidden()
 
 
-def test_set_results_empty(qtbot, mock_session_factory, mock_vector_store):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+def test_set_results_empty(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     grid.set_results([])
@@ -401,9 +430,14 @@ def test_set_results_empty(qtbot, mock_session_factory, mock_vector_store):
 
 
 def test_set_results_emits_results_changed(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -418,9 +452,14 @@ def test_set_results_emits_results_changed(
 
 
 def test_page_loaded_signal(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -436,9 +475,14 @@ def test_page_loaded_signal(
 
 
 def test_set_results_resets_previous(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results1 = [
@@ -457,9 +501,14 @@ def test_set_results_resets_previous(
 
 
 def test_hint_label_shown_when_more_remain(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -474,9 +523,14 @@ def test_hint_label_shown_when_more_remain(
 
 
 def test_hint_label_hidden_when_all_loaded(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -488,9 +542,14 @@ def test_hint_label_hidden_when_all_loaded(
 
 
 def test_scroll_triggers_load_more(
-    qtbot, sample_image, tmp_path, mock_session_factory, mock_vector_store
+    qtbot,
+    sample_image,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
 ):
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     results = [
@@ -674,7 +733,7 @@ def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths, mock_vector_store)
         session.commit()
         img_id = img.id
 
-    grid = ThumbnailGrid(session_factory, mock_vector_store)
+    grid = ThumbnailGrid(session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
@@ -689,7 +748,7 @@ def test_on_image_selected_nonexistent_id_skips_dialog(
 ):
     """Selecting a non-existent image id does not open the dialog."""
     session_factory = _make_session_factory(tmp_app_paths)
-    grid = ThumbnailGrid(session_factory, mock_vector_store)
+    grid = ThumbnailGrid(session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
@@ -698,14 +757,14 @@ def test_on_image_selected_nonexistent_id_skips_dialog(
 
 
 def test_on_image_selected_without_image_in_db_is_noop(
-    qtbot, mock_session_factory, mock_vector_store
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
 ):
     """If image is not found in DB, clicking a thumbnail does nothing."""
     session = mock_session_factory.return_value.__enter__.return_value
     (
         session.execute.return_value.unique.return_value.scalar_one_or_none.return_value
     ) = None
-    grid = ThumbnailGrid(mock_session_factory, mock_vector_store)
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
@@ -727,7 +786,7 @@ def test_navigate_to_labelling_signal_forwarded(
         session.commit()
         img_id = img.id
 
-    grid = ThumbnailGrid(session_factory, mock_vector_store)
+    grid = ThumbnailGrid(session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
     received: list[int] = []

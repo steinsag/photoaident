@@ -68,7 +68,7 @@ class BrowsePage(QtWidgets.QWidget):
         splitter.addWidget(self._scroll_area)
 
         # Bottom: thumbnail grid
-        self.grid = ThumbnailGrid(self.session_factory, self.vector_store)
+        self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
         self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
         splitter.addWidget(self.grid)
 

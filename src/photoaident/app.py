@@ -17,6 +17,7 @@ from photoaident.db.database import (
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
 from photoaident.ui.about_dialog import AboutDialog
+from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.ui.onboarding_dialog import OnboardingDialog
 from photoaident.ui.pages.browse import BrowsePage
 from photoaident.ui.pages.labelling import LabellingPage
@@ -94,7 +95,23 @@ class MainWindow(QtWidgets.QMainWindow):
             self._vector_store.load(self._paths.faiss_path)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
-        self.showMaximized()
+
+        # First, try to restore only the window geometry. This ensures that a
+        # failure in restoring the window state (toolbars/docks, etc.) does not
+        # cause us to override a successfully restored geometry with showMaximized().
+        geometry_restored = restore_widget_geometry(
+            self, self._paths.window_state_file, restore_state=False
+        )
+
+        # Then, best-effort restore of the window state. Any failure here is
+        # treated as non-fatal for geometry; we ignore the return value.
+        restore_widget_geometry(
+            self, self._paths.window_state_file, restore_state=True
+        )
+
+        if not geometry_restored:
+            self.showMaximized()
+
         self._set_app_icon()
 
         # Status bar
@@ -437,6 +454,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._status_bar.showMessage(msg, 5000)
 
     def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        save_widget_geometry(self, self._paths.window_state_file, save_state=True)
         self._indexing_controller.shutdown(self._paths.faiss_path)
         event.accept()
 

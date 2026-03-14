@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
     from photoaident.db.vector_store import VectorStore
+    from photoaident.paths import AppPaths
 
 logger = logging.getLogger(__name__)
 
@@ -261,11 +262,13 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         vector_store: "VectorStore",
+        paths: "AppPaths",
         parent=None,
     ):
         super().__init__(parent)
         self._session_factory = session_factory
         self._vector_store = vector_store
+        self._paths = paths
 
         self.main_layout = QtWidgets.QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
@@ -316,6 +319,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
                     image,
                     self._session_factory,
                     self._vector_store,
+                    self._paths,
                     parent=self,
                 )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)

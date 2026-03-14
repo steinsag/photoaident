@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 
 from photoaident.db.database import Face, FaceState, Image as DBImage, Person
+from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import get_exif_transform
 
@@ -12,6 +13,7 @@ if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
     from photoaident.db.vector_store import VectorStore
+    from photoaident.paths import AppPaths
 
 
 def _resolve_batch_person_names(
@@ -228,6 +230,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         image: DBImage,
         session_factory: "sessionmaker",
         vector_store: "VectorStore",
+        paths: "AppPaths",
         parent=None,
     ):
         super().__init__(parent)
@@ -236,9 +239,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.image_data = image
         self._session_factory = session_factory
         self._vector_store = vector_store
+        self._paths = paths
         self._resolved_names: dict[int, tuple[str, float] | None] = {}
 
         self._setup_ui()
+        restore_widget_geometry(self, self._paths.window_state_file)
         self._load_image()
 
     def _format_file_size(self, size_bytes: int) -> str:
@@ -470,6 +475,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     def _on_show_in_file_manager_clicked(self) -> None:
         reveal_in_file_manager(self.image_data.file_path)
+
+    def done(self, result: int) -> None:
+        """Save geometry before closing."""
+        save_widget_geometry(self, self._paths.window_state_file)
+        super().done(result)
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
