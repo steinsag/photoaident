@@ -262,7 +262,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         vector_store: "VectorStore",
-        paths: "AppPaths | None" = None,
+        paths: "AppPaths",
         parent=None,
     ):
         super().__init__(parent)
@@ -315,14 +315,11 @@ class ThumbnailGrid(QtWidgets.QWidget):
             )
             image = session.execute(stmt).unique().scalar_one_or_none()
             if image:
-                window_state_file = (
-                    self._paths.window_state_file if self._paths is not None else None
-                )
                 dialog = ImageDetailDialog(
                     image,
                     self._session_factory,
                     self._vector_store,
-                    window_state_file=window_state_file,
+                    window_state_file=self._paths.window_state_file,
                     parent=self,
                 )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
