@@ -52,6 +52,19 @@ def restore_widget_geometry(
         return False
 
     widget.restoreGeometry(geometry)
+
+    # Guard against the window being restored off-screen (e.g. after an
+    # external monitor is disconnected).  frameGeometry() reflects the stored
+    # position even before the widget is shown, so we can check it here.
+    frame = widget.frameGeometry()
+    on_any_screen = any(
+        screen.availableGeometry().intersects(frame)
+        for screen in QtWidgets.QApplication.screens()
+    )
+    if not on_any_screen:
+        settings.endGroup()
+        return False
+
     if restore_state and isinstance(widget, QtWidgets.QMainWindow):
         state = settings.value("state")
         if state:

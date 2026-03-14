@@ -1,6 +1,8 @@
 """Tests for photoaident.ui.window_state — save/restore widget geometry helpers."""
 
-from PySide6 import QtWidgets
+from unittest.mock import MagicMock, patch
+
+from PySide6 import QtCore, QtWidgets
 
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 
@@ -100,9 +102,38 @@ def test_mainwindow_state_save_restore(qtbot, tmp_path):
     assert window2.height() == 768
 
 
+# ===========================================================================
+# restore_returns_false_when_off_screen
+# ===========================================================================
+
+
+def test_restore_returns_false_when_off_screen(qtbot, tmp_path):
+    """restore_widget_geometry returns False when the restored frame is off all screens.
+
+    This simulates the external-monitor-disconnected scenario.
+    """
+    ini_path = tmp_path / "offscreen.ini"
+
+    widget = QtWidgets.QWidget()
+    qtbot.addWidget(widget)
+    widget.move(0, 0)
+    widget.resize(640, 480)
+    save_widget_geometry(widget, ini_path)
+
+    widget2 = QtWidgets.QWidget()
+    qtbot.addWidget(widget2)
+
+    # Simulate a single screen positioned far away so it cannot intersect (0,0,640,480).
+    mock_screen = MagicMock()
+    mock_screen.availableGeometry.return_value = QtCore.QRect(50000, 50000, 1920, 1080)
+    with patch.object(QtWidgets.QApplication, "screens", return_value=[mock_screen]):
+        result = restore_widget_geometry(widget2, ini_path)
+
+    assert result is False
+
+
 def test_mainwindow_state_not_saved_for_plain_widget(qtbot, tmp_path):
     """save_state=True on a plain QWidget does not write a 'state' key."""
-    from PySide6 import QtCore
 
     ini_path = tmp_path / "widget_no_state.ini"
 
