@@ -10,8 +10,13 @@ from photoaident.ui.widgets.map_dialog import MapLocationDialog, _icon_path
 
 @pytest.fixture
 def map_dialog(qtbot, tmp_app_paths):
-    """A MapLocationDialog with no initial bbox, registered with qtbot."""
-    dialog = MapLocationDialog(tmp_app_paths)
+    """A MapLocationDialog with no initial bbox, registered with qtbot.
+
+    QQuickWidget.setSource is patched to prevent the QML engine from starting,
+    which would leak file descriptors across tests.
+    """
+    with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
+        dialog = MapLocationDialog(tmp_app_paths)
     qtbot.addWidget(dialog)
     return dialog
 
@@ -71,24 +76,6 @@ def test_selected_bbox_initially_none(map_dialog):
 # --- _extract_bbox ---
 
 
-def test_extract_bbox_from_qml_root(map_dialog):
-    """Reads south/west/north/east properties from the QML root object."""
-    root_obj = map_dialog._quick_widget.rootObject()
-    if root_obj is None:
-        pytest.skip("QML/QtLocation not available in this environment")
-
-    root_obj.setProperty("south", 10.0)
-    root_obj.setProperty("west", 20.0)
-    root_obj.setProperty("north", 30.0)
-    root_obj.setProperty("east", 40.0)
-
-    # pendingBbox must be false for updateBbox to write these properties
-    root_obj.setProperty("pendingBbox", False)
-
-    bbox = map_dialog._extract_bbox()
-    assert bbox == GpsBoundingBox(south=10.0, west=20.0, north=30.0, east=40.0)
-
-
 def test_extract_bbox_returns_none_when_no_root_object(map_dialog):
     """Returns None when rootObject() is None."""
     _mock_quick_widget(map_dialog, root_obj=None)
@@ -122,7 +109,8 @@ def test_on_qml_status_changed_ready_without_root_does_not_call_errors(map_dialo
 def test_on_qml_status_changed_ready_applies_initial_bbox(qtbot, tmp_app_paths):
     """Applies the initial bbox when QML becomes Ready and a bbox is pending."""
     initial = GpsBoundingBox(south=48.0, west=10.0, north=52.0, east=14.0)
-    dialog = MapLocationDialog(tmp_app_paths, initial_bbox=initial)
+    with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
+        dialog = MapLocationDialog(tmp_app_paths, initial_bbox=initial)
     qtbot.addWidget(dialog)
 
     mock_root = MagicMock()
