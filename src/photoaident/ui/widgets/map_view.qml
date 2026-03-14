@@ -7,10 +7,76 @@ Item {
     id: root
     anchors.fill: parent
 
-    // Properties for initial view
+    // Properties for initial view (used when no bbox is provided)
     property double initialLat: 50.0
     property double initialLon: 10.0
     property int initialZoom: 5
+
+    // Pending bbox: Python sets these via setProperty(), then sets pendingBbox=true
+    // to trigger the map view to fit.  Using setProperty() (a reliable C++ API)
+    // avoids the ambiguity of calling QML JavaScript functions across the boundary.
+    property bool   pendingBbox:      false
+    property double pendingBboxSouth: 0
+    property double pendingBboxWest:  0
+    property double pendingBboxNorth: 0
+    property double pendingBboxEast:  0
+
+    // Trigger immediately when Python sets pendingBbox = true.
+    onPendingBboxChanged: { if (pendingBbox) _applyPendingBboxIfReady() }
+
+    // Apply the pending bbox once the map is sized.  Safe to call repeatedly —
+    // clears the flag on the first successful application.
+    function _applyPendingBboxIfReady() {
+        if (!pendingBbox || map.width <= 0 || map.height <= 0) return
+        pendingBbox = false
+
+        var south = pendingBboxSouth
+        var west  = pendingBboxWest
+        var north = pendingBboxNorth
+        var east  = pendingBboxEast
+
+        // --- Longitude (linear in WebMercator — exact) ---
+        var lonSpan, centerLon
+        if (east < west) {  // crosses antimeridian
+            lonSpan = 360.0 - (west - east)
+            var rawCenterLon = west + lonSpan / 2.0
+            centerLon = rawCenterLon > 180.0 ? rawCenterLon - 360.0 : rawCenterLon
+        } else {
+            lonSpan = east - west
+            centerLon = (west + east) / 2
+        }
+
+        // --- Latitude via exact WebMercator (Gudermannian) ---
+        //
+        // updateBbox uses map.toCoordinate which applies the standard WebMercator
+        // formula: mercY(lat) = ln(tan(lat_rad/2 + π/4)).
+        //
+        // Inverting the same formula here makes the round-trip exact:
+        //   • zLat solves  height*0.7*2π / (256*2^z) = mercSpan
+        //   • centerLat is the Mercator midpoint, not the arithmetic degree mean
+        //     (they differ due to Mercator's non-linear y-scaling)
+        var northRad = north * Math.PI / 180
+        var southRad = south * Math.PI / 180
+        var mercN = Math.log(Math.tan(northRad / 2 + Math.PI / 4))
+        var mercS = Math.log(Math.tan(southRad / 2 + Math.PI / 4))
+        var mercSpan = mercN - mercS  // positive: north > south
+
+        // Mercator-space midpoint → actual map centre latitude
+        var centerLat = Math.atan(Math.sinh((mercN + mercS) / 2)) * 180 / Math.PI
+
+        // --- Zoom (float — no rounding to preserve the exact original level) ---
+        //
+        // At zoom z: inner 70% rect spans  width*0.7*360/(256*2^z)  lon degrees
+        //                              and  height*0.7*2π/(256*2^z)  Mercator units.
+        // When the bbox was produced by this dialog both equations yield z exactly,
+        // so zLon == zLat == original zoom and min(zLon, zLat) is stable.
+        var zLon = lonSpan  > 0 ? Math.log2(map.width  * 0.7 * 360         / (256 * lonSpan))  : 20
+        var zLat = mercSpan > 0 ? Math.log2(map.height * 0.7 * 2 * Math.PI / (256 * mercSpan)) : 20
+        var zoom = Math.max(2, Math.min(15, Math.min(zLon, zLat)))
+
+        map.center    = QtPositioning.coordinate(centerLat, centerLon)
+        map.zoomLevel = zoom
+    }
 
     // Parameters for OSM plugin
     property string userAgent: "PhotoAIdent/0.1"
@@ -113,8 +179,8 @@ Item {
         // onVisibleRegionChanged which fires for geocircles/polygons).
         onCenterChanged: updateBbox()
         onZoomLevelChanged: updateBbox()
-        onWidthChanged: updateBbox()
-        onHeightChanged: updateBbox()
+        onWidthChanged:  { updateBbox(); root._applyPendingBboxIfReady() }
+        onHeightChanged: { updateBbox(); root._applyPendingBboxIfReady() }
 
         function updateBbox() {
             // Use the inner 70% of the viewport as the search area.

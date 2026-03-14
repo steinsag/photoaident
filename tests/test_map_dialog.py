@@ -1,5 +1,4 @@
 import logging
-import math
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,8 +77,14 @@ def test_on_qml_status_changed_does_not_log_errors_when_ready(qtbot, tmp_app_pat
 # --- _apply_initial_bbox ---
 
 
-def test_apply_initial_bbox_sets_centre_and_zoom(qtbot, tmp_app_paths):
-    """_apply_initial_bbox derives lat/lon center and zoom from bbox."""
+def _setproperty_calls(mock_root: MagicMock) -> dict:
+    """Return a dict of {name: value} from all setProperty calls on mock_root."""
+    return {call.args[0]: call.args[1] for call in mock_root.setProperty.call_args_list}
+
+
+def test_apply_initial_bbox_pre_populates_extraction_properties(qtbot, tmp_app_paths):
+    """_apply_initial_bbox sets south/west/north/east directly so _extract_bbox
+    returns the correct value even before updateBbox() has run."""
     dialog = MapLocationDialog(paths=tmp_app_paths)
     qtbot.addWidget(dialog)
 
@@ -87,61 +92,55 @@ def test_apply_initial_bbox_sets_centre_and_zoom(qtbot, tmp_app_paths):
     bbox = GpsBoundingBox(south=48.0, north=52.0, west=10.0, east=14.0)
     dialog._apply_initial_bbox(mock_root, bbox)
 
-    expected_zoom = int(max(2, min(15, round(math.log2(252.0 / 4.0)))))
-    mock_root.setProperty.assert_any_call("initialLat", 50.0)
-    mock_root.setProperty.assert_any_call("initialLon", 12.0)
-    mock_root.setProperty.assert_any_call("initialZoom", expected_zoom)
+    props = _setproperty_calls(mock_root)
+    assert props["south"] == 48.0
+    assert props["west"] == 10.0
+    assert props["north"] == 52.0
+    assert props["east"] == 14.0
 
 
-def test_apply_initial_bbox_zero_span_uses_default_zoom(qtbot, tmp_app_paths):
-    """_apply_initial_bbox falls back to zoom=14 when the bbox has zero span."""
-    dialog = MapLocationDialog(tmp_app_paths)
+def test_apply_initial_bbox_sets_pending_bbox_trigger(qtbot, tmp_app_paths):
+    """_apply_initial_bbox sets pendingBbox=True last to trigger the QML view fit."""
+    dialog = MapLocationDialog(paths=tmp_app_paths)
     qtbot.addWidget(dialog)
 
     mock_root = MagicMock()
-    bbox = GpsBoundingBox(south=50.0, north=50.0, west=10.0, east=10.0)
+    bbox = GpsBoundingBox(south=48.0, north=52.0, west=10.0, east=14.0)
     dialog._apply_initial_bbox(mock_root, bbox)
 
-    mock_root.setProperty.assert_any_call("initialZoom", 14)
+    props = _setproperty_calls(mock_root)
+    assert props["pendingBbox"] is True
+    assert props["pendingBboxSouth"] == 48.0
+    assert props["pendingBboxWest"] == 10.0
+    assert props["pendingBboxNorth"] == 52.0
+    assert props["pendingBboxEast"] == 14.0
+    # pendingBbox must be set AFTER the coordinate properties so QML reads them
+    last_call = mock_root.setProperty.call_args_list[-1]
+    assert last_call.args[0] == "pendingBbox"
 
 
-def _apply_bbox(south: float, west: float, north: float, east: float) -> dict:
-    """Helper: call _apply_initial_bbox and return the properties dict."""
+def test_apply_initial_bbox_antimeridian_passes_raw_coords():
+    """_apply_initial_bbox passes antimeridian bbox coords to QML via setProperty."""
     root = MagicMock()
-    props: dict = {}
-    root.setProperty.side_effect = lambda k, v: props.__setitem__(k, v)
-    bbox = GpsBoundingBox(south=south, west=west, north=north, east=east)
+    bbox = GpsBoundingBox(south=30.0, west=170.0, north=50.0, east=-170.0)
     MapLocationDialog._apply_initial_bbox(root, bbox)
-    return props
+    props = _setproperty_calls(root)
+    assert props["south"] == 30.0
+    assert props["west"] == 170.0
+    assert props["north"] == 50.0
+    assert props["east"] == -170.0
 
 
-def test_apply_initial_bbox_antimeridian_span_is_short_arc():
-    """Bbox crossing antimeridian uses the short arc span, not 360 - short."""
-    # west=170, east=-170: crossing span = 20°, NOT 340°
-    props = _apply_bbox(south=30.0, west=170.0, north=50.0, east=-170.0)
-    expected_zoom = int(max(2, min(15, round(math.log2(252.0 / 20.0)))))
-    assert props["initialZoom"] == expected_zoom
-
-
-def test_apply_initial_bbox_antimeridian_center_lon_normalized():
-    """Center longitude is normalized to [-180, 180] for antimeridian-crossing bbox."""
-    # west=170, east=-170: center = 180° → normalized to -180 or 180
-    props = _apply_bbox(south=30.0, west=170.0, north=50.0, east=-170.0)
-    center = props["initialLon"]
-    assert center == pytest.approx(180.0) or center == pytest.approx(-180.0)
-
-
-def test_apply_initial_bbox_antimeridian_center_lon_pacific():
-    """Center longitude is correct for a typical Pacific antimeridian bbox."""
-    # west=160, east=-150: span=50°, center = 160 + 25 = 185 → -175
-    props = _apply_bbox(south=20.0, west=160.0, north=40.0, east=-150.0)
-    assert props["initialLon"] == pytest.approx(-175.0)
-
-
-def test_apply_initial_bbox_antimeridian_center_lat_unaffected():
-    """Latitude center is unaffected by antimeridian crossing."""
-    props = _apply_bbox(south=20.0, west=160.0, north=40.0, east=-150.0)
-    assert props["initialLat"] == pytest.approx(30.0)
+def test_apply_initial_bbox_pacific_antimeridian_passes_raw_coords():
+    """_apply_initial_bbox passes Pacific antimeridian coords to QML via setProperty."""
+    root = MagicMock()
+    bbox = GpsBoundingBox(south=20.0, west=160.0, north=40.0, east=-150.0)
+    MapLocationDialog._apply_initial_bbox(root, bbox)
+    props = _setproperty_calls(root)
+    assert props["south"] == 20.0
+    assert props["west"] == 160.0
+    assert props["north"] == 40.0
+    assert props["east"] == -150.0
 
 
 # --- _extract_bbox ---
