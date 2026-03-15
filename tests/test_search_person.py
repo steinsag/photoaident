@@ -301,8 +301,12 @@ def test_resolve_faces_to_persons_empty_input(search_db, vector_store):
 
 def test_resolve_faces_to_persons_index_error(search_db, vector_store):
     """Returns None for faiss_id out of bounds in the vector store."""
-    # Need at least one person so we get past the early return
-    _add_person_cluster(search_db)
+    # Add an identified face so person_means is non-empty; otherwise
+    # resolve_faces_to_persons returns early before reaching the IndexError path.
+    person_id, cluster_id = _add_person_cluster(search_db)
+    emb = np.zeros(512, dtype=np.float32)
+    emb[0] = 1.0
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
     results = resolve_faces_to_persons([999], search_db, vector_store)
     assert results[999] is None
