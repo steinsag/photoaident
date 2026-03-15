@@ -175,7 +175,6 @@ def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
 
 def _load_person_cluster_means(
     session_factory: "sessionmaker",
-    vector_store: "VectorStore",
 ) -> tuple[dict[int, str], list[tuple[int, "np.ndarray"]]]:
     """Load all persons and their persisted cluster mean embeddings from the DB.
 
@@ -226,7 +225,7 @@ def _match_face_to_person(
             best_person_id = person_id
 
     if best_person_id is not None:
-        return (person_names[best_person_id], best_score)
+        return person_names[best_person_id], best_score
     return None
 
 
@@ -259,9 +258,7 @@ def resolve_faces_to_persons(
     if not faiss_ids:
         return {}
 
-    person_names, person_means = _load_person_cluster_means(
-        session_factory, vector_store
-    )
+    person_names, person_means = _load_person_cluster_means(session_factory)
 
     if not person_names or not person_means:
         return dict.fromkeys(faiss_ids)

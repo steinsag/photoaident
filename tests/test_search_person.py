@@ -412,7 +412,7 @@ def test_match_face_to_person_index_error(search_db, vector_store):
     # Build person_means the same way resolve_faces_to_persons would
     from photoaident.core.search_person import _load_person_cluster_means
 
-    person_names, person_means = _load_person_cluster_means(search_db, vector_store)
+    person_names, person_means = _load_person_cluster_means(search_db)
     assert len(person_means) > 0
 
     # faiss_id 9999 does not exist → IndexError → returns None
