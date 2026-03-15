@@ -1,3 +1,5 @@
+import logging  # pragma: no cover
+import os  # pragma: no cover
 import sys  # pragma: no cover
 
 from PySide6 import QtWidgets  # pragma: no cover
@@ -69,7 +71,17 @@ def _fix_macos_app_name() -> None:  # pragma: no cover
         pass  # Non-fatal — silently skip on unexpected environments
 
 
+def _setup_logging() -> None:  # pragma: no cover
+    level = logging.DEBUG if os.environ.get("PHOTOAIDENT_DEBUG") else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
 def main():  # pragma: no cover
+    _setup_logging()
     if sys.platform == "darwin":
         _fix_macos_app_name()
 

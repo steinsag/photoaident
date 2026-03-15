@@ -152,9 +152,9 @@ def test_indexing_task_success(
         assert meta is not None
         assert meta.width == 100
         assert meta.height == 100
-        assert meta.taken_at is not None
-        # PIL-created fixture images have no EXIF datetime → falls back to filesystem
-        assert meta.taken_at_source == TakenAtSource.FILESYSTEM
+        # PIL-created fixture images have no EXIF and no filepath pattern → no date
+        assert meta.taken_at is None
+        assert meta.taken_at_source is None
 
 
 def test_indexing_task_cancel_method(session_factory, vector_store, tmp_app_paths):
@@ -305,8 +305,9 @@ def test_indexing_task_metadata_populated(
     assert meta is not None
     assert meta.width == 320
     assert meta.height == 240
-    assert meta.taken_at is not None
-    assert meta.taken_at_source == TakenAtSource.FILESYSTEM
+    # No EXIF and no filepath pattern → no date
+    assert meta.taken_at is None
+    assert meta.taken_at_source is None
 
 
 def test_indexing_task_no_thumbnail_during_indexing(
@@ -553,3 +554,42 @@ def test_exif_orientation_invalid_falls_back_to_1(
         ).scalar_one_or_none()
     assert meta is not None
     assert meta.orientation == 1
+
+
+def test_filepath_date_extracted_when_no_exif(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """taken_at_source == FILEPATH when EXIF is absent but path matches the pattern."""
+    # Place image in a dated subdirectory that the pattern will match
+    dated_dir = tmp_path / "2023-07-14"
+    dated_dir.mkdir()
+    img_file = dated_dir / "photo.jpg"
+    PILImage.new("RGB", (50, 50)).save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    task = IndexingTask(
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+        ctx_id=-1,
+        filepath_date_pattern="{YYYY}-{MM}-{DD}",
+    )
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+    # No EXIF tags → filepath pattern should be used
+    with patch("photoaident.core.indexing.exifread.process_file", return_value={}):
+        task.run()
+
+    with Session(db_engine) as session:
+        meta = session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
+    assert meta is not None
+    assert meta.taken_at_source == TakenAtSource.FILEPATH
+    assert meta.taken_at == datetime(2023, 7, 14)

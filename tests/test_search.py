@@ -282,7 +282,7 @@ def test_search_images_person_and_gps_intersection(search_db, vector_store, tmp_
                 image_id=img1_id,
                 gps_lat=50.0,
                 gps_lon=10.0,
-                taken_at_source=TakenAtSource.FILESYSTEM,
+                taken_at_source=TakenAtSource.EXIF,
                 width=100,
                 height=100,
             )
@@ -298,7 +298,7 @@ def test_search_images_person_and_gps_intersection(search_db, vector_store, tmp_
                 image_id=img2_id,
                 gps_lat=20.0,
                 gps_lon=20.0,
-                taken_at_source=TakenAtSource.FILESYSTEM,
+                taken_at_source=TakenAtSource.EXIF,
                 width=100,
                 height=100,
             )
@@ -337,7 +337,7 @@ def test_date_and_person_intersection(search_db, vector_store, tmp_path):
             ImageMetadata(
                 image_id=img1_id,
                 taken_at=datetime(2021, 5, 1),
-                taken_at_source=TakenAtSource.FILESYSTEM,
+                taken_at_source=TakenAtSource.EXIF,
                 width=100,
                 height=100,
             )
@@ -352,7 +352,7 @@ def test_date_and_person_intersection(search_db, vector_store, tmp_path):
             ImageMetadata(
                 image_id=img2_id,
                 taken_at=datetime(2018, 1, 1),
-                taken_at_source=TakenAtSource.FILESYSTEM,
+                taken_at_source=TakenAtSource.EXIF,
                 width=100,
                 height=100,
             )
@@ -441,7 +441,7 @@ def test_all_three_filters_combined(search_db, vector_store, tmp_path):
                 taken_at=datetime(2021, 6, 1),
                 gps_lat=52.0,
                 gps_lon=13.0,
-                taken_at_source=TakenAtSource.FILESYSTEM,
+                taken_at_source=TakenAtSource.EXIF,
                 width=100,
                 height=100,
             )
@@ -458,7 +458,7 @@ def test_all_three_filters_combined(search_db, vector_store, tmp_path):
                 taken_at=datetime(2015, 1, 1),
                 gps_lat=52.0,
                 gps_lon=13.0,
-                taken_at_source=TakenAtSource.FILESYSTEM,
+                taken_at_source=TakenAtSource.EXIF,
                 width=100,
                 height=100,
             )

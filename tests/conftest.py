@@ -99,7 +99,7 @@ def sample_image_with_metadata(tmp_path):
         height=800,
         camera_make="TestCamera",
         camera_model="Model X",
-        taken_at_source=TakenAtSource.FILESYSTEM,
+        taken_at_source=TakenAtSource.EXIF,
     )
     db_image.faces = [
         Face(

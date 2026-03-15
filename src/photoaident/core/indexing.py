@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -11,6 +12,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import sessionmaker
 
 from photoaident.core.embeddings import FaceEmbedder
+from photoaident.core.filepath_date import compile_pattern, extract_date_from_path
 from photoaident.db.database import Image, Face, FaceState, ImageMetadata, TakenAtSource
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
@@ -49,6 +51,7 @@ class IndexingTask(QtCore.QObject):
         vector_store: VectorStore,
         paths: AppPaths,
         ctx_id: int = 0,
+        filepath_date_pattern: str = "",
     ):
         super().__init__()
         self.session_factory = session_factory
@@ -57,6 +60,9 @@ class IndexingTask(QtCore.QObject):
         self.ctx_id = ctx_id
         self._is_cancelled = False
         self._embedder: Optional[FaceEmbedder] = None
+        self._compiled_pattern: re.Pattern[str] | None = (
+            compile_pattern(filepath_date_pattern) if filepath_date_pattern else None
+        )
 
     def cancel(self):
         self._is_cancelled = True
@@ -73,8 +79,16 @@ class IndexingTask(QtCore.QObject):
                 sha256.update(chunk)
         return sha256.hexdigest()
 
-    def _get_taken_at(self, tags: dict, path: Path) -> tuple[datetime, TakenAtSource]:
-        """Determine when the image was taken, falling back to filesystem mtime."""
+    def _get_taken_at(
+        self, tags: dict, path: Path
+    ) -> tuple[datetime | None, TakenAtSource | None]:
+        """Determine when the image was taken.
+
+        Fallback chain:
+        1. EXIF tags (DateTimeOriginal / DateTimeDigitized / DateTime)
+        2. Filepath pattern match (only when a pattern is configured)
+        3. ``(None, None)`` — no reliable date available
+        """
         for tag_key in (
             "EXIF DateTimeOriginal",
             "EXIF DateTimeDigitized",
@@ -89,8 +103,17 @@ class IndexingTask(QtCore.QObject):
                 except ValueError:
                     continue
 
-        taken_at = datetime.fromtimestamp(path.stat().st_mtime)
-        return taken_at, TakenAtSource.FILESYSTEM
+        if self._compiled_pattern is not None:
+            extracted = extract_date_from_path(path, self._compiled_pattern)
+            if extracted is not None:
+                taken_at = datetime(extracted.year, extracted.month, extracted.day)
+                logger.debug("Filepath date extracted from %s: %s", path, extracted)
+                return taken_at, TakenAtSource.FILEPATH
+            logger.debug("Filepath date pattern did not match: %s", path)
+        else:
+            logger.debug("No filepath date pattern configured; skipping for %s", path)
+
+        return None, None
 
     def _get_gps_info(
         self, tags: dict

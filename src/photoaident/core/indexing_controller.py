@@ -33,12 +33,14 @@ class IndexingController(QtCore.QObject):
         session_factory: sessionmaker,
         vector_store: VectorStore,
         paths: "AppPaths",
+        filepath_date_pattern: str = "",
         parent: QtCore.QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._session_factory = session_factory
         self._vector_store = vector_store
         self._paths = paths
+        self._filepath_date_pattern = filepath_date_pattern
 
         self._inventory_task: InventoryTask | None = None
         self._inventory_thread: QtCore.QThread | None = None
@@ -161,7 +163,10 @@ class IndexingController(QtCore.QObject):
 
     def _start_indexing(self) -> None:
         self._indexing_task = IndexingTask(
-            self._session_factory, self._vector_store, self._paths
+            self._session_factory,
+            self._vector_store,
+            self._paths,
+            filepath_date_pattern=self._filepath_date_pattern,
         )
         self._indexing_thread = QtCore.QThread()
         self._indexing_task.moveToThread(self._indexing_thread)
