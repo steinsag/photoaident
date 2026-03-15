@@ -23,7 +23,6 @@ from photoaident.ui.widgets.thumbnail_grid import (
     ThumbnailWidget,
     _get_scaled_size,
     _has_unidentified_faces,
-    _icon_path,
     _read_pixmap,
 )
 
@@ -564,22 +563,6 @@ def test_scroll_triggers_load_more(
     grid._on_scroll_changed(grid.scroll_area.verticalScrollBar().maximum())
 
     assert grid._loaded_count == initial_count + PAGE_SIZE
-
-
-# --- _icon_path tests ---
-
-
-def test_icon_path_dev():
-    """In dev mode (no _MEIPASS) the path points to assets/icons/."""
-    path = _icon_path("test.svg")
-    assert Path(path).parts[-3:] == ("assets", "icons", "test.svg")
-
-
-def test_icon_path_bundle(tmp_path):
-    """In a PyInstaller bundle (_MEIPASS set) the path is relative to _MEIPASS."""
-    with patch("sys._MEIPASS", str(tmp_path), create=True):
-        path = _icon_path("view.svg")
-    assert path == str(tmp_path / "assets" / "icons" / "view.svg")
 
 
 # --- _has_unidentified_faces tests ---

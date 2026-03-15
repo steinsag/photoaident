@@ -1,5 +1,4 @@
 import builtins
-import os
 import sys
 import threading
 from pathlib import Path
@@ -10,7 +9,7 @@ import pytest
 from PySide6 import QtGui, QtWidgets
 
 import photoaident.app as app_module
-from photoaident.app import MainWindow, get_resource_path, load_translations
+from photoaident.app import MainWindow, load_translations
 from photoaident.core.gpu_checker import GpuChecker
 from photoaident.db.database import Face, Image
 from photoaident.db.migrate import apply_migrations
@@ -241,18 +240,6 @@ def test_onboarding_accepted_saves_settings_and_starts_scan(
     # Settings must be persisted to disk
     loaded = Settings.load(window._paths.config_file)
     assert loaded.collection_path == str(collection_dir)
-
-
-# ---------------------------------------------------------------------------
-# get_resource_path — PyInstaller bundle branch (line 34)
-# ---------------------------------------------------------------------------
-
-
-def test_get_resource_path_pyinstaller_bundle(monkeypatch):
-    """Uses _MEIPASS as base when running from a PyInstaller bundle."""
-    monkeypatch.setattr(sys, "_MEIPASS", "/bundle_root", raising=False)
-    result = get_resource_path("assets/icon.png")
-    assert result == os.path.join("/bundle_root", "assets/icon.png")
 
 
 # ---------------------------------------------------------------------------

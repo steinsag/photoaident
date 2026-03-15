@@ -1,13 +1,13 @@
 import logging
-import math
 from pathlib import Path
 from typing import Optional
 
-from PySide6 import QtCore, QtWidgets, QtQuickWidgets
+from PySide6 import QtCore, QtGui, QtWidgets, QtQuickWidgets
 
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.paths import AppPaths
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
+from photoaident.utils.resource_path import icon_path as _icon_path
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +40,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         self._setup_instruction_label(layout)
         self._setup_map_widget(layout, initial_bbox)
+        self._setup_zoom_buttons(layout)
         self._setup_button_box(layout)
 
     def _setup_instruction_label(self, layout: QtWidgets.QVBoxLayout) -> None:
@@ -71,6 +72,17 @@ class MapLocationDialog(QtWidgets.QDialog):
         # Store for use by the status handler (may fire after setSource returns).
         self._pending_initial_bbox = initial_bbox
 
+        # Create the tiles directory before QML initialises the OSM plugin so
+        # the network disk-cache path is valid from the very first tile fetch.
+        self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
+
+        # Inject cachePath before setSource so the Plugin sees a valid directory
+        # during its one-time initialisation (PluginParameter bindings are not
+        # reactive after the plugin is already resolved).
+        self._quick_widget.setInitialProperties(
+            {"cachePath": str(self._paths.tiles_dir)}
+        )
+
         # Connect before setSource so we catch both synchronous and asynchronous
         # status transitions (Loading → Ready / Error).
         self._quick_widget.statusChanged.connect(self._on_qml_status_changed)
@@ -89,36 +101,71 @@ class MapLocationDialog(QtWidgets.QDialog):
                 logger.error("QML error: %s", err)
         elif status == QtQuickWidgets.QQuickWidget.Status.Ready:
             root_obj = self._quick_widget.rootObject()
-            if root_obj:
-                # Create the directory before QML tries to write to it.
-                self._paths.tiles_dir.mkdir(parents=True, exist_ok=True)
-                root_obj.setProperty("cachePath", str(self._paths.tiles_dir))
-                if self._pending_initial_bbox:
-                    self._apply_initial_bbox(root_obj, self._pending_initial_bbox)
+            if root_obj and self._pending_initial_bbox:
+                self._apply_initial_bbox(root_obj, self._pending_initial_bbox)
 
     @staticmethod
     def _apply_initial_bbox(root_obj: object, initial_bbox: GpsBoundingBox) -> None:
-        """Set the initial map center and zoom level from a bounding box."""
-        center_lat = (initial_bbox.south + initial_bbox.north) / 2
-        lat_span = initial_bbox.north - initial_bbox.south
-        crosses_antimeridian = initial_bbox.east < initial_bbox.west
-        if crosses_antimeridian:
-            lon_span = 360.0 - (initial_bbox.west - initial_bbox.east)
-            raw_center = initial_bbox.west + lon_span / 2
-            center_lon = raw_center - 360.0 if raw_center > 180.0 else raw_center
-        else:
-            lon_span = initial_bbox.east - initial_bbox.west
-            center_lon = (initial_bbox.west + initial_bbox.east) / 2
-        span = max(lat_span, lon_span)
-        if span > 0:
-            # Derive zoom so that the 70% selection rect covers the bbox.
-            # At zoom z the selection rect spans ~252/2^z degrees.
-            zoom = int(max(2, min(15, round(math.log2(252.0 / span)))))
-        else:
-            zoom = 14
-        root_obj.setProperty("initialLat", center_lat)  # type: ignore[attr-defined]
-        root_obj.setProperty("initialLon", center_lon)  # type: ignore[attr-defined]
-        root_obj.setProperty("initialZoom", zoom)  # type: ignore[attr-defined]
+        """Seed the QML map with an initial bounding box.
+
+        Two things happen here:
+
+        1. The extraction properties (``south``/``west``/``north``/``east``) are
+           pre-populated directly so that ``_extract_bbox`` always returns the
+           correct value even when the user clicks OK before the map widget has
+           been laid out and ``updateBbox()`` has had a chance to run.
+
+        2. The pending-bbox properties are set and ``pendingBbox`` is flipped to
+           ``true``.  QML's ``onPendingBboxChanged`` handler picks this up and
+           calls ``_applyPendingBboxIfReady``, which positions the map view to
+           show the bbox (deferred until the widget has non-zero dimensions).
+
+        All communication uses ``setProperty`` — a reliable C++ API — instead of
+        calling QML JavaScript functions across the Python/QML boundary, which can
+        fail silently when PySide6 cannot resolve the method signature.
+        """
+        for name, value in (
+            ("south", initial_bbox.south),
+            ("west", initial_bbox.west),
+            ("north", initial_bbox.north),
+            ("east", initial_bbox.east),
+            ("pendingBboxSouth", initial_bbox.south),
+            ("pendingBboxWest", initial_bbox.west),
+            ("pendingBboxNorth", initial_bbox.north),
+            ("pendingBboxEast", initial_bbox.east),
+        ):
+            root_obj.setProperty(name, value)  # type: ignore[attr-defined]
+        # Setting pendingBbox last triggers onPendingBboxChanged in QML.
+        root_obj.setProperty("pendingBbox", True)  # type: ignore[attr-defined]
+
+    def _setup_zoom_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
+        zoom_layout = QtWidgets.QHBoxLayout()
+        zoom_layout.addStretch()
+
+        self._zoom_out_btn = QtWidgets.QPushButton(self.tr("Zoom out"))
+        self._zoom_out_btn.setIcon(QtGui.QIcon(_icon_path("zoom-out.svg")))
+        self._zoom_out_btn.clicked.connect(self._on_zoom_out)
+        zoom_layout.addWidget(self._zoom_out_btn)
+
+        self._zoom_in_btn = QtWidgets.QPushButton(self.tr("Zoom in"))
+        self._zoom_in_btn.setIcon(QtGui.QIcon(_icon_path("zoom-in.svg")))
+        self._zoom_in_btn.clicked.connect(self._on_zoom_in)
+        zoom_layout.addWidget(self._zoom_in_btn)
+
+        zoom_layout.addStretch()
+        layout.addLayout(zoom_layout)
+
+    def _on_zoom_in(self) -> None:
+        root_obj = self._quick_widget.rootObject()
+        if root_obj:
+            # Trigger zoom via a QML property instead of calling JS functions directly
+            root_obj.setProperty("pendingZoomDelta", 1)
+
+    def _on_zoom_out(self) -> None:
+        root_obj = self._quick_widget.rootObject()
+        if root_obj:
+            # Trigger zoom via a QML property instead of calling JS functions directly
+            root_obj.setProperty("pendingZoomDelta", -1)
 
     def _setup_button_box(self, layout: QtWidgets.QVBoxLayout) -> None:
         self._button_box = QtWidgets.QDialogButtonBox(
