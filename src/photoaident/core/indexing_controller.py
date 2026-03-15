@@ -52,6 +52,16 @@ class IndexingController(QtCore.QObject):
         """True if any task (inventory or indexing) is currently running."""
         return self._inventory_task is not None or self._indexing_task is not None
 
+    @property
+    def filepath_date_pattern(self) -> str:
+        """Current filepath date pattern used by new indexing tasks."""
+        return self._filepath_date_pattern
+
+    @filepath_date_pattern.setter
+    def filepath_date_pattern(self, pattern: str) -> None:
+        """Update the pattern used by subsequent indexing tasks."""
+        self._filepath_date_pattern = pattern
+
     def start_pipeline(self, collection_path: str) -> None:
         """Run a silent inventory scan followed by indexing.
 

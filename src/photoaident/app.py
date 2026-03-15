@@ -398,6 +398,13 @@ class MainWindow(QtWidgets.QMainWindow):
             # Always persist filepath date settings immediately.
             self._settings.filepath_date_enabled = dialog.is_filepath_date_enabled()
             self._settings.filepath_date_pattern = dialog.get_filepath_date_pattern()
+            # Propagate the updated pattern to the controller so the next
+            # indexing run in this session uses the current settings.
+            self._indexing_controller.filepath_date_pattern = (
+                self._settings.filepath_date_pattern
+                if self._settings.filepath_date_enabled
+                else ""
+            )
 
             if new_path != old_path:
                 # Ask for confirmation
