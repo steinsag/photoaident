@@ -60,9 +60,15 @@ class IndexingTask(QtCore.QObject):
         self.ctx_id = ctx_id
         self._is_cancelled = False
         self._embedder: Optional[FaceEmbedder] = None
-        self._compiled_pattern: re.Pattern[str] | None = (
-            compile_pattern(filepath_date_pattern) if filepath_date_pattern else None
-        )
+        self._compiled_pattern: re.Pattern[str] | None = None
+        if filepath_date_pattern:
+            try:
+                self._compiled_pattern = compile_pattern(filepath_date_pattern)
+            except ValueError:
+                logger.warning(
+                    "Invalid filepath_date_pattern %r; path date extraction disabled",
+                    filepath_date_pattern,
+                )
 
     def cancel(self):
         self._is_cancelled = True

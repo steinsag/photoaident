@@ -593,3 +593,17 @@ def test_filepath_date_extracted_when_no_exif(
     assert meta is not None
     assert meta.taken_at_source == TakenAtSource.FILEPATH
     assert meta.taken_at == datetime(2023, 7, 14)
+
+
+def test_indexing_task_invalid_filepath_date_pattern_does_not_raise(
+    session_factory, vector_store, tmp_app_paths
+):
+    """IndexingTask.__init__ must not raise when given an invalid pattern."""
+    task = IndexingTask(
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+        ctx_id=-1,
+        filepath_date_pattern="no-placeholders-here",
+    )
+    assert task._compiled_pattern is None
