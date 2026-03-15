@@ -1,5 +1,6 @@
 import logging
 import tomllib
+import tomli_w
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -64,12 +65,13 @@ class Settings:
     def save(self, path: Path) -> None:
         """Save settings to a TOML file."""
         try:
-            with open(path, "w") as f:
-                f.write(f'collection_path = "{self.collection_path}"\n')
-                f.write(
-                    f"filepath_date_enabled = "
-                    f"{'true' if self.filepath_date_enabled else 'false'}\n"
-                )
-                f.write(f'filepath_date_pattern = "{self.filepath_date_pattern}"\n')
+            data = {
+                "collection_path": self.collection_path,
+                "filepath_date_enabled": self.filepath_date_enabled,
+                "filepath_date_pattern": self.filepath_date_pattern,
+            }
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "wb") as f:
+                tomli_w.dump(data, f)
         except Exception:
             logger.error("Failed to save settings to %s", path, exc_info=True)
