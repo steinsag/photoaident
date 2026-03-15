@@ -488,6 +488,12 @@ def test_show_preferences_saves_settings_when_path_unchanged(
         def get_collection_path(self) -> str:
             return str(collection_dir)  # same as old path
 
+        def is_filepath_date_enabled(self) -> bool:
+            return False
+
+        def get_filepath_date_pattern(self) -> str:
+            return ""
+
     monkeypatch.setattr(app_module, "PreferencesDialog", FakePreferencesDialog)
 
     window._show_preferences()

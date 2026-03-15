@@ -206,8 +206,17 @@ class MainWindow(QtWidgets.QMainWindow):
             self._gpu_checker.start()
 
         # Indexing controller
+        filepath_pattern = (
+            self._settings.filepath_date_pattern
+            if self._settings.filepath_date_enabled
+            else ""
+        )
         self._indexing_controller = IndexingController(
-            self._session_factory, self._vector_store, self._paths, parent=self
+            self._session_factory,
+            self._vector_store,
+            self._paths,
+            filepath_date_pattern=filepath_pattern,
+            parent=self,
         )
         self._indexing_controller.inventory_progress.connect(
             self._on_inventory_progress
@@ -376,9 +385,27 @@ class MainWindow(QtWidgets.QMainWindow):
         image_count, face_count = get_counts(self._session_factory)
         old_path = self._settings.collection_path
 
-        dialog = PreferencesDialog(old_path, image_count, face_count, self)
+        dialog = PreferencesDialog(
+            old_path,
+            image_count,
+            face_count,
+            filepath_date_enabled=self._settings.filepath_date_enabled,
+            filepath_date_pattern=self._settings.filepath_date_pattern,
+            parent=self,
+        )
         if dialog.exec() == QtWidgets.QDialog.DialogCode.Accepted:
             new_path = dialog.get_collection_path()
+            # Always persist filepath date settings immediately.
+            self._settings.filepath_date_enabled = dialog.is_filepath_date_enabled()
+            self._settings.filepath_date_pattern = dialog.get_filepath_date_pattern()
+            # Propagate the updated pattern to the controller so the next
+            # indexing run in this session uses the current settings.
+            self._indexing_controller.filepath_date_pattern = (
+                self._settings.filepath_date_pattern
+                if self._settings.filepath_date_enabled
+                else ""
+            )
+
             if new_path != old_path:
                 # Ask for confirmation
                 msg = self.tr(
@@ -416,9 +443,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
                     # Start inventory scan
                     self._run_inventory_scan(new_path)
+                else:
+                    self._settings.save(self._paths.config_file)
             else:
-                # Path didn't change, just save settings
-                # (in case other settings added later)
                 self._settings.save(self._paths.config_file)
 
     def _run_inventory_scan(self, path: str) -> None:

@@ -33,12 +33,14 @@ class IndexingController(QtCore.QObject):
         session_factory: sessionmaker,
         vector_store: VectorStore,
         paths: "AppPaths",
+        filepath_date_pattern: str = "",
         parent: QtCore.QObject | None = None,
     ) -> None:
         super().__init__(parent)
         self._session_factory = session_factory
         self._vector_store = vector_store
         self._paths = paths
+        self._filepath_date_pattern = filepath_date_pattern
 
         self._inventory_task: InventoryTask | None = None
         self._inventory_thread: QtCore.QThread | None = None
@@ -49,6 +51,16 @@ class IndexingController(QtCore.QObject):
     def is_busy(self) -> bool:
         """True if any task (inventory or indexing) is currently running."""
         return self._inventory_task is not None or self._indexing_task is not None
+
+    @property
+    def filepath_date_pattern(self) -> str:
+        """Current filepath date pattern used by new indexing tasks."""
+        return self._filepath_date_pattern
+
+    @filepath_date_pattern.setter
+    def filepath_date_pattern(self, pattern: str) -> None:
+        """Update the pattern used by subsequent indexing tasks."""
+        self._filepath_date_pattern = pattern
 
     def start_pipeline(self, collection_path: str) -> None:
         """Run a silent inventory scan followed by indexing.
@@ -161,7 +173,10 @@ class IndexingController(QtCore.QObject):
 
     def _start_indexing(self) -> None:
         self._indexing_task = IndexingTask(
-            self._session_factory, self._vector_store, self._paths
+            self._session_factory,
+            self._vector_store,
+            self._paths,
+            filepath_date_pattern=self._filepath_date_pattern,
         )
         self._indexing_thread = QtCore.QThread()
         self._indexing_task.moveToThread(self._indexing_thread)

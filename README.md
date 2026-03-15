@@ -17,35 +17,47 @@ No cloud, no external API calls, no data leaves the machine.
 
 ## Initial setup
 
-This project uses package manager [uv](https://github.com/astral-sh/uv) to manage dependencies.
-Run the following to install all dependencies:
+This project uses package manager [uv](https://github.com/astral-sh/uv) to manage
+dependencies. Because the ONNX Runtime packages conflict with each other, you must
+choose exactly **one** of the three runtime groups below. No group is installed by
+default — the app will not start until one is selected.
 
-    uv sync --python 3.12
+The Python version (3.12) is pinned in `.python-version` and picked up automatically
+by uv — no `--python` flag needed.
+
+### NVIDIA GPU (CUDA)
+
+```bash
+uv sync --group cuda
+```
+
+### CPU / Apple Silicon (CoreML)
+
+```bash
+uv sync --group cpu_coreml
+```
+
+### Intel CPU / iGPU / NPU (OpenVINO)
+
+For Intel hardware including the N100 and other Alder/Raptor Lake processors:
+
+```bash
+uv sync --group openvino
+```
+
+> **Note:** only install one runtime group. The packages conflict — installing more
+> than one at the same time will cause import errors.
 
 ## Hardware acceleration
 
 PhotoAIdent automatically uses the best available execution provider in this priority order:
 
-1. **CUDA** (NVIDIA GPU) — installed by default on Linux via the `cuda` group
-2. **CoreML** (Apple Silicon / macOS) — included in the base `onnxruntime` package
-3. **OpenVINO** (Intel CPU/iGPU/NPU) — optional, see below
-4. **CPU** — always available as fallback
+1. **CUDA** (`onnxruntime-gpu`) — NVIDIA GPU
+2. **CoreML** (`onnxruntime`) — Apple Silicon / macOS
+3. **OpenVINO** (`onnxruntime-openvino`) — Intel CPU / iGPU / NPU (x86_64 only)
+4. **CPU** — always available as fallback within any of the above packages
 
-`uv sync` installs the `cuda` group by default on Linux, so NVIDIA users need no
-extra steps. The status bar at the bottom of the window confirms which provider is active.
-
-### Intel CPU / iGPU / NPU (OpenVINO)
-
-Users with Intel hardware (including the Intel N100 and other Alder/Raptor Lake
-processors with integrated NPU) should exclude the default `cuda` group and install
-`openvino` instead — the two packages conflict:
-
-```bash
-uv sync --no-group cuda --group openvino
-```
-
-> **Note:** avoid running a plain `uv sync` afterwards, as it will reinstall the
-> `cuda` group and override the OpenVINO setup.
+The status bar at the bottom of the window confirms which provider is active.
 
 ## Running the app
 

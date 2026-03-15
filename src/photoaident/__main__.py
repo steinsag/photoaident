@@ -1,4 +1,8 @@
-import sys  # pragma: no cover
+import logging  # pragma: no cover
+import os
+import platform
+import sys
+from pathlib import Path
 
 from PySide6 import QtWidgets  # pragma: no cover
 
@@ -8,6 +12,46 @@ from photoaident.paths import AppPaths  # pragma: no cover
 from photoaident.utils.instance_lock import InstanceLock  # pragma: no cover
 
 APP_NAME = "PhotoAIdent"  # pragma: no cover
+
+
+def ensure_nvidia_paths() -> None:
+    """Prepend NVIDIA library paths to LD_LIBRARY_PATH and re-exec if needed.
+
+    CUDA/cuDNN libs live under site-packages/nvidia/; the dynamic linker must
+    see them before the process starts loading ONNX Runtime.
+    """
+    if platform.system() != "Linux" or os.environ.get("ORT_PATHS_SET") == "1":
+        return
+
+    import site
+
+    try:
+        site_pkgs = Path(site.getsitepackages()[0])
+    except IndexError:
+        return
+
+    nvidia_root = site_pkgs / "nvidia"
+    if not nvidia_root.exists():
+        return
+
+    # Collect root itself (e.g. tensorrt_libs) and any 'lib' subdirs (e.g. cudnn/lib)
+    candidates: list[str] = []
+    if any(nvidia_root.glob("*.so*")):
+        candidates.append(str(nvidia_root.resolve()))
+    candidates.extend(str(d.resolve()) for d in nvidia_root.rglob("lib") if d.is_dir())
+
+    if not candidates:
+        return
+
+    unique_paths = list(dict.fromkeys(candidates))
+    current_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    os.environ["LD_LIBRARY_PATH"] = ":".join(unique_paths) + (
+        f":{current_ld}" if current_ld else ""
+    )
+    os.environ["ORT_PATHS_SET"] = "1"
+
+    # Re-execute so the dynamic linker picks up the new paths
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 def _fix_macos_app_name() -> None:  # pragma: no cover
@@ -69,7 +113,18 @@ def _fix_macos_app_name() -> None:  # pragma: no cover
         pass  # Non-fatal — silently skip on unexpected environments
 
 
+def _setup_logging() -> None:  # pragma: no cover
+    level = logging.DEBUG if os.environ.get("PHOTOAIDENT_DEBUG") else logging.WARNING
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+
 def main():  # pragma: no cover
+    _setup_logging()
+    ensure_nvidia_paths()
     if sys.platform == "darwin":
         _fix_macos_app_name()
 

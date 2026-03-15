@@ -153,7 +153,7 @@ def _add_image_with_metadata(
             taken_at=taken_at,
             gps_lat=gps_lat,
             gps_lon=gps_lon,
-            taken_at_source=TakenAtSource.FILESYSTEM,
+            taken_at_source=TakenAtSource.EXIF,
             width=100,
             height=100,
         )

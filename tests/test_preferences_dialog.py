@@ -1,6 +1,9 @@
+from unittest.mock import MagicMock
+
 from PySide6 import QtCore, QtWidgets
 
 from photoaident.app import MainWindow
+from photoaident.core.filepath_date import PatternErrorCode
 from photoaident.db.migrate import apply_migrations
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
@@ -59,21 +62,19 @@ def test_preferences_save_settings(qtbot, tmp_app_paths, monkeypatch):
         self.path_edit.setText("/mock/saved/path")
         return QtWidgets.QDialog.DialogCode.Accepted
 
-    # Mock ProgressDialog.exec to avoid modal blocking in tests
-    def mock_progress_exec(self):
-        # We don't actually want to run the thread in this test,
-        # but let's just make it return immediately.
-        return QtWidgets.QDialog.DialogCode.Accepted
-
-    # Mock QMessageBox.question to simulate Yes
-    def mock_question(*args, **kwargs):
-        return QtWidgets.QMessageBox.StandardButton.Yes
-
     monkeypatch.setattr(PreferencesDialog, "exec", mock_exec)
     from photoaident.ui.widgets.progress_dialog import ProgressDialog
 
-    monkeypatch.setattr(ProgressDialog, "exec", mock_progress_exec)
-    monkeypatch.setattr(QtWidgets.QMessageBox, "question", mock_question)
+    monkeypatch.setattr(
+        ProgressDialog,
+        "exec",
+        lambda *_: QtWidgets.QDialog.DialogCode.Accepted,
+    )
+    monkeypatch.setattr(
+        QtWidgets.QMessageBox,
+        "question",
+        lambda *_: QtWidgets.QMessageBox.StandardButton.Yes,
+    )
 
     # Show preferences (this calls dialog.exec() and then saves if Accepted)
     window._show_preferences()
@@ -146,3 +147,114 @@ def test_preferences_cancel_not_saved(qtbot, tmp_app_paths, monkeypatch):
     # Verify settings on disk NOT updated
     loaded_settings = Settings.load(tmp_app_paths.config_file)
     assert loaded_settings.collection_path == initial_path
+
+
+# ===========================================================================
+# _translate_pattern_error
+# ===========================================================================
+
+
+def test_translate_pattern_error_empty(qtbot):
+    """EMPTY code maps to the 'must not be empty' translated string."""
+    dialog = PreferencesDialog("/path", 0, 0)
+    qtbot.add_widget(dialog)
+    assert dialog._translate_pattern_error(PatternErrorCode.EMPTY) == dialog.tr(
+        "Pattern must not be empty."
+    )
+
+
+def test_translate_pattern_error_year_missing(qtbot):
+    """YEAR_MISSING code maps to the missing-year translated string."""
+    dialog = PreferencesDialog("/path", 0, 0)
+    qtbot.add_widget(dialog)
+    assert dialog._translate_pattern_error(PatternErrorCode.YEAR_MISSING) == dialog.tr(
+        "Pattern must contain exactly one {YYYY} placeholder."
+    )
+
+
+def test_translate_pattern_error_covers_all_codes(qtbot):
+    """_translate_pattern_error returns a non-empty string for every error code."""
+    dialog = PreferencesDialog("/path", 0, 0)
+    qtbot.add_widget(dialog)
+    for code in PatternErrorCode:
+        msg = dialog._translate_pattern_error(code)
+        assert isinstance(msg, str) and msg
+
+
+# ===========================================================================
+# accept
+# ===========================================================================
+
+
+def test_accept_blocks_when_checkbox_checked_and_pattern_invalid(qtbot, monkeypatch):
+    """accept() does not close the dialog when pattern is invalid."""
+    dialog = PreferencesDialog(
+        "/path", 0, 0, filepath_date_enabled=True, filepath_date_pattern=""
+    )
+    qtbot.add_widget(dialog)
+
+    mock_warning = MagicMock()
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", mock_warning)
+    dialog.accept()
+
+    mock_warning.assert_called_once()
+    assert dialog.result() != QtWidgets.QDialog.DialogCode.Accepted
+
+
+def test_accept_shows_warning_with_error_message_when_invalid(qtbot, monkeypatch):
+    """accept() passes the validation error text to QMessageBox.warning."""
+    dialog = PreferencesDialog(
+        "/path", 0, 0, filepath_date_enabled=True, filepath_date_pattern="{MM}-{DD}"
+    )
+    qtbot.add_widget(dialog)
+
+    mock_warning = MagicMock()
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", mock_warning)
+    dialog.accept()
+
+    call_args = mock_warning.call_args[0]
+    assert (
+        dialog.tr("Pattern must contain exactly one {YYYY} placeholder.") in call_args
+    )
+
+
+def test_accept_succeeds_when_checkbox_checked_and_pattern_valid(qtbot):
+    """accept() closes the dialog when the checkbox is checked and pattern is valid."""
+    dialog = PreferencesDialog(
+        "/path",
+        0,
+        0,
+        filepath_date_enabled=True,
+        filepath_date_pattern="{YYYY}-{MM}-{DD}",
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.accept()
+
+    assert dialog.result() == QtWidgets.QDialog.DialogCode.Accepted
+
+
+def test_accept_succeeds_when_checkbox_unchecked_regardless_of_pattern(qtbot):
+    """accept() closes the dialog when unchecked even if pattern is empty."""
+    dialog = PreferencesDialog(
+        "/path", 0, 0, filepath_date_enabled=False, filepath_date_pattern=""
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.accept()
+
+    assert dialog.result() == QtWidgets.QDialog.DialogCode.Accepted
+
+
+def test_accept_unchecked_does_not_show_warning(qtbot, monkeypatch):
+    """accept() never calls QMessageBox.warning when the checkbox is unchecked."""
+    dialog = PreferencesDialog(
+        "/path", 0, 0, filepath_date_enabled=False, filepath_date_pattern=""
+    )
+    qtbot.add_widget(dialog)
+
+    mock_warning = MagicMock()
+    monkeypatch.setattr(QtWidgets.QMessageBox, "warning", mock_warning)
+    dialog.accept()
+
+    mock_warning.assert_not_called()

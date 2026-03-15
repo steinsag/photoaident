@@ -34,7 +34,7 @@ class Base(DeclarativeBase):
 
 class TakenAtSource(PyEnum):
     EXIF = "exif"
-    FILESYSTEM = "filesystem"
+    FILEPATH = "filepath"
     MANUAL = "manual"
 
 
@@ -113,9 +113,9 @@ class ImageMetadata(Base):
         ForeignKey(_FK_IMAGES), unique=True, nullable=False
     )
     taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
-    taken_at_source: Mapped[TakenAtSource] = mapped_column(
+    taken_at_source: Mapped[Optional[TakenAtSource]] = mapped_column(
         Enum(TakenAtSource, values_callable=lambda x: [e.value for e in x]),
-        nullable=False,
+        nullable=True,
     )
     camera_make: Mapped[Optional[str]] = mapped_column(String)
     camera_model: Mapped[Optional[str]] = mapped_column(String)

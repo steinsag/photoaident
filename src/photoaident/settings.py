@@ -1,5 +1,6 @@
 import logging
 import tomllib
+import tomli_w
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,12 +12,16 @@ class Settings:
     """Application settings for PhotoAIdent."""
 
     collection_path: str = ""
+    filepath_date_enabled: bool = False
+    filepath_date_pattern: str = ""
 
     @classmethod
     def load(cls, path: Path) -> "Settings":
         """Load settings from a TOML file.
 
         If the file doesn't exist, returns default settings.
+        Invalid filepath date patterns are treated as disabled to guard
+        against manual file tampering.
         """
         if not path.exists():
             return cls()
@@ -25,19 +30,55 @@ class Settings:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
 
-            # For simplicity, just get known keys
-            return cls(collection_path=data.get("collection_path", ""))
+            raw_enabled = data.get("filepath_date_enabled", False)
+            if not isinstance(raw_enabled, bool):
+                logger.warning(
+                    "filepath_date_enabled must be a boolean, got %r; disabling.",
+                    raw_enabled,
+                )
+                raw_enabled = False
+            raw_pattern = data.get("filepath_date_pattern", "")
+            if not isinstance(raw_pattern, str):
+                logger.warning(
+                    "filepath_date_pattern must be a string, got %r; disabling.",
+                    raw_pattern,
+                )
+                raw_pattern = ""
+            pattern = raw_pattern
+            enabled = raw_enabled and bool(pattern)
+
+            if enabled:
+                from photoaident.core.filepath_date import compile_pattern
+
+                try:
+                    compile_pattern(pattern)
+                except ValueError:
+                    logger.warning(
+                        "Invalid filepath_date_pattern %r in settings; "
+                        "disabling filepath date extraction.",
+                        pattern,
+                    )
+                    enabled = False
+
+            return cls(
+                collection_path=data.get("collection_path", ""),
+                filepath_date_enabled=enabled,
+                filepath_date_pattern=pattern,
+            )
         except Exception:
             logger.error("Failed to load settings from %s", path, exc_info=True)
             return cls()
 
     def save(self, path: Path) -> None:
         """Save settings to a TOML file."""
-        # Since we only have one setting for now and want to avoid new dependencies
-        # if not strictly necessary, we write it manually.
-        # If the settings grow, we should add tomli-w to dependencies.
         try:
-            with open(path, "w") as f:
-                f.write(f'collection_path = "{self.collection_path}"\n')
+            data = {
+                "collection_path": self.collection_path,
+                "filepath_date_enabled": self.filepath_date_enabled,
+                "filepath_date_pattern": self.filepath_date_pattern,
+            }
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "wb") as f:
+                tomli_w.dump(data, f)
         except Exception:
             logger.error("Failed to save settings to %s", path, exc_info=True)

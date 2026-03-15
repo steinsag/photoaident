@@ -23,7 +23,7 @@ class GpuChecker(QtCore.QObject):
         """Check available ONNX providers and emit ``status_ready``."""
         try:
             __import__("insightface")
-            providers = ort.get_available_providers()  # type: ignore
+            providers = ort.get_available_providers()
             has_gpu = any(p in HARDWARE_ACCELERATOR_PROVIDERS for p in providers)
 
             prefix = "✅" if has_gpu else "⚠️"

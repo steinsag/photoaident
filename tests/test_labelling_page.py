@@ -63,7 +63,7 @@ def _insert_face(session_factory, file_path: str = "/path/to/img.jpg") -> int:
 
         meta = ImageMetadata(
             image_id=img.id,
-            taken_at_source=TakenAtSource.FILESYSTEM,
+            taken_at_source=TakenAtSource.EXIF,
             width=800,
             height=600,
         )

@@ -1,7 +1,10 @@
 """ONNX Runtime execution provider utilities.
 
 Providers are evaluated in preference order:
-  CUDA (NVIDIA) → CoreML (macOS/Apple Silicon) → OpenVINO (Intel CPU/iGPU/NPU) → CPU
+  CUDA (NVIDIA) →
+  CoreML (macOS/Apple Silicon) →
+  OpenVINO (Intel CPU/iGPU/NPU) →
+  CPU
 """
 
 import onnxruntime
@@ -25,7 +28,7 @@ def select_providers() -> list[str]:
 
     Always returns at least ``["CPUExecutionProvider"]``.
     """
-    available = set(onnxruntime.get_available_providers())  # type: ignore[attr-defined]
+    available = set(onnxruntime.get_available_providers())
     return [p for p in PREFERRED_PROVIDERS if p in available] or [
         "CPUExecutionProvider"
     ]

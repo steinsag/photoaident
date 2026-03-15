@@ -229,3 +229,32 @@ def test_shutdown_no_tasks_is_noop(tmp_path):
     # Must not raise; vector_store.save should NOT be called (no indexing task)
     controller.shutdown(tmp_path / "faiss.index")
     vector_store.save.assert_not_called()
+
+
+def test_shutdown_logs_warning_when_faiss_save_fails(tmp_path):
+    """shutdown() logs a warning when vector_store.save raises, does not propagate."""
+    controller, vector_store = _make_controller(tmp_path)
+
+    mock_task = MagicMock()
+    mock_thread = MagicMock()
+    mock_thread.wait.return_value = True  # thread stopped in time
+    controller._indexing_task = mock_task
+    controller._indexing_thread = mock_thread
+    vector_store.save.side_effect = OSError("disk full")
+
+    # Must not raise despite save() failing
+    controller.shutdown(tmp_path / "faiss.index")
+    vector_store.save.assert_called_once()
+
+
+def test_start_inventory_noop_when_busy(tmp_path):
+    """start_inventory() is a no-op when the controller is already busy."""
+    controller, _ = _make_controller(tmp_path)
+
+    # Simulate a running inventory task so is_busy returns True
+    controller._inventory_task = MagicMock()
+
+    with patch.object(controller, "_start_inventory") as mock_start:
+        controller.start_inventory("some/path")
+
+    mock_start.assert_not_called()
