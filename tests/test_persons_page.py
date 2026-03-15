@@ -1,5 +1,6 @@
 """Tests for PersonsPage and ReferenceFaceWidget."""
 
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 from PySide6 import QtWidgets
@@ -503,3 +504,243 @@ def test_new_person_dialog_cancel_does_not_change_list(tmp_app_paths, qtbot):
         page._on_new_person()
 
     assert page._person_list.count() == 1
+
+
+# ─── Coverage gap tests ──────────────────────────────────────────────────────
+
+
+def test_reference_face_widget_missing_crop(tmp_path: Path, qtbot):
+    """ReferenceFaceWidget with a non-existent crop path shows '?' label."""
+    crop_path = tmp_path / "nonexistent.jpg"
+    assert not crop_path.exists()
+
+    widget = ReferenceFaceWidget(
+        face_id=1, crop_path=crop_path, cluster_id=1, other_clusters=[]
+    )
+    qtbot.addWidget(widget)
+
+    assert widget._image_label.text() == "?"
+
+
+def test_reference_face_widget_valid_crop(tmp_path: Path, qtbot):
+    """ReferenceFaceWidget with a valid image file displays the pixmap (not '?')."""
+    from PIL import Image as PILImage
+
+    crop_path = tmp_path / "face.jpg"
+    PILImage.new("RGB", (120, 120), color=(128, 64, 32)).save(crop_path)
+
+    widget = ReferenceFaceWidget(
+        face_id=2, crop_path=crop_path, cluster_id=1, other_clusters=[]
+    )
+    qtbot.addWidget(widget)
+
+    # A pixmap should be set — text() would be "" when a pixmap is shown
+    assert widget._image_label.text() == ""
+    assert not widget._image_label.pixmap().isNull()
+
+
+def test_reference_face_remove_button_emits_signal(tmp_path: Path, qtbot):
+    """Clicking _remove_btn emits remove_requested with the correct face_id."""
+    crop_path = tmp_path / "missing.jpg"
+    widget = ReferenceFaceWidget(
+        face_id=42, crop_path=crop_path, cluster_id=1, other_clusters=[]
+    )
+    qtbot.addWidget(widget)
+
+    with qtbot.waitSignal(widget.remove_requested, timeout=1000) as blocker:
+        widget._remove_btn.click()
+
+    assert blocker.args == [42]
+
+
+def test_reference_face_move_button_emits_signal(tmp_path: Path, qtbot):
+    """_on_move_clicked emits move_requested when a menu action is chosen."""
+    from PySide6 import QtWidgets as _QtWidgets
+
+    crop_path = tmp_path / "missing.jpg"
+    widget = ReferenceFaceWidget(
+        face_id=42,
+        crop_path=crop_path,
+        cluster_id=1,
+        other_clusters=[(2, "Infant"), (3, "Youngster")],
+    )
+    qtbot.addWidget(widget)
+
+    received: list[tuple[int, int]] = []
+    widget.move_requested.connect(lambda fid, cid: received.append((fid, cid)))
+
+    mock_action = MagicMock()
+    mock_action.data.return_value = 2  # target cluster_id
+
+    with patch.object(_QtWidgets, "QMenu") as MockQMenu:
+        mock_menu = MockQMenu.return_value
+        mock_menu.addAction.return_value = MagicMock()
+        mock_menu.exec.return_value = mock_action
+
+        widget._on_move_clicked()
+
+    assert received == [(42, 2)]
+
+
+def test_refresh_reselects_current_person(tmp_app_paths, qtbot):
+    """refresh() re-selects the person that was selected before the call."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    _add_person_with_clusters(page.session_factory, "Bob")
+    page.refresh()
+
+    # Bob is second in sorted order
+    page._person_list.setCurrentRow(1)
+    bob_id = page._selected_person_id
+    assert page._person_list.item(1).text() == "Bob"
+
+    page.refresh()
+
+    current = page._person_list.currentItem()
+    assert current is not None
+    assert current.text() == "Bob"
+    assert page._selected_person_id == bob_id
+
+
+def test_new_person_none_id_preserves_state(tmp_app_paths, qtbot):
+    """Accepted dialog with created_person_id()=None leaves list unchanged."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    assert page._person_list.count() == 1
+
+    mock_dialog = MagicMock()
+    mock_dialog.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
+    mock_dialog.created_person_id.return_value = None
+
+    with patch(
+        "photoaident.ui.pages.persons.NewPersonDialog", return_value=mock_dialog
+    ):
+        page._on_new_person()
+
+    assert page._person_list.count() == 1
+
+
+def test_person_deselect_clears_panel(tmp_app_paths, qtbot):
+    """Calling _on_person_selected(None, None) clears the right panel."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    # Panel should be showing the person
+    assert not page._person_name_label.isHidden()
+    assert not page._scroll.isHidden()
+
+    page._on_person_selected(None, None)
+
+    assert page._selected_person_id is None
+    assert not page._placeholder_label.isHidden()
+    assert page._scroll.isHidden()
+    assert page._person_name_label.isHidden()
+    assert len(page._pending) == 0
+
+
+def test_load_person_deleted_between_select_and_load(tmp_app_paths, qtbot):
+    """_load_person with a non-existent person_id clears the panel without crashing."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    # Panel shows the person
+    assert not page._person_name_label.isHidden()
+
+    # Simulate person disappearing from DB by using a never-existing ID
+    page._load_person(999999)
+
+    assert not page._placeholder_label.isHidden()
+    assert page._person_name_label.isHidden()
+
+
+def test_load_person_skips_missing_age_groups(tmp_app_paths, qtbot):
+    """Person with clusters for only 2 of 5 age groups → only 2 QGroupBoxes rendered."""
+    page = _make_page(tmp_app_paths, qtbot)
+
+    with page.session_factory() as session:
+        person = Person(name="Partial")
+        session.add(person)
+        session.flush()
+        person_id = person.id
+        session.add(
+            EmbeddingCluster(person_id=person_id, label="adult", age_group="adult")
+        )
+        session.add(
+            EmbeddingCluster(person_id=person_id, label="infant", age_group="infant")
+        )
+        session.commit()
+
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    group_boxes = page._clusters_widget.findChildren(QtWidgets.QGroupBox)
+    assert len(group_boxes) == 2
+
+
+def test_confirm_with_no_pending_is_noop(tmp_app_paths, qtbot):
+    """_confirm() with empty _pending is a no-op — no crash, no DB change."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    assert len(page._pending) == 0
+    page._confirm()  # must not crash
+    assert len(page._pending) == 0
+    assert not page._confirm_btn.isEnabled()
+
+
+def test_confirm_skips_deleted_face(tmp_app_paths, qtbot):
+    """If a face is deleted between staging and confirming, _confirm skips it."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
+    img_id = _add_image(page.session_factory)
+    face_id = _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_remove_requested(face_id)
+    assert face_id in page._pending
+
+    # Delete the face from DB before confirming
+    with page.session_factory() as session:
+        face = session.get(Face, face_id)
+        assert face is not None
+        session.delete(face)
+        session.commit()
+
+    # Confirm must not crash and should clear pending
+    page._confirm()
+    assert len(page._pending) == 0
+
+
+def test_confirm_when_selected_person_is_none(tmp_app_paths, qtbot):
+    """_confirm() with _selected_person_id=None calls _update_action_buttons."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
+    img_id = _add_image(page.session_factory)
+    face_id = _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_remove_requested(face_id)
+
+    # Simulate person deselection after staging
+    page._selected_person_id = None
+
+    page._confirm()
+
+    assert len(page._pending) == 0
+    assert not page._confirm_btn.isEnabled()
+
+    with page.session_factory() as session:
+        face = session.get(Face, face_id)
+        assert face is not None
+        assert face.state == FaceState.UNIDENTIFIED
