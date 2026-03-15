@@ -17,7 +17,7 @@ from photoaident.db.database import (
 from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.orm import Session, sessionmaker
 
     from photoaident.paths import AppPaths
 
@@ -314,52 +314,69 @@ class PersonsPage(QtWidgets.QWidget):
         self._face_widgets.clear()
         self._update_action_buttons()
 
+    def _query_person_and_clusters(
+        self,
+        session: "Session",
+        person_id: int,
+    ) -> Optional[tuple[str, list[tuple[int, str, list[tuple[int, Path]]]]]]:
+        """Query person name and per-cluster face data from DB.
+
+        Returns ``(person_name, cluster_data)`` where each entry in
+        ``cluster_data`` is ``(cluster_id, label, [(face_id, crop_path), ...])``,
+        or ``None`` if the person no longer exists.
+        """
+        person = session.get(Person, person_id)
+        if person is None:
+            return None
+        person_name = person.name
+
+        clusters = (
+            session.execute(
+                select(EmbeddingCluster)
+                .where(EmbeddingCluster.person_id == person_id)
+                .options(selectinload(EmbeddingCluster.faces))
+            )
+            .scalars()
+            .all()
+        )
+
+        display_labels = self._age_display_labels()
+        cluster_id_to_label: dict[int, str] = {}
+        for cluster in clusters:
+            age_key = cluster.age_group or cluster.label or ""
+            label = display_labels.get(age_key, age_key)
+            cluster_id_to_label[cluster.id] = label
+
+        cluster_data: list[tuple[int, str, list[tuple[int, Path]]]] = []
+        for age_key in AGE_CLUSTERS:
+            matched = [c for c in clusters if c.age_group == age_key]
+            if not matched:
+                continue
+            cluster = matched[0]
+            label = cluster_id_to_label[cluster.id]
+            ref_faces = [
+                f
+                for f in cluster.faces
+                if f.state == FaceState.IDENTIFIED and f.deleted_at is None
+            ]
+            face_paths = [
+                (f.id, self.paths.face_crops_dir / f"{f.id}.jpg") for f in ref_faces
+            ]
+            cluster_data.append((cluster.id, label, face_paths))
+
+        return person_name, cluster_data
+
     def _load_person(self, person_id: int) -> None:
         self._selected_person_id = person_id
         self._pending.clear()
         self._face_widgets.clear()
 
         with self.session_factory() as session:
-            person = session.get(Person, person_id)
-            if person is None:
+            result = self._query_person_and_clusters(session, person_id)
+            if result is None:
                 self._clear_right_panel()
                 return
-            person_name = person.name
-
-            clusters = (
-                session.execute(
-                    select(EmbeddingCluster)
-                    .where(EmbeddingCluster.person_id == person_id)
-                    .options(selectinload(EmbeddingCluster.faces))
-                )
-                .scalars()
-                .all()
-            )
-
-            # Build per-cluster face data (avoid lazy-loading outside session)
-            cluster_data: list[tuple[int, str, list[tuple[int, Path]]]] = []
-            display_labels = self._age_display_labels()
-            cluster_id_to_label: dict[int, str] = {}
-            for cluster in clusters:
-                age_key = cluster.age_group or cluster.label or ""
-                label = display_labels.get(age_key, age_key)
-                cluster_id_to_label[cluster.id] = label
-
-            for age_key in AGE_CLUSTERS:
-                matched = [c for c in clusters if c.age_group == age_key]
-                if not matched:
-                    continue
-                cluster = matched[0]
-                label = cluster_id_to_label[cluster.id]
-                ref_faces = [
-                    f
-                    for f in cluster.faces
-                    if f.state == FaceState.IDENTIFIED and f.deleted_at is None
-                ]
-                face_paths = [
-                    (f.id, self.paths.face_crops_dir / f"{f.id}.jpg") for f in ref_faces
-                ]
-                cluster_data.append((cluster.id, label, face_paths))
+            person_name, cluster_data = result
 
         self._person_name_label.setText(person_name)
         self._person_name_label.setVisible(True)
@@ -457,6 +474,17 @@ class PersonsPage(QtWidgets.QWidget):
         else:
             self._changes_label.setText("")
 
+    @staticmethod
+    def _apply_face_change(face: Face, change: _PendingChange) -> None:
+        """Apply a pending change to a face object within an open session."""
+        if change.kind == _PendingKind.REMOVE:
+            face.state = FaceState.UNIDENTIFIED
+            face.person_id = None
+            face.cluster_id = None
+            face.labelled_at = None
+        elif change.kind == _PendingKind.MOVE:
+            face.cluster_id = change.new_cluster_id
+
     def _confirm(self) -> None:
         if not self._pending:
             return
@@ -465,13 +493,7 @@ class PersonsPage(QtWidgets.QWidget):
                 face = session.get(Face, face_id)
                 if face is None:
                     continue
-                if change.kind == _PendingKind.REMOVE:
-                    face.state = FaceState.UNIDENTIFIED
-                    face.person_id = None
-                    face.cluster_id = None
-                    face.labelled_at = None
-                elif change.kind == _PendingKind.MOVE:
-                    face.cluster_id = change.new_cluster_id
+                self._apply_face_change(face, change)
             session.commit()
 
         self._pending.clear()
