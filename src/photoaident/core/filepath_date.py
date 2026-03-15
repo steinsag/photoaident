@@ -83,10 +83,9 @@ def _validate_pattern(pattern: str) -> None:
             "Pattern must not contain {YYYY} more than once.",
         )
 
-    # Month: exactly one of {MM} or {M}.
-    # Strip {MM} before checking for bare {M} so "{M}" is not matched inside "{MM}".
+    # Month: pattern must contain exactly one month placeholder, either {MM} or {M}.
     has_mm = "{MM}" in pattern
-    has_m = "{M}" in pattern.replace("{MM}", "")
+    has_m = "{M}" in pattern
     if has_mm and has_m:
         raise PatternValidationError(
             PatternErrorCode.MONTH_CONFLICT,
