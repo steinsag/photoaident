@@ -37,7 +37,14 @@ class Settings:
                     raw_enabled,
                 )
                 raw_enabled = False
-            pattern = str(data.get("filepath_date_pattern", ""))
+            raw_pattern = data.get("filepath_date_pattern", "")
+            if not isinstance(raw_pattern, str):
+                logger.warning(
+                    "filepath_date_pattern must be a string, got %r; disabling.",
+                    raw_pattern,
+                )
+                raw_pattern = ""
+            pattern = raw_pattern
             enabled = raw_enabled and bool(pattern)
 
             if enabled:

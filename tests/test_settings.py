@@ -60,3 +60,24 @@ def test_filepath_date_invalid_pattern_disables_feature(tmp_path):
     )
     settings = Settings.load(config_file)
     assert settings.filepath_date_enabled is False
+
+
+def test_filepath_date_pattern_integer_treated_as_disabled(tmp_path):
+    """An integer pattern value must be rejected and feature disabled."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("filepath_date_enabled = true\nfilepath_date_pattern = 42\n")
+    settings = Settings.load(config_file)
+    assert settings.filepath_date_enabled is False
+    assert settings.filepath_date_pattern == ""
+
+
+def test_filepath_date_pattern_array_treated_as_disabled(tmp_path):
+    """An array pattern value must be rejected and feature disabled."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        "filepath_date_enabled = true\n"
+        'filepath_date_pattern = ["{YYYY}", "{MM}", "{DD}"]\n'
+    )
+    settings = Settings.load(config_file)
+    assert settings.filepath_date_enabled is False
+    assert settings.filepath_date_pattern == ""
