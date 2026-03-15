@@ -1,7 +1,11 @@
 """ONNX Runtime execution provider utilities.
 
 Providers are evaluated in preference order:
-  CUDA (NVIDIA) → CoreML (macOS/Apple Silicon) → OpenVINO (Intel CPU/iGPU/NPU) → CPU
+  TensorRT (NVIDIA) →
+  CUDA (NVIDIA) →
+  CoreML (macOS/Apple Silicon) →
+  OpenVINO (Intel CPU/iGPU/NPU) →
+  CPU
 """
 
 import onnxruntime

@@ -1,6 +1,8 @@
 import logging  # pragma: no cover
-import os  # pragma: no cover
-import sys  # pragma: no cover
+import os
+import platform
+import sys
+from pathlib import Path
 
 from PySide6 import QtWidgets  # pragma: no cover
 
@@ -10,6 +12,50 @@ from photoaident.paths import AppPaths  # pragma: no cover
 from photoaident.utils.instance_lock import InstanceLock  # pragma: no cover
 
 APP_NAME = "PhotoAIdent"  # pragma: no cover
+
+
+def ensure_nvidia_paths():
+    if platform.system() != "Linux" or os.environ.get("ORT_PATHS_SET") == "1":
+        return
+
+    import site
+
+    try:
+        # Get the primary site-packages directory
+        site_pkgs = Path(site.getsitepackages()[0])
+    except IndexError:
+        return
+
+    # In CUDA/cuDNN, libs are usually in site-packages/nvidia/<pkg>/lib
+    search_roots = [
+        site_pkgs / "nvidia",
+    ]
+
+    valid_paths = []
+    for root in search_roots:
+        if not root.exists():
+            continue
+
+        # Add the root itself if it contains .so files (like tensorrt_libs)
+        if any(root.glob("*.so*")):
+            valid_paths.append(str(root.resolve()))
+
+        # Also check subdirectories named 'lib' (like nvidia/cudnn/lib)
+        for lib_dir in root.rglob("lib"):
+            if lib_dir.is_dir():
+                valid_paths.append(str(lib_dir.resolve()))
+
+    if valid_paths:
+        # Deduplicate and merge with existing LD_LIBRARY_PATH
+        unique_paths = list(dict.fromkeys(valid_paths))
+        current_ld = os.environ.get("LD_LIBRARY_PATH", "")
+        new_ld = ":".join(unique_paths) + (f":{current_ld}" if current_ld else "")
+
+        os.environ["LD_LIBRARY_PATH"] = new_ld
+        os.environ["ORT_PATHS_SET"] = "1"
+
+        # Re-execute the script so the dynamic linker loads the new paths
+        os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 def _fix_macos_app_name() -> None:  # pragma: no cover
@@ -82,6 +128,7 @@ def _setup_logging() -> None:  # pragma: no cover
 
 def main():  # pragma: no cover
     _setup_logging()
+    ensure_nvidia_paths()
     if sys.platform == "darwin":
         _fix_macos_app_name()
 

@@ -174,7 +174,9 @@ For pure metadata queries (no person filter): skip FAISS, query SQLite directly.
 ## Development Commands
 
 ```bash
-uv sync                              # Install all dependencies
+uv sync --group cuda                 # Install deps + CUDA runtime (NVIDIA GPU)
+uv sync --group cpu_coreml          # Install deps + CPU/CoreML runtime
+uv sync --group openvino            # Install deps + OpenVINO runtime (Intel)
 uv run photoaident                   # Run the app
 uv run scripts/verify.py             # Format + lint + type check + translations + tests
 uv run pytest                        # Tests only
