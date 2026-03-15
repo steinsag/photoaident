@@ -33,33 +33,19 @@ _PLACEHOLDER_PATTERNS: dict[str, str] = {
 logger = logging.getLogger(__name__)
 
 
-def compile_pattern(pattern: str) -> re.Pattern[str]:
-    """Compile a placeholder pattern string into a regex.
-
-    Args:
-        pattern: A string containing exactly one ``{YYYY}``, exactly one month
-            placeholder (``{MM}`` *or* ``{M}``, not both), and exactly one day
-            placeholder (``{DD}`` *or* ``{D}``, not both).  All other
-            characters are treated as literals.
-
-    Returns:
-        A compiled ``re.Pattern`` with named groups ``year``, ``month``, ``day``.
-
-    Raises:
-        ValueError: If the pattern is invalid (missing placeholder, conflicts,
-            or empty).
-    """
+def _validate_pattern(pattern: str) -> None:
+    """Raise ``ValueError`` if *pattern* is missing or has conflicting placeholders."""
     if not pattern:
         raise ValueError("Pattern must not be empty.")
 
-    # Validate year placeholder (exactly one)
+    # Year: exactly one {YYYY}
     if "{YYYY}" not in pattern:
         raise ValueError("Pattern must contain exactly one {YYYY} placeholder.")
     if pattern.count("{YYYY}") > 1:
         raise ValueError("Pattern must not contain {YYYY} more than once.")
 
-    # Validate month placeholder (exactly one of {MM} or {M}).
-    # Strip {MM} before checking for {M} because "{M}" is a substring of "{MM}".
+    # Month: exactly one of {MM} or {M}.
+    # Strip {MM} before checking for bare {M} because "{M}" is a substring of "{MM}".
     has_mm = "{MM}" in pattern
     has_m = "{M}" in pattern.replace("{MM}", "")
     if has_mm and has_m:
@@ -71,7 +57,7 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
     if has_m and pattern.count("{M}") > 1:
         raise ValueError("Pattern must not contain {M} more than once.")
 
-    # Validate day placeholder (exactly one of {DD} or {D})
+    # Day: exactly one of {DD} or {D}
     has_dd = "{DD}" in pattern
     has_d = "{D}" in pattern
     if has_dd and has_d:
@@ -83,8 +69,13 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
     if has_d and pattern.count("{D}") > 1:
         raise ValueError("Pattern must not contain {D} more than once.")
 
-    # Build regex by scanning left-to-right, always picking the longest matching
-    # placeholder at each position.  This avoids {M} matching inside {MM}.
+
+def _build_regex(pattern: str) -> str:
+    """Translate a validated placeholder pattern into a raw regex string.
+
+    Scans left-to-right, always picking the longest matching placeholder at
+    each position so that ``{M}`` never matches inside ``{MM}``.
+    """
     regex_parts: list[str] = []
     remaining = pattern
     while remaining:
@@ -106,9 +97,29 @@ def compile_pattern(pattern: str) -> re.Pattern[str]:
         regex_parts.append(re.escape(remaining[:idx]))
         regex_parts.append(_PLACEHOLDER_PATTERNS[ph])
         remaining = remaining[idx + len(ph) :]
+    return "".join(regex_parts)
 
-    logger.debug("Compiled filepath date pattern: %s", "".join(regex_parts))
-    return re.compile("".join(regex_parts))
+
+def compile_pattern(pattern: str) -> re.Pattern[str]:
+    """Compile a placeholder pattern string into a regex.
+
+    Args:
+        pattern: A string containing exactly one ``{YYYY}``, exactly one month
+            placeholder (``{MM}`` *or* ``{M}``, not both), and exactly one day
+            placeholder (``{DD}`` *or* ``{D}``, not both).  All other
+            characters are treated as literals.
+
+    Returns:
+        A compiled ``re.Pattern`` with named groups ``year``, ``month``, ``day``.
+
+    Raises:
+        ValueError: If the pattern is invalid (missing placeholder, conflicts,
+            or empty).
+    """
+    _validate_pattern(pattern)
+    regex = _build_regex(pattern)
+    logger.debug("Compiled filepath date pattern: %s", regex)
+    return re.compile(regex)
 
 
 def extract_date_from_path(
