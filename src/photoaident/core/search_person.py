@@ -193,6 +193,65 @@ def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
     return ranked
 
 
+def _load_person_cluster_means(
+    session_factory: "sessionmaker",
+    vector_store: "VectorStore",
+) -> tuple[dict[int, str], list[tuple[int, "np.ndarray"]]]:
+    """Load all persons and compute their cluster mean embeddings.
+
+    Returns:
+        A tuple of (person_names, person_means) where person_names maps
+        person_id → name and person_means is a list of (person_id, mean_embedding).
+    """
+    with session_factory() as session:
+        person_rows = session.execute(select(Person.id, Person.name)).all()
+        cluster_rows = session.execute(
+            select(EmbeddingCluster.id, EmbeddingCluster.person_id)
+        ).all()
+
+    person_names: dict[int, str] = {r.id: r.name for r in person_rows}
+
+    clusters_by_person: dict[int, list[int]] = {}
+    for row in cluster_rows:
+        clusters_by_person.setdefault(row.person_id, []).append(row.id)
+
+    person_means: list[tuple[int, np.ndarray]] = []
+    for person_id, cluster_ids in clusters_by_person.items():
+        for cluster_id in cluster_ids:
+            mean = _compute_cluster_mean(cluster_id, session_factory, vector_store)
+            if mean is not None:
+                person_means.append((person_id, mean))
+
+    return person_names, person_means
+
+
+def _match_face_to_person(
+    fid: int,
+    person_means: list[tuple[int, "np.ndarray"]],
+    person_names: dict[int, str],
+    vector_store: "VectorStore",
+    threshold: float,
+) -> tuple[str, float] | None:
+    """Return (person_name, score) for the best-matching person, or None."""
+    try:
+        embedding = vector_store.get_embedding(fid)
+    except IndexError:
+        return None
+
+    best_person_id: int | None = None
+    best_score = 0.0
+
+    for person_id, mean_emb in person_means:
+        score = float(np.dot(embedding, mean_emb))
+        if score >= threshold and score > best_score:
+            best_score = score
+            best_person_id = person_id
+
+    if best_person_id is not None:
+        return (person_names[best_person_id], best_score)
+    return None
+
+
 def resolve_faces_to_persons(
     faiss_ids: list[int],
     session_factory: "sessionmaker",
@@ -222,53 +281,16 @@ def resolve_faces_to_persons(
     if not faiss_ids:
         return {}
 
-    # 1. Load all persons and their cluster IDs
-    with session_factory() as session:
-        person_rows = session.execute(select(Person.id, Person.name)).all()
-        cluster_rows = session.execute(
-            select(EmbeddingCluster.id, EmbeddingCluster.person_id)
-        ).all()
+    person_names, person_means = _load_person_cluster_means(
+        session_factory, vector_store
+    )
 
-    if not person_rows:
+    if not person_names or not person_means:
         return dict.fromkeys(faiss_ids)
 
-    person_names: dict[int, str] = {r.id: r.name for r in person_rows}
-    clusters_by_person: dict[int, list[int]] = {}
-    for row in cluster_rows:
-        clusters_by_person.setdefault(row.person_id, []).append(row.id)
-
-    # 2. Compute cluster means for every person (reuses search logic)
-    person_means: list[tuple[int, np.ndarray]] = []
-    for person_id, cluster_ids in clusters_by_person.items():
-        for cluster_id in cluster_ids:
-            mean = _compute_cluster_mean(cluster_id, session_factory, vector_store)
-            if mean is not None:
-                person_means.append((person_id, mean))
-
-    if not person_means:
-        return dict.fromkeys(faiss_ids)
-
-    # 3. For each query face, find the best-matching person via dot product
-    results: dict[int, tuple[str, float] | None] = {}
-    for fid in faiss_ids:
-        try:
-            embedding = vector_store.get_embedding(fid)
-        except IndexError:
-            results[fid] = None
-            continue
-
-        best_person_id: int | None = None
-        best_score = 0.0
-
-        for person_id, mean_emb in person_means:
-            score = float(np.dot(embedding, mean_emb))
-            if score >= threshold and score > best_score:
-                best_score = score
-                best_person_id = person_id
-
-        if best_person_id is not None:
-            results[fid] = (person_names[best_person_id], best_score)
-        else:
-            results[fid] = None
-
-    return results
+    return {
+        fid: _match_face_to_person(
+            fid, person_means, person_names, vector_store, threshold
+        )
+        for fid in faiss_ids
+    }

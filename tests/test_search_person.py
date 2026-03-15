@@ -6,7 +6,11 @@ import numpy as np
 
 import photoaident.core.search as search_module
 from photoaident.core.search import _find_images_by_person, search_images
-from photoaident.core.search_person import resolve_faces_to_persons
+from photoaident.core.search_person import (
+    _intersect_and_rank,
+    _match_face_to_person,
+    resolve_faces_to_persons,
+)
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -362,3 +366,51 @@ def test_resolve_faces_to_persons_consistent_with_search(search_db, vector_store
     match = resolve_results[unid_faiss_id]
     assert match is not None
     assert match[0] == "Test Person"
+
+
+# ===========================================================================
+# _intersect_and_rank — edge cases
+# ===========================================================================
+
+
+def test_intersect_and_rank_empty_list():
+    """Empty input returns empty result."""
+    assert _intersect_and_rank([]) == []
+
+
+def test_intersect_and_rank_no_common_ids():
+    """Disjoint score dicts return empty result."""
+    assert _intersect_and_rank([{1: 0.9}, {2: 0.8}]) == []
+
+
+def test_intersect_and_rank_multiple_persons():
+    """Common image IDs are ranked by weakest per-person score."""
+    scores_a = {10: 0.9, 20: 0.7, 30: 0.5}
+    scores_b = {10: 0.6, 20: 0.8, 30: 0.4}
+    result = _intersect_and_rank([scores_a, scores_b])
+    # min scores: 10→0.6, 20→0.7, 30→0.4 → sorted desc: [20, 10, 30]
+    assert result == [20, 10, 30]
+
+
+# ===========================================================================
+# _match_face_to_person — stale faiss_id
+# ===========================================================================
+
+
+def test_match_face_to_person_index_error(search_db, vector_store):
+    """Returns None when faiss_id is not in the vector store."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+
+    emb = np.zeros(512, dtype=np.float32)
+    emb[0] = 1.0
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
+
+    # Build person_means the same way resolve_faces_to_persons would
+    from photoaident.core.search_person import _load_person_cluster_means
+
+    person_names, person_means = _load_person_cluster_means(search_db, vector_store)
+    assert len(person_means) > 0
+
+    # faiss_id 9999 does not exist → IndexError → returns None
+    result = _match_face_to_person(9999, person_means, person_names, vector_store, 0.0)
+    assert result is None
