@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from PySide6 import QtCore, QtWidgets
 
 from photoaident.app import MainWindow
+from photoaident.core.filepath_date import PatternErrorCode
 from photoaident.db.migrate import apply_migrations
 from photoaident.settings import Settings
 from photoaident.ui.preferences_dialog import PreferencesDialog
@@ -149,114 +150,35 @@ def test_preferences_cancel_not_saved(qtbot, tmp_app_paths, monkeypatch):
 
 
 # ===========================================================================
-# _validate_pattern_message
+# _translate_pattern_error
 # ===========================================================================
 
 
-def test_validate_pattern_message_empty_returns_error(qtbot):
-    """Empty string returns the 'must not be empty' error message."""
+def test_translate_pattern_error_empty(qtbot):
+    """EMPTY code maps to the 'must not be empty' translated string."""
     dialog = PreferencesDialog("/path", 0, 0)
     qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("")
-    assert result == dialog.tr("Pattern must not be empty.")
-
-
-def test_validate_pattern_message_missing_yyyy_returns_error(qtbot):
-    """Pattern without {YYYY} returns the missing-year error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{MM}-{DD}")
-    assert result == dialog.tr("Pattern must contain exactly one {YYYY} placeholder.")
-
-
-def test_validate_pattern_message_duplicate_yyyy_returns_error(qtbot):
-    """Pattern with two {YYYY} returns the duplicate-YYYY error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}{YYYY}{M}{D}")
-    assert result == dialog.tr("Pattern must not contain {YYYY} more than once.")
-
-
-def test_validate_pattern_message_duplicate_mm_returns_error(qtbot):
-    """Pattern with two {MM} returns the duplicate-MM error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}{MM}{MM}{D}")
-    assert result == dialog.tr("Pattern must not contain {MM} more than once.")
-
-
-def test_validate_pattern_message_duplicate_m_returns_error(qtbot):
-    """Pattern with two {M} returns the duplicate-M error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}{M}{M}{DD}")
-    assert result == dialog.tr("Pattern must not contain {M} more than once.")
-
-
-def test_validate_pattern_message_duplicate_dd_returns_error(qtbot):
-    """Pattern with two {DD} returns the duplicate-DD error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}{M}{DD}{DD}")
-    assert result == dialog.tr("Pattern must not contain {DD} more than once.")
-
-
-def test_validate_pattern_message_duplicate_d_returns_error(qtbot):
-    """Pattern with two {D} returns the duplicate-D error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}{MM}{D}{D}")
-    assert result == dialog.tr("Pattern must not contain {D} more than once.")
-
-
-def test_validate_pattern_message_both_mm_and_m_returns_error(qtbot):
-    """Pattern with both {MM} and {M} returns the conflicting-month error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}-{MM}-{M}-{DD}")
-    assert result == dialog.tr("Pattern must not contain both {MM} and {M}.")
-
-
-def test_validate_pattern_message_no_month_placeholder_returns_error(qtbot):
-    """Pattern with no month placeholder returns the missing-month error message."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}-{DD}")
-    assert result == dialog.tr(
-        "Pattern must contain a month placeholder ({MM} or {M})."
+    assert dialog._translate_pattern_error(PatternErrorCode.EMPTY) == dialog.tr(
+        "Pattern must not be empty."
     )
 
 
-def test_validate_pattern_message_both_dd_and_d_returns_error(qtbot):
-    """Pattern with both {DD} and {D} returns the conflicting-day error message."""
+def test_translate_pattern_error_year_missing(qtbot):
+    """YEAR_MISSING code maps to the missing-year translated string."""
     dialog = PreferencesDialog("/path", 0, 0)
     qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}-{MM}-{DD}-{D}")
-    assert result == dialog.tr("Pattern must not contain both {DD} and {D}.")
+    assert dialog._translate_pattern_error(PatternErrorCode.YEAR_MISSING) == dialog.tr(
+        "Pattern must contain exactly one {YYYY} placeholder."
+    )
 
 
-def test_validate_pattern_message_no_day_placeholder_returns_error(qtbot):
-    """Pattern with no day placeholder returns the missing-day error message."""
+def test_translate_pattern_error_covers_all_codes(qtbot):
+    """_translate_pattern_error returns a non-empty string for every error code."""
     dialog = PreferencesDialog("/path", 0, 0)
     qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}-{MM}")
-    assert result == dialog.tr("Pattern must contain a day placeholder ({DD} or {D}).")
-
-
-def test_validate_pattern_message_valid_full_pattern_returns_none(qtbot):
-    """Valid pattern with all required placeholders returns None."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{YYYY}-{MM}-{DD}")
-    assert result is None
-
-
-def test_validate_pattern_message_valid_single_digit_variants_returns_none(qtbot):
-    """Valid pattern using {M} and {D} single-digit variants returns None."""
-    dialog = PreferencesDialog("/path", 0, 0)
-    qtbot.add_widget(dialog)
-    result = dialog._validate_pattern_message("{DD}.{M}.{YYYY}")
-    assert result is None
+    for code in PatternErrorCode:
+        msg = dialog._translate_pattern_error(code)
+        assert isinstance(msg, str) and msg
 
 
 # ===========================================================================

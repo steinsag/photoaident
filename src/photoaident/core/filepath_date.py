@@ -19,7 +19,38 @@ Example patterns:
 import logging
 import re
 from datetime import date
+from enum import Enum
 from pathlib import Path
+
+
+class PatternErrorCode(Enum):
+    """Structured error codes for :class:`PatternValidationError`."""
+
+    EMPTY = "empty"
+    YEAR_MISSING = "year_missing"
+    YEAR_DUPLICATE = "year_duplicate"
+    MONTH_CONFLICT = "month_conflict"
+    MONTH_MISSING = "month_missing"
+    MONTH_MM_DUPLICATE = "month_mm_duplicate"
+    MONTH_M_DUPLICATE = "month_m_duplicate"
+    DAY_CONFLICT = "day_conflict"
+    DAY_MISSING = "day_missing"
+    DAY_DD_DUPLICATE = "day_dd_duplicate"
+    DAY_D_DUPLICATE = "day_d_duplicate"
+
+
+class PatternValidationError(ValueError):
+    """Raised when a filepath date pattern fails validation.
+
+    Attributes:
+        code: Machine-readable :class:`PatternErrorCode` identifying the
+            specific constraint that was violated.
+    """
+
+    def __init__(self, code: PatternErrorCode, message: str) -> None:
+        self.code = code
+        super().__init__(message)
+
 
 # Map each placeholder to its named-capture regex fragment.
 _PLACEHOLDER_PATTERNS: dict[str, str] = {
@@ -34,40 +65,72 @@ logger = logging.getLogger(__name__)
 
 
 def _validate_pattern(pattern: str) -> None:
-    """Raise ``ValueError`` if *pattern* is missing or has conflicting placeholders."""
+    """Raise :class:`PatternValidationError` if *pattern* is invalid."""
     if not pattern:
-        raise ValueError("Pattern must not be empty.")
+        raise PatternValidationError(
+            PatternErrorCode.EMPTY, "Pattern must not be empty."
+        )
 
     # Year: exactly one {YYYY}
     if "{YYYY}" not in pattern:
-        raise ValueError("Pattern must contain exactly one {YYYY} placeholder.")
+        raise PatternValidationError(
+            PatternErrorCode.YEAR_MISSING,
+            "Pattern must contain exactly one {YYYY} placeholder.",
+        )
     if pattern.count("{YYYY}") > 1:
-        raise ValueError("Pattern must not contain {YYYY} more than once.")
+        raise PatternValidationError(
+            PatternErrorCode.YEAR_DUPLICATE,
+            "Pattern must not contain {YYYY} more than once.",
+        )
 
     # Month: exactly one of {MM} or {M}.
-    # Strip {MM} before checking for bare {M} because "{M}" is a substring of "{MM}".
+    # Strip {MM} before checking for bare {M} so "{M}" is not matched inside "{MM}".
     has_mm = "{MM}" in pattern
     has_m = "{M}" in pattern.replace("{MM}", "")
     if has_mm and has_m:
-        raise ValueError("Pattern must not contain both {MM} and {M}.")
+        raise PatternValidationError(
+            PatternErrorCode.MONTH_CONFLICT,
+            "Pattern must not contain both {MM} and {M}.",
+        )
     if not has_mm and not has_m:
-        raise ValueError("Pattern must contain a month placeholder ({MM} or {M}).")
+        raise PatternValidationError(
+            PatternErrorCode.MONTH_MISSING,
+            "Pattern must contain a month placeholder ({MM} or {M}).",
+        )
     if has_mm and pattern.count("{MM}") > 1:
-        raise ValueError("Pattern must not contain {MM} more than once.")
+        raise PatternValidationError(
+            PatternErrorCode.MONTH_MM_DUPLICATE,
+            "Pattern must not contain {MM} more than once.",
+        )
     if has_m and pattern.count("{M}") > 1:
-        raise ValueError("Pattern must not contain {M} more than once.")
+        raise PatternValidationError(
+            PatternErrorCode.MONTH_M_DUPLICATE,
+            "Pattern must not contain {M} more than once.",
+        )
 
     # Day: exactly one of {DD} or {D}
     has_dd = "{DD}" in pattern
     has_d = "{D}" in pattern
     if has_dd and has_d:
-        raise ValueError("Pattern must not contain both {DD} and {D}.")
+        raise PatternValidationError(
+            PatternErrorCode.DAY_CONFLICT,
+            "Pattern must not contain both {DD} and {D}.",
+        )
     if not has_dd and not has_d:
-        raise ValueError("Pattern must contain a day placeholder ({DD} or {D}).")
+        raise PatternValidationError(
+            PatternErrorCode.DAY_MISSING,
+            "Pattern must contain a day placeholder ({DD} or {D}).",
+        )
     if has_dd and pattern.count("{DD}") > 1:
-        raise ValueError("Pattern must not contain {DD} more than once.")
+        raise PatternValidationError(
+            PatternErrorCode.DAY_DD_DUPLICATE,
+            "Pattern must not contain {DD} more than once.",
+        )
     if has_d and pattern.count("{D}") > 1:
-        raise ValueError("Pattern must not contain {D} more than once.")
+        raise PatternValidationError(
+            PatternErrorCode.DAY_D_DUPLICATE,
+            "Pattern must not contain {D} more than once.",
+        )
 
 
 def _build_regex(pattern: str) -> str:

@@ -1,6 +1,10 @@
 from PySide6 import QtWidgets
 
-from photoaident.core.filepath_date import compile_pattern
+from photoaident.core.filepath_date import (
+    PatternErrorCode,
+    PatternValidationError,
+    compile_pattern,
+)
 
 
 class PreferencesDialog(QtWidgets.QDialog):
@@ -101,53 +105,54 @@ class PreferencesDialog(QtWidgets.QDialog):
         if directory:
             self.path_edit.setText(directory)
 
-    def _validate_pattern_message(self, pattern: str) -> str | None:
-        """Return a translated error message for an invalid pattern, or None."""
-        if not pattern:
-            return self.tr("Pattern must not be empty.")
-        if "{YYYY}" not in pattern:
-            return self.tr("Pattern must contain exactly one {YYYY} placeholder.")
-        if pattern.count("{YYYY}") > 1:
-            return self.tr("Pattern must not contain {YYYY} more than once.")
-        has_mm = "{MM}" in pattern
-        has_m = "{M}" in pattern
-        if has_mm and has_m:
-            return self.tr("Pattern must not contain both {MM} and {M}.")
-        if not has_mm and not has_m:
-            return self.tr("Pattern must contain a month placeholder ({MM} or {M}).")
-        if has_mm and pattern.count("{MM}") > 1:
-            return self.tr("Pattern must not contain {MM} more than once.")
-        if has_m and pattern.count("{M}") > 1:
-            return self.tr("Pattern must not contain {M} more than once.")
-        has_dd = "{DD}" in pattern
-        has_d = "{D}" in pattern
-        if has_dd and has_d:
-            return self.tr("Pattern must not contain both {DD} and {D}.")
-        if not has_dd and not has_d:
-            return self.tr("Pattern must contain a day placeholder ({DD} or {D}).")
-        if has_dd and pattern.count("{DD}") > 1:
-            return self.tr("Pattern must not contain {DD} more than once.")
-        if has_d and pattern.count("{D}") > 1:
-            return self.tr("Pattern must not contain {D} more than once.")
-        return None
+    def _translate_pattern_error(self, code: PatternErrorCode) -> str:
+        """Return a translated error message for the given validation error code."""
+        messages: dict[PatternErrorCode, str] = {
+            PatternErrorCode.EMPTY: self.tr("Pattern must not be empty."),
+            PatternErrorCode.YEAR_MISSING: self.tr(
+                "Pattern must contain exactly one {YYYY} placeholder."
+            ),
+            PatternErrorCode.YEAR_DUPLICATE: self.tr(
+                "Pattern must not contain {YYYY} more than once."
+            ),
+            PatternErrorCode.MONTH_CONFLICT: self.tr(
+                "Pattern must not contain both {MM} and {M}."
+            ),
+            PatternErrorCode.MONTH_MISSING: self.tr(
+                "Pattern must contain a month placeholder ({MM} or {M})."
+            ),
+            PatternErrorCode.MONTH_MM_DUPLICATE: self.tr(
+                "Pattern must not contain {MM} more than once."
+            ),
+            PatternErrorCode.MONTH_M_DUPLICATE: self.tr(
+                "Pattern must not contain {M} more than once."
+            ),
+            PatternErrorCode.DAY_CONFLICT: self.tr(
+                "Pattern must not contain both {DD} and {D}."
+            ),
+            PatternErrorCode.DAY_MISSING: self.tr(
+                "Pattern must contain a day placeholder ({DD} or {D})."
+            ),
+            PatternErrorCode.DAY_DD_DUPLICATE: self.tr(
+                "Pattern must not contain {DD} more than once."
+            ),
+            PatternErrorCode.DAY_D_DUPLICATE: self.tr(
+                "Pattern must not contain {D} more than once."
+            ),
+        }
+        return messages[code]
 
     def accept(self) -> None:
         """Validate settings before closing. Block if the pattern is invalid."""
         if self._filepath_date_checkbox.isChecked():
             pattern = self._filepath_date_pattern_edit.text().strip()
-            error_msg = self._validate_pattern_message(pattern)
-            if error_msg is None:
-                # Run compile_pattern as a final sanity check; this should only
-                # fail if there is a bug in _validate_pattern_message.
-                try:
-                    compile_pattern(pattern)
-                except ValueError as exc:
-                    error_msg = str(exc)
-            if error_msg is not None:
+            try:
+                compile_pattern(pattern)
+            except PatternValidationError as exc:
                 QtWidgets.QMessageBox.warning(
                     self,
                     self.tr("Invalid Pattern"),
-                    error_msg,
+                    self._translate_pattern_error(exc.code),
                 )
                 return
         super().accept()

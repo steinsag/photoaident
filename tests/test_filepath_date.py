@@ -6,7 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from photoaident.core.filepath_date import compile_pattern, extract_date_from_path
+from photoaident.core.filepath_date import (
+    PatternErrorCode,
+    PatternValidationError,
+    compile_pattern,
+    extract_date_from_path,
+)
 
 # ===========================================================================
 # compile_pattern — valid patterns
@@ -115,65 +120,82 @@ class TestCompilePatternLiteralEscaping:
 
 
 class TestCompilePatternInvalid:
-    def test_empty_string_raises_value_error(self):
-        """compile_pattern('') raises ValueError."""
-        with pytest.raises(ValueError, match="empty"):
+    def test_empty_string_raises_pattern_validation_error(self):
+        """compile_pattern('') raises PatternValidationError with EMPTY code."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("")
+        assert exc_info.value.code is PatternErrorCode.EMPTY
 
-    def test_missing_yyyy_raises_value_error(self):
-        """compile_pattern without {YYYY} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{YYYY\}"):
+    def test_missing_yyyy_raises_year_missing_code(self):
+        """compile_pattern without {YYYY} raises YEAR_MISSING."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("{MM}-{DD}")
+        assert exc_info.value.code is PatternErrorCode.YEAR_MISSING
 
-    def test_missing_month_placeholder_raises_value_error(self):
-        """compile_pattern without any month placeholder raises ValueError."""
-        with pytest.raises(ValueError, match="month"):
-            compile_pattern("{YYYY}-{DD}")
-
-    def test_missing_day_placeholder_raises_value_error(self):
-        """compile_pattern without any day placeholder raises ValueError."""
-        with pytest.raises(ValueError, match="day"):
-            compile_pattern("{YYYY}-{MM}")
-
-    def test_both_mm_and_m_raises_value_error(self):
-        """compile_pattern with both {MM} and {M} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{MM\}.*\{M\}|\{M\}.*\{MM\}"):
-            compile_pattern("{YYYY}-{MM}-{M}-{DD}")
-
-    def test_both_dd_and_d_raises_value_error(self):
-        """compile_pattern with both {DD} and {D} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{DD\}.*\{D\}|\{D\}.*\{DD\}"):
-            compile_pattern("{YYYY}-{MM}-{DD}-{D}")
-
-    def test_only_yyyy_raises_value_error(self):
-        """compile_pattern with only {YYYY} raises ValueError for missing month."""
-        with pytest.raises(ValueError, match="month"):
-            compile_pattern("{YYYY}")
-
-    def test_duplicate_yyyy_raises_value_error(self):
-        """compile_pattern with two {YYYY} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{YYYY\}.*once"):
+    def test_duplicate_yyyy_raises_year_duplicate_code(self):
+        """compile_pattern with two {YYYY} raises YEAR_DUPLICATE."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("{YYYY}{YYYY}{M}{D}")
+        assert exc_info.value.code is PatternErrorCode.YEAR_DUPLICATE
 
-    def test_duplicate_mm_raises_value_error(self):
-        """compile_pattern with two {MM} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{MM\}.*once"):
+    def test_both_mm_and_m_raises_month_conflict_code(self):
+        """compile_pattern with both {MM} and {M} raises MONTH_CONFLICT."""
+        with pytest.raises(PatternValidationError) as exc_info:
+            compile_pattern("{YYYY}-{MM}-{M}-{DD}")
+        assert exc_info.value.code is PatternErrorCode.MONTH_CONFLICT
+
+    def test_missing_month_placeholder_raises_month_missing_code(self):
+        """compile_pattern without any month placeholder raises MONTH_MISSING."""
+        with pytest.raises(PatternValidationError) as exc_info:
+            compile_pattern("{YYYY}-{DD}")
+        assert exc_info.value.code is PatternErrorCode.MONTH_MISSING
+
+    def test_duplicate_mm_raises_month_mm_duplicate_code(self):
+        """compile_pattern with two {MM} raises MONTH_MM_DUPLICATE."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("{YYYY}{MM}{MM}{D}")
+        assert exc_info.value.code is PatternErrorCode.MONTH_MM_DUPLICATE
 
-    def test_duplicate_m_raises_value_error(self):
-        """compile_pattern with two {M} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{M\}.*once"):
+    def test_duplicate_m_raises_month_m_duplicate_code(self):
+        """compile_pattern with two {M} raises MONTH_M_DUPLICATE."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("{YYYY}{M}{M}{DD}")
+        assert exc_info.value.code is PatternErrorCode.MONTH_M_DUPLICATE
 
-    def test_duplicate_dd_raises_value_error(self):
-        """compile_pattern with two {DD} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{DD\}.*once"):
+    def test_both_dd_and_d_raises_day_conflict_code(self):
+        """compile_pattern with both {DD} and {D} raises DAY_CONFLICT."""
+        with pytest.raises(PatternValidationError) as exc_info:
+            compile_pattern("{YYYY}-{MM}-{DD}-{D}")
+        assert exc_info.value.code is PatternErrorCode.DAY_CONFLICT
+
+    def test_missing_day_placeholder_raises_day_missing_code(self):
+        """compile_pattern without any day placeholder raises DAY_MISSING."""
+        with pytest.raises(PatternValidationError) as exc_info:
+            compile_pattern("{YYYY}-{MM}")
+        assert exc_info.value.code is PatternErrorCode.DAY_MISSING
+
+    def test_duplicate_dd_raises_day_dd_duplicate_code(self):
+        """compile_pattern with two {DD} raises DAY_DD_DUPLICATE."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("{YYYY}{M}{DD}{DD}")
+        assert exc_info.value.code is PatternErrorCode.DAY_DD_DUPLICATE
 
-    def test_duplicate_d_raises_value_error(self):
-        """compile_pattern with two {D} raises ValueError."""
-        with pytest.raises(ValueError, match=r"\{D\}.*once"):
+    def test_duplicate_d_raises_day_d_duplicate_code(self):
+        """compile_pattern with two {D} raises DAY_D_DUPLICATE."""
+        with pytest.raises(PatternValidationError) as exc_info:
             compile_pattern("{YYYY}{MM}{D}{D}")
+        assert exc_info.value.code is PatternErrorCode.DAY_D_DUPLICATE
+
+    def test_only_yyyy_raises_month_missing_code(self):
+        """compile_pattern with only {YYYY} raises MONTH_MISSING."""
+        with pytest.raises(PatternValidationError) as exc_info:
+            compile_pattern("{YYYY}")
+        assert exc_info.value.code is PatternErrorCode.MONTH_MISSING
+
+    def test_pattern_validation_error_is_value_error(self):
+        """PatternValidationError is a subclass of ValueError."""
+        with pytest.raises(ValueError):
+            compile_pattern("")
 
 
 # ===========================================================================
