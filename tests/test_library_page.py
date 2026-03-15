@@ -8,6 +8,7 @@ from PySide6 import QtWidgets, QtGui
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
+from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -74,7 +75,9 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
         )
         session.add(face)
         session.commit()
-        return person_id, img.id
+        image_id = img.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return person_id, image_id
 
 
 # --- Filter panel always visible ---

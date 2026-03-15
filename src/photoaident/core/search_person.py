@@ -7,7 +7,8 @@ from typing import TYPE_CHECKING
 import numpy as np
 from sqlalchemy import select
 
-from photoaident.db.database import EmbeddingCluster, Face, FaceState, Person
+from photoaident.db.cluster_means import deserialize_embedding
+from photoaident.db.database import EmbeddingCluster, Face, Person
 from photoaident.db.vector_store import FACE_MATCH_THRESHOLD
 
 _SQLITE_IN_LIMIT = 900  # SQLite bound-parameter limit is 999; stay safely below it
@@ -21,38 +22,17 @@ if TYPE_CHECKING:
 def _compute_cluster_mean(
     cluster_id: int,
     session_factory: "sessionmaker",
-    vector_store: "VectorStore",
 ) -> "np.ndarray | None":
-    """Return normalized mean embedding for a cluster, or None if no valid faces."""
+    """Return persisted mean embedding for a cluster, or None if not yet computed."""
     with session_factory() as session:
-        faiss_ids = list(
-            session.scalars(
-                select(Face.faiss_id).where(
-                    Face.cluster_id == cluster_id,
-                    Face.state == FaceState.IDENTIFIED,
-                    Face.deleted_at.is_(None),
-                )
-            ).all()
+        blob = session.scalar(
+            select(EmbeddingCluster.mean_embedding).where(
+                EmbeddingCluster.id == cluster_id
+            )
         )
-
-    if not faiss_ids:
+    if blob is None:
         return None
-
-    embeddings = []
-    for faiss_id in faiss_ids:
-        try:
-            embeddings.append(vector_store.get_embedding(faiss_id))
-        except IndexError:
-            continue
-
-    if not embeddings:
-        return None
-
-    mean_emb = np.mean(np.stack(embeddings), axis=0).astype(np.float32)
-    norm = np.linalg.norm(mean_emb)
-    if norm > 0:
-        mean_emb = mean_emb / norm
-    return mean_emb
+    return deserialize_embedding(blob)
 
 
 def _accumulate_faiss_scores(
@@ -65,7 +45,7 @@ def _accumulate_faiss_scores(
     """Per cluster: compute mean embedding → FAISS search → keep best score."""
     faiss_scores: dict[int, float] = {}
     for cluster_id in cluster_ids:
-        mean_emb = _compute_cluster_mean(cluster_id, session_factory, vector_store)
+        mean_emb = _compute_cluster_mean(cluster_id, session_factory)
         if mean_emb is None:
             continue
         for fid, score in vector_store.search(
@@ -197,10 +177,7 @@ def _load_person_cluster_means(
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
 ) -> tuple[dict[int, str], list[tuple[int, "np.ndarray"]]]:
-    """Load all persons and compute their cluster mean embeddings.
-
-    Batch-loads all identified face FAISS IDs in a single query to avoid
-    an N+1 pattern (one query per cluster).
+    """Load all persons and their persisted cluster mean embeddings from the DB.
 
     Returns:
         A tuple of (person_names, person_means) where person_names maps
@@ -209,44 +186,19 @@ def _load_person_cluster_means(
     with session_factory() as session:
         person_rows = session.execute(select(Person.id, Person.name)).all()
         cluster_rows = session.execute(
-            select(EmbeddingCluster.id, EmbeddingCluster.person_id)
-        ).all()
-        face_rows = session.execute(
-            select(Face.cluster_id, Face.faiss_id).where(
-                Face.state == FaceState.IDENTIFIED,
-                Face.deleted_at.is_(None),
-            )
+            select(
+                EmbeddingCluster.person_id,
+                EmbeddingCluster.mean_embedding,
+            ).where(EmbeddingCluster.mean_embedding.isnot(None))
         ).all()
 
     person_names: dict[int, str] = {r.id: r.name for r in person_rows}
 
-    cluster_to_person: dict[int, int] = {row.id: row.person_id for row in cluster_rows}
-
-    faiss_ids_by_cluster: dict[int, list[int]] = {}
-    for row in face_rows:
-        faiss_ids_by_cluster.setdefault(row.cluster_id, []).append(row.faiss_id)
-
     person_means: list[tuple[int, np.ndarray]] = []
-    for cluster_id, faiss_ids in faiss_ids_by_cluster.items():
-        person_id = cluster_to_person.get(cluster_id)
-        if person_id is None:
+    for row in cluster_rows:
+        if row.person_id not in person_names:
             continue
-
-        embeddings = []
-        for faiss_id in faiss_ids:
-            try:
-                embeddings.append(vector_store.get_embedding(faiss_id))
-            except IndexError:
-                continue
-
-        if not embeddings:
-            continue
-
-        mean_emb = np.mean(np.stack(embeddings), axis=0).astype(np.float32)
-        norm = np.linalg.norm(mean_emb)
-        if norm > 0:
-            mean_emb = mean_emb / norm
-        person_means.append((person_id, mean_emb))
+        person_means.append((row.person_id, deserialize_embedding(row.mean_embedding)))
 
     return person_names, person_means
 

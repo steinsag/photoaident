@@ -8,6 +8,7 @@ import pytest
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
 from photoaident.core.search import search_images
+from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     Face,
     FaceState,
@@ -112,6 +113,9 @@ def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
             ]
         )
         session.commit()
+
+    recompute_cluster_mean(c1_id, search_db, vector_store)
+    recompute_cluster_mean(c2_id, search_db, vector_store)
 
     # Image with only p1
     _add_identified_face(search_db, vector_store, p1_id, c1_id, emb1)
@@ -249,6 +253,9 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
         )
         session.commit()
         img1_id, img2_id = img1.id, img2.id
+
+    recompute_cluster_mean(c1_id, search_db, vector_store)
+    recompute_cluster_mean(c2_id, search_db, vector_store)
 
     results = search_images(
         tmp_path,

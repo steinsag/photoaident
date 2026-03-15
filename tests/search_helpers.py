@@ -10,6 +10,7 @@ from datetime import datetime
 
 import numpy as np
 
+from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -49,7 +50,10 @@ def _add_identified_face(
     cluster_id: int,
     embedding: np.ndarray,
 ) -> tuple[int, int]:
-    """Insert an identified Face; return (image_id, faiss_id)."""
+    """Insert an identified Face and update the cluster mean.
+
+    Returns (image_id, faiss_id).
+    """
     faiss_id = vector_store.add(embedding)
     with session_factory() as session:
         img = Image(file_path=f"/test/img_{faiss_id}.jpg", file_size=100)
@@ -70,7 +74,9 @@ def _add_identified_face(
         )
         session.add(face)
         session.commit()
-        return img.id, faiss_id
+        image_id = img.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return image_id, faiss_id
 
 
 def _add_unidentified_face(
@@ -132,7 +138,9 @@ def _add_face_for_image(
             )
         )
         session.commit()
-        return img.id
+        image_id = img.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return image_id
 
 
 def _add_image_with_metadata(

@@ -10,6 +10,7 @@ from PySide6 import QtWidgets
 from sqlalchemy import func, select
 from sqlalchemy.orm import contains_eager, selectinload
 
+from photoaident.db.cluster_means import deserialize_embedding, recompute_cluster_mean
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -393,7 +394,7 @@ class LabellingPage(QtWidgets.QWidget):
     ) -> dict[str, float]:
         """Compute cosine similarity between query_embedding and each cluster mean.
 
-        Only clusters with ≥1 identified face are included.
+        Reads persisted mean embeddings from the DB — no FAISS access needed.
         """
         assert self._query_embedding is not None
 
@@ -405,43 +406,12 @@ class LabellingPage(QtWidgets.QWidget):
 
         scores: dict[str, float] = {}
         for age_key, cluster in cluster_by_age.items():
-            faiss_ids = self._get_cluster_faiss_ids(cluster.id)
-            if not faiss_ids:
+            if cluster.mean_embedding is None:
                 continue
-            embeddings = []
-            for fid in faiss_ids:
-                try:
-                    embeddings.append(self.vector_store.get_embedding(fid))
-                except Exception:
-                    logger.warning(
-                        "Failed to retrieve embedding %s", fid, exc_info=True
-                    )
-            if not embeddings:
-                continue
-            mean_vec = np.mean(np.stack(embeddings, axis=0), axis=0).astype(np.float32)
-            mean_norm = np.linalg.norm(mean_vec)
-            if mean_norm < 1e-9:
-                continue
-            mean_vec = mean_vec / mean_norm
+            mean_vec = deserialize_embedding(cluster.mean_embedding)
             scores[age_key] = float(np.dot(q, mean_vec))
 
         return scores
-
-    def _get_cluster_faiss_ids(self, cluster_id: int) -> list[int]:
-        """Load faiss_ids of all identified faces belonging to a cluster."""
-        with self.session_factory() as session:
-            rows = (
-                session.execute(
-                    select(Face.faiss_id).where(
-                        Face.cluster_id == cluster_id,
-                        Face.state == FaceState.IDENTIFIED,
-                        Face.deleted_at.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
-        return list(rows)
 
     def _update_confirm_button(self) -> None:
         self.confirm_btn.setEnabled(
@@ -498,6 +468,7 @@ class LabellingPage(QtWidgets.QWidget):
                 face.cluster_id = cluster.id
                 face.labelled_at = datetime.now(timezone.utc)
                 session.commit()
+        recompute_cluster_mean(cluster.id, self.session_factory, self.vector_store)
         self._load_next_face()
 
     def _on_cancel(self) -> None:

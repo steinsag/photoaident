@@ -210,7 +210,7 @@ erDiagram
         int id PK
         int image_id FK, UK
         datetime taken_at
-        string taken_at_source "exif|filesystem|manual"
+        string taken_at_source "nullable, exif|filepath|manual"
         string camera_make
         string camera_model
         numeric gps_lat
@@ -260,6 +260,7 @@ erDiagram
         int person_id FK
         string label
         string age_group "infant|youngster|teenager|adult|senior"
+        blob mean_embedding "nullable, 512-dim float32"
         datetime created_at
     }
 

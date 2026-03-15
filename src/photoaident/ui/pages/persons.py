@@ -7,6 +7,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     AGE_CLUSTERS,
     EmbeddingCluster,
@@ -19,6 +20,7 @@ from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
+    from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
 
 
@@ -143,11 +145,13 @@ class PersonsPage(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         paths: "AppPaths",
+        vector_store: "VectorStore",
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
         super().__init__(parent)
         self.session_factory = session_factory
         self.paths = paths
+        self.vector_store = vector_store
         self._selected_person_id: Optional[int] = None
         self._pending: dict[int, _PendingChange] = {}
         self._face_widgets: dict[int, ReferenceFaceWidget] = {}
@@ -488,13 +492,25 @@ class PersonsPage(QtWidgets.QWidget):
     def _confirm(self) -> None:
         if not self._pending:
             return
+        affected_cluster_ids: set[int] = set()
         with self.session_factory() as session:
             for face_id, change in self._pending.items():
                 face = session.get(Face, face_id)
                 if face is None:
                     continue
+                # Track old cluster before applying change
+                if face.cluster_id is not None:
+                    affected_cluster_ids.add(face.cluster_id)
+                if (
+                    change.kind == _PendingKind.MOVE
+                    and change.new_cluster_id is not None
+                ):
+                    affected_cluster_ids.add(change.new_cluster_id)
                 self._apply_face_change(face, change)
             session.commit()
+
+        for cluster_id in affected_cluster_ids:
+            recompute_cluster_mean(cluster_id, self.session_factory, self.vector_store)
 
         self._pending.clear()
         # Reload the right panel to reflect DB state

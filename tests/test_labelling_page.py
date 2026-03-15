@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -8,6 +8,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
+from photoaident.db.cluster_means import recompute_cluster_mean, serialize_embedding
 from photoaident.db.database import (
     AGE_CLUSTERS,
     EmbeddingCluster,
@@ -128,6 +129,7 @@ def _insert_identified_face(
 ) -> tuple[int, int]:
     """Insert an identified face with a normalised embedding.
 
+    Also recomputes the cluster mean so that DB-based lookups work.
     Returns (face_id, faiss_id).
     """
     rng = np.random.default_rng(42)
@@ -150,7 +152,9 @@ def _insert_identified_face(
         )
         session.add(face)
         session.commit()
-        return face.id, faiss_id
+        face_id = face.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return face_id, faiss_id
 
 
 def _get_cluster_by_age(session_factory, person_id: int) -> dict:
@@ -464,23 +468,8 @@ def test_on_person_selected_preselects_best_cluster(
 
 
 # ===========================================================================
-# _compute_cluster_scores / _get_cluster_faiss_ids
+# _compute_cluster_scores
 # ===========================================================================
-
-
-def test_get_cluster_faiss_ids(qtbot, session_factory, tmp_app_paths, vector_store):
-    """_get_cluster_faiss_ids() returns only identified-face faiss_ids for a cluster."""
-    img_id = _insert_image(session_factory, "/gfi.jpg", "gfihash")
-    person_id, cluster_id = _insert_person_with_cluster(session_factory, "GFI", "adult")
-    _, faiss_id = _insert_identified_face(
-        session_factory, vector_store, person_id, cluster_id, img_id
-    )
-
-    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
-    qtbot.addWidget(page)
-
-    result = page._get_cluster_faiss_ids(cluster_id)
-    assert faiss_id in result
 
 
 def test_compute_cluster_scores_returns_float(
@@ -1054,85 +1043,46 @@ def test_skip_image_clears_priority_when_all_image_faces_skipped(
 # ===========================================================================
 
 
-def test_compute_cluster_scores_get_embedding_exception(
-    qtbot, session_factory, tmp_app_paths
-):
-    """get_embedding exceptions cause the embedding to be skipped; no score produced."""
-    failing_store = MagicMock()
-    failing_store.get_embedding.side_effect = RuntimeError("FAISS read error")
-
-    img_id = _insert_image(session_factory, "/exc.jpg", "exchash")
-    person_id, cluster_id = _insert_person_with_cluster(session_factory, "Exc", "adult")
-
-    # Insert an identified face so _get_cluster_faiss_ids returns a non-empty list
-    with session_factory() as session:
-        face = Face(
-            image_id=img_id,
-            faiss_id=0,
-            person_id=person_id,
-            cluster_id=cluster_id,
-            bbox_x=0,
-            bbox_y=0,
-            bbox_w=40,
-            bbox_h=40,
-            detection_confidence=0.9,
-            state=FaceState.IDENTIFIED,
-            model_version="test",
-        )
-        session.add(face)
-        session.commit()
-
-    page = LabellingPage(session_factory, tmp_app_paths, failing_store)
-    qtbot.addWidget(page)
-    page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
-
-    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
-    scores = page._compute_cluster_scores(cluster_by_age)
-
-    # All embeddings failed → cluster skipped → no score
-    assert "adult" not in scores
-
-
-def test_compute_cluster_scores_near_zero_mean_norm(
+def test_compute_cluster_scores_null_mean_skipped(
     qtbot, session_factory, tmp_app_paths, vector_store
 ):
-    """_compute_cluster_scores skips clusters with a near-zero mean embedding norm."""
-    img_id = _insert_image(session_factory, "/znm.jpg", "znmhash")
-    person_id, cluster_id = _insert_person_with_cluster(session_factory, "ZNM", "adult")
-
-    # Add two opposite unit vectors so their mean is ~zero
-    v = np.ones(512, dtype=np.float32) / np.sqrt(512)
-    faiss_id1 = vector_store.add(v.copy())
-    faiss_id2 = vector_store.add(-v.copy())
-
-    with session_factory() as session:
-        for faiss_id in (faiss_id1, faiss_id2):
-            session.add(
-                Face(
-                    image_id=img_id,
-                    faiss_id=faiss_id,
-                    person_id=person_id,
-                    cluster_id=cluster_id,
-                    bbox_x=0,
-                    bbox_y=0,
-                    bbox_w=40,
-                    bbox_h=40,
-                    detection_confidence=0.9,
-                    state=FaceState.IDENTIFIED,
-                    model_version="test",
-                )
-            )
-        session.commit()
+    """Cluster with mean_embedding=None is skipped in score computation."""
+    person_id, _ = _insert_person_with_cluster(session_factory, "Exc", "adult")
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
     page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
 
     cluster_by_age = _get_cluster_by_age(session_factory, person_id)
+    # mean_embedding is None by default (no faces added)
     scores = page._compute_cluster_scores(cluster_by_age)
 
-    # Mean norm is ~0 → cluster skipped
     assert "adult" not in scores
+
+
+def test_compute_cluster_scores_with_persisted_mean(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """_compute_cluster_scores reads the persisted mean and computes a dot product."""
+    person_id, cluster_id = _insert_person_with_cluster(session_factory, "ZNM", "adult")
+
+    # Directly set a known mean_embedding on the cluster
+    mean = np.zeros(512, dtype=np.float32)
+    mean[0] = 1.0
+    with session_factory() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        cluster.mean_embedding = serialize_embedding(mean)
+        session.commit()
+
+    page = LabellingPage(session_factory, tmp_app_paths, vector_store)
+    qtbot.addWidget(page)
+    page._query_embedding = mean.copy()
+
+    cluster_by_age = _get_cluster_by_age(session_factory, person_id)
+    scores = page._compute_cluster_scores(cluster_by_age)
+
+    assert "adult" in scores
+    assert scores["adult"] == pytest.approx(1.0, abs=1e-6)
 
 
 def _insert_face_with_taken_at(

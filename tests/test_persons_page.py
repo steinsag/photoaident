@@ -34,10 +34,11 @@ def _make_window(
 def _make_page(tmp_app_paths: AppPaths, qtbot) -> PersonsPage:
     apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
     from photoaident.db.database import get_engine, get_session_factory
+    from photoaident.db.vector_store import VectorStore
 
     engine = get_engine(str(tmp_app_paths.db_path))
     session_factory = get_session_factory(engine)
-    page = PersonsPage(session_factory, tmp_app_paths)
+    page = PersonsPage(session_factory, tmp_app_paths, VectorStore())
     qtbot.addWidget(page)
     return page
 
