@@ -45,6 +45,11 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # 'filepath' is not in the old enum; remap to 'filesystem' before the type change.
+    op.execute(
+        "UPDATE image_metadata SET taken_at_source = 'filesystem' "
+        "WHERE taken_at_source = 'filepath'"
+    )
     # Restore taken_at_source to NOT NULL, setting any NULLs back to 'filesystem'
     # so that existing rows are valid after the column becomes non-nullable again.
     op.execute(
