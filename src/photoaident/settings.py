@@ -29,10 +29,17 @@ class Settings:
             with open(path, "rb") as f:
                 data = tomllib.load(f)
 
-            enabled = bool(data.get("filepath_date_enabled", False))
+            raw_enabled = data.get("filepath_date_enabled", False)
+            if not isinstance(raw_enabled, bool):
+                logger.warning(
+                    "filepath_date_enabled must be a boolean, got %r; disabling.",
+                    raw_enabled,
+                )
+                raw_enabled = False
             pattern = str(data.get("filepath_date_pattern", ""))
+            enabled = raw_enabled and bool(pattern)
 
-            if enabled and pattern:
+            if enabled:
                 from photoaident.core.filepath_date import compile_pattern
 
                 try:
