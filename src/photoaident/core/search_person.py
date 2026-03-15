@@ -199,6 +199,9 @@ def _load_person_cluster_means(
 ) -> tuple[dict[int, str], list[tuple[int, "np.ndarray"]]]:
     """Load all persons and compute their cluster mean embeddings.
 
+    Batch-loads all identified face FAISS IDs in a single query to avoid
+    an N+1 pattern (one query per cluster).
+
     Returns:
         A tuple of (person_names, person_means) where person_names maps
         person_id → name and person_means is a list of (person_id, mean_embedding).
@@ -208,19 +211,42 @@ def _load_person_cluster_means(
         cluster_rows = session.execute(
             select(EmbeddingCluster.id, EmbeddingCluster.person_id)
         ).all()
+        face_rows = session.execute(
+            select(Face.cluster_id, Face.faiss_id).where(
+                Face.state == FaceState.IDENTIFIED,
+                Face.deleted_at.is_(None),
+            )
+        ).all()
 
     person_names: dict[int, str] = {r.id: r.name for r in person_rows}
 
-    clusters_by_person: dict[int, list[int]] = {}
-    for row in cluster_rows:
-        clusters_by_person.setdefault(row.person_id, []).append(row.id)
+    cluster_to_person: dict[int, int] = {row.id: row.person_id for row in cluster_rows}
+
+    faiss_ids_by_cluster: dict[int, list[int]] = {}
+    for row in face_rows:
+        faiss_ids_by_cluster.setdefault(row.cluster_id, []).append(row.faiss_id)
 
     person_means: list[tuple[int, np.ndarray]] = []
-    for person_id, cluster_ids in clusters_by_person.items():
-        for cluster_id in cluster_ids:
-            mean = _compute_cluster_mean(cluster_id, session_factory, vector_store)
-            if mean is not None:
-                person_means.append((person_id, mean))
+    for cluster_id, faiss_ids in faiss_ids_by_cluster.items():
+        person_id = cluster_to_person.get(cluster_id)
+        if person_id is None:
+            continue
+
+        embeddings = []
+        for faiss_id in faiss_ids:
+            try:
+                embeddings.append(vector_store.get_embedding(faiss_id))
+            except IndexError:
+                continue
+
+        if not embeddings:
+            continue
+
+        mean_emb = np.mean(np.stack(embeddings), axis=0).astype(np.float32)
+        norm = np.linalg.norm(mean_emb)
+        if norm > 0:
+            mean_emb = mean_emb / norm
+        person_means.append((person_id, mean_emb))
 
     return person_names, person_means
 
