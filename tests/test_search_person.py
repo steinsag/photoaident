@@ -6,6 +6,7 @@ import numpy as np
 
 import photoaident.core.search as search_module
 from photoaident.core.search import _find_images_by_person, search_images
+from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -234,3 +235,130 @@ def test_search_images_chunks_large_id_list(search_db, vector_store, tmp_path):
         )
 
     assert {r.image_id for r in results} == expected_ids
+
+
+# ===========================================================================
+# resolve_faces_to_persons — cluster-mean based face resolution
+# ===========================================================================
+
+
+def test_resolve_faces_to_persons_returns_match(search_db, vector_store):
+    """Resolves an unidentified face to a person via cluster mean similarity."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+
+    emb = np.zeros(512, dtype=np.float32)
+    emb[0] = 1.0
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
+
+    # Add an unidentified face with the same embedding
+    _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb.copy())
+
+    results = resolve_faces_to_persons([unid_faiss_id], search_db, vector_store)
+    match = results[unid_faiss_id]
+    assert match is not None
+    assert match[0] == "Test Person"
+    assert match[1] > 0.5
+
+
+def test_resolve_faces_to_persons_no_persons(search_db, vector_store):
+    """Returns None for all faces when no persons exist."""
+    emb = np.ones(512, dtype=np.float32)
+    emb /= np.linalg.norm(emb)
+    faiss_id = vector_store.add(emb)
+
+    results = resolve_faces_to_persons([faiss_id], search_db, vector_store)
+    assert results[faiss_id] is None
+
+
+def test_resolve_faces_to_persons_below_threshold(search_db, vector_store):
+    """Returns None when similarity is below threshold."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+
+    # Person's cluster embedding along axis 0
+    emb_person = np.zeros(512, dtype=np.float32)
+    emb_person[0] = 1.0
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, emb_person)
+
+    # Orthogonal embedding → dot product ≈ 0
+    emb_other = np.zeros(512, dtype=np.float32)
+    emb_other[1] = 1.0
+    _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb_other)
+
+    results = resolve_faces_to_persons(
+        [unid_faiss_id], search_db, vector_store, threshold=0.35
+    )
+    assert results[unid_faiss_id] is None
+
+
+def test_resolve_faces_to_persons_empty_input(search_db, vector_store):
+    """Returns empty dict for empty input."""
+    assert resolve_faces_to_persons([], search_db, vector_store) == {}
+
+
+def test_resolve_faces_to_persons_index_error(search_db, vector_store):
+    """Returns None for faiss_id out of bounds in the vector store."""
+    # Need at least one person so we get past the early return
+    _add_person_cluster(search_db)
+
+    results = resolve_faces_to_persons([999], search_db, vector_store)
+    assert results[999] is None
+
+
+def test_resolve_faces_to_persons_multiple_faces(search_db, vector_store):
+    """Resolves multiple faces in a single call, each to the correct person."""
+    # Create two persons with different cluster embeddings
+    with search_db() as session:
+        p1 = Person(name="Alice")
+        p2 = Person(name="Bob")
+        session.add_all([p1, p2])
+        session.flush()
+        c1 = EmbeddingCluster(person_id=p1.id, label="adult")
+        c2 = EmbeddingCluster(person_id=p2.id, label="adult")
+        session.add_all([c1, c2])
+        session.commit()
+        p1_id, c1_id = p1.id, c1.id
+        p2_id, c2_id = p2.id, c2.id
+
+    emb_alice = np.zeros(512, dtype=np.float32)
+    emb_alice[0] = 1.0
+    _add_identified_face(search_db, vector_store, p1_id, c1_id, emb_alice)
+
+    emb_bob = np.zeros(512, dtype=np.float32)
+    emb_bob[1] = 1.0
+    _add_identified_face(search_db, vector_store, p2_id, c2_id, emb_bob)
+
+    # Unidentified faces matching each person
+    _, fid_alice = _add_unidentified_face(search_db, vector_store, emb_alice.copy())
+    _, fid_bob = _add_unidentified_face(search_db, vector_store, emb_bob.copy())
+
+    results = resolve_faces_to_persons(
+        [fid_alice, fid_bob], search_db, vector_store, threshold=0.0
+    )
+
+    match_alice = results[fid_alice]
+    assert match_alice is not None
+    assert match_alice[0] == "Alice"
+    match_bob = results[fid_bob]
+    assert match_bob is not None
+    assert match_bob[0] == "Bob"
+
+
+def test_resolve_faces_to_persons_consistent_with_search(search_db, vector_store):
+    """A face found by _find_images_by_person should also be resolved by
+    resolve_faces_to_persons, ensuring search and detail dialog agree."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+
+    emb = _rand_norm_emb()
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
+    _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb.copy())
+
+    # Search finds the image
+    search_results = _find_images_by_person(search_db, vector_store, person_id)
+    search_image_ids = [r[0] for r in search_results]
+    assert len(search_image_ids) > 0
+
+    # Resolution also matches the same face
+    resolve_results = resolve_faces_to_persons([unid_faiss_id], search_db, vector_store)
+    match = resolve_results[unid_faiss_id]
+    assert match is not None
+    assert match[0] == "Test Person"

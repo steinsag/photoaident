@@ -6,6 +6,13 @@ from typing import Any, Callable, Concatenate, List, ParamSpec, Tuple, TypeVar
 import numpy as np
 from faiss import IndexFlatIP, read_index, write_index
 
+FACE_MATCH_THRESHOLD: float = 0.35
+"""Minimum cosine similarity for a face embedding match.
+
+Used consistently across person search (library) and face resolution
+(image detail dialog) so that search results and face highlights agree.
+"""
+
 P = ParamSpec("P")
 R = TypeVar("R")
 
