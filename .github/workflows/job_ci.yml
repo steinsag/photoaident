@@ -19,7 +19,7 @@ jobs:
           python-version: "3.12"
 
       - name: Sync dependencies (including dev)
-        run: uv sync
+        run: uv sync --group cpu_coreml
 
       - name: Install system dependencies for Qt and Xvfb
         run: |
