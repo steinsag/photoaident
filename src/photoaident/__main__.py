@@ -14,48 +14,44 @@ from photoaident.utils.instance_lock import InstanceLock  # pragma: no cover
 APP_NAME = "PhotoAIdent"  # pragma: no cover
 
 
-def ensure_nvidia_paths():
+def ensure_nvidia_paths() -> None:
+    """Prepend NVIDIA library paths to LD_LIBRARY_PATH and re-exec if needed.
+
+    CUDA/cuDNN libs live under site-packages/nvidia/; the dynamic linker must
+    see them before the process starts loading ONNX Runtime.
+    """
     if platform.system() != "Linux" or os.environ.get("ORT_PATHS_SET") == "1":
         return
 
     import site
 
     try:
-        # Get the primary site-packages directory
         site_pkgs = Path(site.getsitepackages()[0])
     except IndexError:
         return
 
-    # In CUDA/cuDNN, libs are usually in site-packages/nvidia/<pkg>/lib
-    search_roots = [
-        site_pkgs / "nvidia",
-    ]
+    nvidia_root = site_pkgs / "nvidia"
+    if not nvidia_root.exists():
+        return
 
-    valid_paths = []
-    for root in search_roots:
-        if not root.exists():
-            continue
+    # Collect root itself (e.g. tensorrt_libs) and any 'lib' subdirs (e.g. cudnn/lib)
+    candidates: list[str] = []
+    if any(nvidia_root.glob("*.so*")):
+        candidates.append(str(nvidia_root.resolve()))
+    candidates.extend(str(d.resolve()) for d in nvidia_root.rglob("lib") if d.is_dir())
 
-        # Add the root itself if it contains .so files (like tensorrt_libs)
-        if any(root.glob("*.so*")):
-            valid_paths.append(str(root.resolve()))
+    if not candidates:
+        return
 
-        # Also check subdirectories named 'lib' (like nvidia/cudnn/lib)
-        for lib_dir in root.rglob("lib"):
-            if lib_dir.is_dir():
-                valid_paths.append(str(lib_dir.resolve()))
+    unique_paths = list(dict.fromkeys(candidates))
+    current_ld = os.environ.get("LD_LIBRARY_PATH", "")
+    os.environ["LD_LIBRARY_PATH"] = ":".join(unique_paths) + (
+        f":{current_ld}" if current_ld else ""
+    )
+    os.environ["ORT_PATHS_SET"] = "1"
 
-    if valid_paths:
-        # Deduplicate and merge with existing LD_LIBRARY_PATH
-        unique_paths = list(dict.fromkeys(valid_paths))
-        current_ld = os.environ.get("LD_LIBRARY_PATH", "")
-        new_ld = ":".join(unique_paths) + (f":{current_ld}" if current_ld else "")
-
-        os.environ["LD_LIBRARY_PATH"] = new_ld
-        os.environ["ORT_PATHS_SET"] = "1"
-
-        # Re-execute the script so the dynamic linker loads the new paths
-        os.execv(sys.executable, [sys.executable] + sys.argv)
+    # Re-execute so the dynamic linker picks up the new paths
+    os.execv(sys.executable, [sys.executable] + sys.argv)
 
 
 def _fix_macos_app_name() -> None:  # pragma: no cover
