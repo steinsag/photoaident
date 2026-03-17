@@ -8,7 +8,6 @@ import photoaident.core.search as search_module
 from photoaident.core.search import _find_images_by_person, search_images
 from photoaident.core.search_person import (
     _intersect_and_rank,
-    _match_face_to_person,
     resolve_faces_to_persons,
 )
 from photoaident.db.database import (
@@ -397,24 +396,18 @@ def test_intersect_and_rank_multiple_persons():
 
 
 # ===========================================================================
-# _match_face_to_person — stale faiss_id
+# resolve_faces_to_persons — stale faiss_id
 # ===========================================================================
 
 
-def test_match_face_to_person_index_error(search_db, vector_store):
-    """Returns None when faiss_id is not in the vector store."""
+def test_resolve_faces_stale_faiss_id(search_db, vector_store):
+    """Returns None for a faiss_id that is not in the vector store."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
     emb = np.zeros(512, dtype=np.float32)
     emb[0] = 1.0
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
-    # Build person_means the same way resolve_faces_to_persons would
-    from photoaident.core.search_person import _load_person_cluster_means
-
-    person_names, person_means = _load_person_cluster_means(search_db)
-    assert len(person_means) > 0
-
-    # faiss_id 9999 does not exist → IndexError → returns None
-    result = _match_face_to_person(9999, person_means, person_names, vector_store, 0.0)
-    assert result is None
+    # faiss_id 9999 does not exist → IndexError path → maps to None
+    result = resolve_faces_to_persons([9999], search_db, vector_store, threshold=0.0)
+    assert result == {9999: None}

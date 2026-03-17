@@ -202,33 +202,6 @@ def _load_person_cluster_means(
     return person_names, person_means
 
 
-def _match_face_to_person(
-    fid: int,
-    person_means: list[tuple[int, "np.ndarray"]],
-    person_names: dict[int, str],
-    vector_store: "VectorStore",
-    threshold: float,
-) -> tuple[str, float] | None:
-    """Return (person_name, score) for the best-matching person, or None."""
-    try:
-        embedding = vector_store.get_embedding(fid)
-    except IndexError:
-        return None
-
-    best_person_id: int | None = None
-    best_score = 0.0
-
-    for person_id, mean_emb in person_means:
-        score = float(np.dot(embedding, mean_emb))
-        if score >= threshold and score > best_score:
-            best_score = score
-            best_person_id = person_id
-
-    if best_person_id is not None:
-        return person_names[best_person_id], best_score
-    return None
-
-
 def resolve_faces_to_persons(
     faiss_ids: list[int],
     session_factory: "sessionmaker",
@@ -240,10 +213,9 @@ def resolve_faces_to_persons(
     Uses the same cluster-mean approach as the library person search so that
     search results and face highlighting in the detail dialog agree.
 
-    For each face, the dot product (= cosine similarity for L2-normalized
-    embeddings) against every person's cluster means is computed.  The
-    person whose best cluster mean exceeds *threshold* with the highest
-    score wins.
+    Embeddings are batched into an (N, 512) matrix and scored against all M
+    cluster means in a single (N, 512) @ (M, 512).T multiply, reducing Python
+    overhead to O(1) NumPy/BLAS calls instead of O(N × M) Python iterations.
 
     Args:
         faiss_ids: FAISS index IDs of the faces to resolve.
@@ -263,9 +235,34 @@ def resolve_faces_to_persons(
     if not person_names or not person_means:
         return dict.fromkeys(faiss_ids)
 
-    return {
-        fid: _match_face_to_person(
-            fid, person_means, person_names, vector_store, threshold
-        )
-        for fid in faiss_ids
-    }
+    # Build (M, 512) means matrix once; keep parallel person_id list for lookup.
+    mean_person_ids = [pid for pid, _ in person_means]
+    means_matrix = np.stack([emb for _, emb in person_means])  # (M, 512)
+
+    result: dict[int, tuple[str, float] | None] = {}
+    valid_fids: list[int] = []
+    embeddings: list[np.ndarray] = []
+
+    for fid in faiss_ids:
+        try:
+            embeddings.append(vector_store.get_embedding(fid))
+            valid_fids.append(fid)
+        except IndexError:
+            result[fid] = None
+
+    if valid_fids:
+        emb_matrix = np.stack(embeddings)  # (N, 512)
+        scores = emb_matrix @ means_matrix.T  # (N, M)
+
+        best_cols = np.argmax(scores, axis=1)  # (N,)
+        best_scores = scores[np.arange(len(valid_fids)), best_cols]  # (N,)
+
+        for i, fid in enumerate(valid_fids):
+            score = float(best_scores[i])
+            if score >= threshold:
+                person_id = mean_person_ids[int(best_cols[i])]
+                result[fid] = (person_names[person_id], score)
+            else:
+                result[fid] = None
+
+    return result
