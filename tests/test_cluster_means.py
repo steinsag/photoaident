@@ -54,6 +54,12 @@ def test_serialize_deserialize_roundtrip():
     np.testing.assert_array_equal(emb, recovered)
 
 
+def test_serialize_wrong_shape_raises():
+    """serialize_embedding rejects arrays with wrong shape."""
+    with pytest.raises(ValueError):
+        serialize_embedding(np.zeros((10, 10), dtype=VectorStore.EMBEDDING_DTYPE))
+
+
 def test_serialize_produces_correct_size():
     """Serialized embedding has DEFAULT_DIMENSION * sizeof(EMBEDDING_DTYPE) bytes."""
     emb = _zero_emb()
@@ -61,6 +67,12 @@ def test_serialize_produces_correct_size():
         VectorStore.DEFAULT_DIMENSION * np.dtype(VectorStore.EMBEDDING_DTYPE).itemsize
     )
     assert len(serialize_embedding(emb)) == expected_size
+
+
+def test_deserialize_wrong_length_returns_none():
+    """deserialize_embedding returns None for a blob of unexpected length."""
+    result = deserialize_embedding(b"\x00" * 4)
+    assert result is None
 
 
 # ── recompute_cluster_mean ────────────────────────────────────────────────
