@@ -147,6 +147,52 @@ def test_restore_moves_widget_on_screen_when_off_screen(qtbot, tmp_path):
     assert result is True
 
 
+def test_restore_returns_false_when_geometry_data_is_corrupt(qtbot, tmp_path):
+    """restore_widget_geometry returns False when restoreGeometry() rejects the data."""
+    ini_path = tmp_path / "corrupt_geom.ini"
+
+    # Write a recognisable but invalid geometry blob so that the key exists
+    # but QWidget.restoreGeometry() returns False.
+    settings = QtCore.QSettings(str(ini_path), QtCore.QSettings.Format.IniFormat)
+    settings.beginGroup("QWidget")
+    settings.setValue("geometry", QtCore.QByteArray(b"\x00\x01\x02corrupt"))
+    settings.endGroup()
+    settings.sync()
+
+    widget = QtWidgets.QWidget()
+    qtbot.addWidget(widget)
+
+    with patch.object(QtWidgets.QWidget, "restoreGeometry", return_value=False):
+        result = restore_widget_geometry(widget, ini_path)
+
+    assert result is False
+
+
+def test_restore_returns_false_when_state_data_is_corrupt(qtbot, tmp_path):
+    """restore_widget_geometry returns False when restoreState() rejects the data."""
+    ini_path = tmp_path / "corrupt_state.ini"
+
+    window = QtWidgets.QMainWindow()
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    # Save valid geometry and a corrupt state blob.
+    save_widget_geometry(window, ini_path, save_state=False)
+
+    settings = QtCore.QSettings(str(ini_path), QtCore.QSettings.Format.IniFormat)
+    settings.beginGroup("QMainWindow")
+    settings.setValue("state", QtCore.QByteArray(b"\x00\x01\x02corrupt"))
+    settings.endGroup()
+    settings.sync()
+
+    window2 = QtWidgets.QMainWindow()
+    qtbot.addWidget(window2)
+
+    with patch.object(QtWidgets.QMainWindow, "restoreState", return_value=False):
+        result = restore_widget_geometry(window2, ini_path, restore_state=True)
+
+    assert result is False
+
+
 def test_mainwindow_state_not_saved_for_plain_widget(qtbot, tmp_path):
     """save_state=True on a plain QWidget does not write a 'state' key."""
 
