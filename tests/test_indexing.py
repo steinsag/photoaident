@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from photoaident.core.indexing import IndexingTask, _dms_to_decimal
 from photoaident.db.database import Image, ImageMetadata, TakenAtSource
+from photoaident.db.vector_store import VectorStore
 
 
 class _Ratio:
@@ -105,7 +106,9 @@ def test_indexing_task_success(
     mock_embedder.process_image.return_value = [
         {
             "bbox": [10, 10, 60, 60],
-            "embedding": _rng.random(512).astype(np.float32),
+            "embedding": _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+                VectorStore.EMBEDDING_DTYPE
+            ),
             "det_score": 0.95,
             "gender": 1,
             "age": 30,

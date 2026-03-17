@@ -2,154 +2,18 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
-from sqlalchemy import select
 
-from photoaident.db.database import Face, FaceState, Image as DBImage, Person
+from photoaident.core.search_person import resolve_faces_to_persons
+from photoaident.db.database import Face, FaceState, Image as DBImage
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import get_exif_transform
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session, sessionmaker
+    from sqlalchemy.orm import sessionmaker
 
     from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
-
-
-def _resolve_batch_person_names(
-    faiss_ids: list[int],
-    session: "Session",
-    vector_store: "VectorStore",
-    threshold: float = 0.35,
-) -> dict[int, tuple[str, float] | None]:
-    """Find the best-matching identified person for several unidentified
-    face embeddings.
-
-    Args:
-        faiss_ids: List of FAISS index IDs of the faces to resolve.
-        session: SQLAlchemy session (already open).
-        vector_store: FAISS vector store.
-        threshold: Minimum similarity score to consider a match.
-
-    Returns:
-        A dictionary mapping each faiss_id to a (person_name, score) tuple or None.
-    """
-    if not faiss_ids:
-        return {}
-
-    # 1. Collect all neighbor searches
-    all_neighbors_map: dict[int, list[tuple[int, float]]] = {}
-    all_neighbor_ids: set[int] = set()
-
-    for fid in faiss_ids:
-        try:
-            embedding = vector_store.get_embedding(fid)
-            # Search for top-11 similar faces so we can exclude self
-            neighbors = vector_store.search(embedding, k=11, threshold=threshold)
-            neighbor_ids = [nid for nid, _ in neighbors if nid != fid]
-            if neighbor_ids:
-                all_neighbors_map[fid] = neighbors
-                all_neighbor_ids.update(neighbor_ids)
-        except IndexError:
-            continue
-
-    if not all_neighbor_ids:
-        return dict.fromkeys(faiss_ids)
-
-    # 2. Batch DB query for all potential neighbor names
-    stmt = (
-        select(Face.faiss_id, Person.name)
-        .join(Face.person)
-        .where(
-            Face.faiss_id.in_(list(all_neighbor_ids)),
-            Face.state == FaceState.IDENTIFIED,
-            Face.deleted_at.is_(None),
-        )
-    )
-    rows = session.execute(stmt).all()
-    id_to_name = {row.faiss_id: row.name for row in rows}
-
-    # 3. Map back to each original face
-    results: dict[int, tuple[str, float] | None] = {}
-    for fid in faiss_ids:
-        neighbors = all_neighbors_map.get(fid)
-        if not neighbors:
-            results[fid] = None
-            continue
-
-        # Filter neighbors to those that have an identified name in our DB result
-        valid_neighbors = [
-            (nid, score) for nid, score in neighbors if nid in id_to_name and nid != fid
-        ]
-
-        if not valid_neighbors:
-            results[fid] = None
-            continue
-
-        # Pick the one with the highest score
-        best_id, best_score = max(valid_neighbors, key=lambda x: x[1])
-        results[fid] = (id_to_name[best_id], best_score)
-
-    return results
-
-
-def _resolve_best_person_name(
-    faiss_id: int,
-    session: "Session",
-    vector_store: "VectorStore",
-    threshold: float = 0.35,
-) -> tuple[str, float] | None:
-    """Find the best-matching identified person for an unidentified face embedding.
-
-    Args:
-        faiss_id: The FAISS index ID of the face to resolve.
-        session: SQLAlchemy session (already open).
-        vector_store: FAISS vector store.
-        threshold: Minimum similarity score to consider a match.
-
-    Returns:
-        A (person_name, score) tuple, or None if no match found.
-    """
-    try:
-        embedding = vector_store.get_embedding(faiss_id)
-    except IndexError:
-        return None
-
-    # Search for top-11 similar faces so we can exclude self
-    neighbors = vector_store.search(embedding, k=11, threshold=threshold)
-    neighbor_ids = [nid for nid, _ in neighbors if nid != faiss_id]
-    if not neighbor_ids:
-        return None
-
-    return _query_best_person(faiss_id, neighbor_ids, neighbors, session)
-
-
-def _query_best_person(
-    faiss_id: int,
-    neighbor_ids: list[int],
-    neighbors: list[tuple[int, float]],
-    session: "Session",
-) -> tuple[str, float] | None:
-    """Execute the DB query to find the best person among neighbors."""
-    stmt = (
-        select(Face.faiss_id, Person.name)
-        .join(Face.person)
-        .where(
-            Face.faiss_id.in_(neighbor_ids),
-            Face.state == FaceState.IDENTIFIED,
-            Face.deleted_at.is_(None),
-        )
-    )
-    rows = session.execute(stmt).all()
-
-    if not rows:
-        return None
-
-    id_to_score = {nid: score for nid, score in neighbors if nid != faiss_id}
-    id_to_name = {row.faiss_id: row.name for row in rows}
-
-    best_id = max(id_to_name.keys(), key=lambda nid: id_to_score.get(nid, 0.0))
-    return id_to_name[best_id], id_to_score[best_id]
 
 
 class _FaceOverlayLabel(QtWidgets.QLabel):
@@ -362,7 +226,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         Color is green for identified/anonymous/matched-unidentified faces and
         red only for truly unknown (unidentified with no FAISS match) faces.
         """
-        # Pre-resolve unidentified faces in a single session to avoid N+1 queries
+        # Pre-resolve unidentified faces in one batch to avoid per-face (N+1) queries
         unidentified_ids = [
             f.faiss_id
             for f in self.image_data.faces
@@ -372,11 +236,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
         ]
 
         if unidentified_ids:
-            with self._session_factory() as session:
-                resolved = _resolve_batch_person_names(
-                    unidentified_ids, session, self._vector_store
-                )
-                self._resolved_names.update(resolved)
+            resolved = resolve_faces_to_persons(
+                unidentified_ids, self._session_factory, self._vector_store
+            )
+            self._resolved_names.update(resolved)
 
         result: list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]] = []
         for face in self.image_data.faces:

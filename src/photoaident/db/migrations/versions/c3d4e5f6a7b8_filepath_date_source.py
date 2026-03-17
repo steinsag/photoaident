@@ -25,16 +25,25 @@ _NEW_ENUM = sa.Enum("exif", "filepath", "manual", name="takenatsource")
 
 
 def upgrade() -> None:
-    # Rows whose date came from the unreliable filesystem mtime are cleared:
-    # set both taken_at and taken_at_source to NULL before the constraint changes.
+    # Step 1: make the column nullable while keeping _OLD_ENUM so that SQLite's
+    # table-recreation (batch mode) does not encounter a CHECK violation on the
+    # existing 'filesystem' rows.
+    with op.batch_alter_table("image_metadata") as batch_op:
+        batch_op.alter_column(
+            "taken_at_source",
+            existing_type=_OLD_ENUM,
+            type_=_OLD_ENUM,
+            nullable=True,
+        )
+
+    # Step 2: clear rows whose date came from the unreliable filesystem mtime.
     op.execute(
         "UPDATE image_metadata SET taken_at = NULL, taken_at_source = NULL "
         "WHERE taken_at_source = 'filesystem'"
     )
 
-    # SQLite requires batch mode to alter column constraints.  The type change
-    # from the old enum (includes 'filesystem') to the new one (includes
-    # 'filepath') updates the CHECK constraint when SQLite recreates the table.
+    # Step 3: now that no 'filesystem' values remain, switch to _NEW_ENUM which
+    # replaces 'filesystem' with 'filepath' in the CHECK constraint.
     with op.batch_alter_table("image_metadata") as batch_op:
         batch_op.alter_column(
             "taken_at_source",

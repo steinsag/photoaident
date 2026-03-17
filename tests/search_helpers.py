@@ -10,6 +10,7 @@ from datetime import datetime
 
 import numpy as np
 
+from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -23,9 +24,32 @@ from photoaident.db.vector_store import VectorStore
 
 _rng = np.random.default_rng(seed=42)
 
+_DIM = VectorStore.DEFAULT_DIMENSION
+_DTYPE = VectorStore.EMBEDDING_DTYPE
+
 
 def _rand_norm_emb() -> np.ndarray:
-    v = _rng.random(512).astype(np.float32)
+    """Return a random unit-length embedding vector."""
+    v = _rng.random(_DIM).astype(_DTYPE)
+    v /= np.linalg.norm(v)
+    return v
+
+
+def _zero_emb() -> np.ndarray:
+    """Return a zero embedding vector."""
+    return np.zeros(_DIM, dtype=_DTYPE)
+
+
+def _unit_emb(axis: int) -> np.ndarray:
+    """Return a unit vector with 1.0 at the given axis index."""
+    v = np.zeros(_DIM, dtype=_DTYPE)
+    v[axis] = 1.0
+    return v
+
+
+def _ones_norm_emb() -> np.ndarray:
+    """Return a normalized all-ones embedding vector."""
+    v = np.ones(_DIM, dtype=_DTYPE)
     v /= np.linalg.norm(v)
     return v
 
@@ -49,7 +73,10 @@ def _add_identified_face(
     cluster_id: int,
     embedding: np.ndarray,
 ) -> tuple[int, int]:
-    """Insert an identified Face; return (image_id, faiss_id)."""
+    """Insert an identified Face and update the cluster mean.
+
+    Returns (image_id, faiss_id).
+    """
     faiss_id = vector_store.add(embedding)
     with session_factory() as session:
         img = Image(file_path=f"/test/img_{faiss_id}.jpg", file_size=100)
@@ -70,7 +97,9 @@ def _add_identified_face(
         )
         session.add(face)
         session.commit()
-        return img.id, faiss_id
+        image_id = img.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return image_id, faiss_id
 
 
 def _add_unidentified_face(
@@ -132,7 +161,9 @@ def _add_face_for_image(
             )
         )
         session.commit()
-        return img.id
+        image_id = img.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return image_id
 
 
 def _add_image_with_metadata(

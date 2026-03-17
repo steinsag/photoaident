@@ -10,6 +10,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Numeric,
     UniqueConstraint,
@@ -247,6 +248,7 @@ class EmbeddingCluster(Base):
     person_id: Mapped[int] = mapped_column(ForeignKey(_FK_PERSONS), nullable=False)
     label: Mapped[Optional[str]] = mapped_column(String)
     age_group: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    mean_embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     person: Mapped["Person"] = relationship("Person", back_populates="clusters")

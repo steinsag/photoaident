@@ -2,12 +2,12 @@
 
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 from PySide6 import QtWidgets, QtGui
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
+from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
@@ -19,6 +19,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.ui.pages.library import LibraryPage
+from tests.search_helpers import _unit_emb
 
 
 @pytest.fixture
@@ -51,8 +52,7 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
         person_id = p.id
         cluster_id = c.id
 
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     faiss_id = vector_store.add(emb)
 
     with session_factory() as session:
@@ -74,7 +74,9 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
         )
         session.add(face)
         session.commit()
-        return person_id, img.id
+        image_id = img.id
+    recompute_cluster_mean(cluster_id, session_factory, vector_store)
+    return person_id, image_id
 
 
 # --- Filter panel always visible ---

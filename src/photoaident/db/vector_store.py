@@ -6,6 +6,13 @@ from typing import Any, Callable, Concatenate, List, ParamSpec, Tuple, TypeVar
 import numpy as np
 from faiss import IndexFlatIP, read_index, write_index
 
+FACE_MATCH_THRESHOLD: float = 0.35
+"""Minimum cosine similarity for a face embedding match.
+
+Used consistently across person search (library) and face resolution
+(image detail dialog) so that search results and face highlights agree.
+"""
+
 P = ParamSpec("P")
 R = TypeVar("R")
 
@@ -24,7 +31,10 @@ def _locked(
 
 
 class VectorStore:
-    """FAISS wrapper for 512-dimensional face embeddings using IndexFlatIP.
+    """FAISS wrapper for face embeddings using IndexFlatIP.
+
+    The vector dimensionality is configurable via the ``dimension`` argument
+    (defaulting to ``DEFAULT_DIMENSION``).
 
     IndexFlatIP uses Inner Product similarity, which for L2-normalized vectors
     is equivalent to cosine similarity.
@@ -34,6 +44,7 @@ class VectorStore:
     """
 
     DEFAULT_DIMENSION = 512
+    EMBEDDING_DTYPE = np.float32
 
     def __init__(self, dimension: int = DEFAULT_DIMENSION):
         self.dimension = dimension
@@ -42,30 +53,40 @@ class VectorStore:
         # position which acts as the faiss_id.
         self.index: Any = IndexFlatIP(self.dimension)
 
-    @_locked
-    def add(self, embedding: np.ndarray) -> int:
-        """Adds an embedding to the index and returns its faiss_id.
+    def _prepare_embedding(self, embedding: np.ndarray) -> np.ndarray:
+        """Validate and cast an embedding for FAISS.
 
-        Args:
-            embedding: A 1D or 2D numpy array of shape (512,) or (1, 512).
-
-        Returns:
-            The assigned faiss_id (the position in the index).
+        Accepts shape ``(D,)`` or ``(1, D)``, returns a 2-D ``float32`` array
+        of shape ``(1, D)``.  Raises ``ValueError`` for wrong ndim or dimension.
         """
-        # Ensure it's 2D for FAISS
         if embedding.ndim == 1:
             embedding = embedding.reshape(1, -1)
         elif embedding.ndim != 2:
             raise ValueError(
                 f"Embedding must be a 1D or 2D array; got {embedding.ndim}D."
             )
-
+        # After reshaping/validation above, only a single embedding (1, D) is allowed.
+        if embedding.shape[0] != 1:
+            raise ValueError(
+                f"Batch embeddings with shape (N, D) where N != 1 are not supported; "
+                f"got shape {embedding.shape}."
+            )
         if embedding.shape[1] != self.dimension:
             raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
+        return embedding.astype(VectorStore.EMBEDDING_DTYPE)
 
-        # Ensure float32
-        embedding = embedding.astype(np.float32)
+    @_locked
+    def add(self, embedding: np.ndarray) -> int:
+        """Adds an embedding to the index and returns its faiss_id.
 
+        Args:
+            embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
+                where ``D`` is the store's configured ``dimension``.
+
+        Returns:
+            The assigned faiss_id (the position in the index).
+        """
+        embedding = self._prepare_embedding(embedding)
         faiss_id = self.index.ntotal
         self.index.add(embedding)
         return faiss_id
@@ -77,24 +98,15 @@ class VectorStore:
         """Searches for the k most similar embeddings.
 
         Args:
-            query_embedding: A 1D or 2D numpy array of shape (512,) or (1, 512).
+            query_embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
+                where ``D`` is the store's configured ``dimension``.
             k: Number of neighbors to return.
             threshold: Minimum similarity score to include in results.
 
         Returns:
             A list of tuples (faiss_id, similarity_score) sorted by similarity.
         """
-        if query_embedding.ndim == 1:
-            query_embedding = query_embedding.reshape(1, -1)
-        elif query_embedding.ndim != 2:
-            raise ValueError(
-                f"Query embedding must be 1D or 2D; got {query_embedding.ndim}D."
-            )
-
-        if query_embedding.shape[1] != self.dimension:
-            raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
-
-        query_embedding = query_embedding.astype(np.float32)
+        query_embedding = self._prepare_embedding(query_embedding)
 
         if k <= 0:
             return []

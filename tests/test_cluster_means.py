@@ -1,0 +1,382 @@
+"""Tests for cluster mean embedding persistence."""
+
+import numpy as np
+import pytest
+from sqlalchemy import create_engine
+
+from photoaident.db.cluster_means import (
+    backfill_cluster_means,
+    deserialize_embedding,
+    recompute_cluster_mean,
+    serialize_embedding,
+)
+from photoaident.db.database import (
+    EmbeddingCluster,
+    Face,
+    FaceState,
+    Image,
+    Person,
+    get_session_factory,
+)
+from photoaident.db.migrate import apply_migrations
+from photoaident.db.vector_store import VectorStore
+from tests.search_helpers import _unit_emb, _zero_emb
+
+
+@pytest.fixture
+def cluster_db(tmp_path):
+    """Fresh per-test SQLite DB with migrations applied."""
+    db_path = tmp_path / "cluster.db"
+    apply_migrations(f"sqlite:///{db_path}")
+    engine = create_engine(f"sqlite:///{db_path}")
+    return get_session_factory(engine)
+
+
+@pytest.fixture
+def vs():
+    """Fresh FAISS VectorStore."""
+    return VectorStore()
+
+
+# ── serialize / deserialize roundtrip ─────────────────────────────────────
+
+
+def test_serialize_deserialize_roundtrip():
+    """Serializing then deserializing reproduces the original embedding."""
+    emb = (
+        np.random.default_rng(0)
+        .random(VectorStore.DEFAULT_DIMENSION)
+        .astype(VectorStore.EMBEDDING_DTYPE)
+    )
+    blob = serialize_embedding(emb)
+    recovered = deserialize_embedding(blob)
+    assert recovered is not None
+    np.testing.assert_array_equal(emb, recovered)
+
+
+def test_serialize_wrong_shape_raises():
+    """serialize_embedding rejects arrays with wrong shape."""
+    with pytest.raises(ValueError):
+        serialize_embedding(np.zeros((10, 10), dtype=VectorStore.EMBEDDING_DTYPE))
+
+
+def test_serialize_produces_correct_size():
+    """Serialized embedding has DEFAULT_DIMENSION * sizeof(EMBEDDING_DTYPE) bytes."""
+    emb = _zero_emb()
+    expected_size = (
+        VectorStore.DEFAULT_DIMENSION * np.dtype(VectorStore.EMBEDDING_DTYPE).itemsize
+    )
+    assert len(serialize_embedding(emb)) == expected_size
+
+
+def test_deserialize_wrong_length_returns_none():
+    """deserialize_embedding returns None for a blob of unexpected length."""
+    result = deserialize_embedding(b"\x00" * 4)
+    assert result is None
+
+
+# ── recompute_cluster_mean ────────────────────────────────────────────────
+
+
+def test_recompute_with_no_faces(cluster_db, vs):
+    """Cluster with no identified faces → mean_embedding is NULL."""
+    with cluster_db() as session:
+        person = Person(name="Empty")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.commit()
+        cluster_id = cluster.id
+
+    recompute_cluster_mean(cluster_id, cluster_db, vs)
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        assert cluster.mean_embedding is None
+
+
+def test_recompute_with_one_face(cluster_db, vs):
+    """Single face → mean equals that face's normalized embedding."""
+    emb = _unit_emb(0)
+    faiss_id = vs.add(emb)
+
+    with cluster_db() as session:
+        person = Person(name="Solo")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.flush()
+        cluster_id = cluster.id
+        img = Image(file_path="/solo.jpg", file_size=100)
+        session.add(img)
+        session.flush()
+        face = Face(
+            image_id=img.id,
+            faiss_id=faiss_id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person.id,
+            cluster_id=cluster_id,
+        )
+        session.add(face)
+        session.commit()
+
+    recompute_cluster_mean(cluster_id, cluster_db, vs)
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        assert cluster.mean_embedding is not None
+        mean = deserialize_embedding(cluster.mean_embedding)
+        assert mean is not None
+        # Single face → mean equals the face's embedding
+        np.testing.assert_allclose(mean, emb, atol=1e-6)
+
+
+def test_recompute_with_multiple_faces(cluster_db, vs):
+    """Two faces → mean is the normalized average."""
+    emb1 = _unit_emb(0)
+    emb2 = _unit_emb(1)
+    fid1 = vs.add(emb1)
+    fid2 = vs.add(emb2)
+
+    with cluster_db() as session:
+        person = Person(name="Multi")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.flush()
+        cluster_id = cluster.id
+        for fid in [fid1, fid2]:
+            img = Image(file_path=f"/multi_{fid}.jpg", file_size=100)
+            session.add(img)
+            session.flush()
+            session.add(
+                Face(
+                    image_id=img.id,
+                    faiss_id=fid,
+                    bbox_x=0,
+                    bbox_y=0,
+                    bbox_w=10,
+                    bbox_h=10,
+                    detection_confidence=0.9,
+                    model_version="v1",
+                    state=FaceState.IDENTIFIED,
+                    person_id=person.id,
+                    cluster_id=cluster_id,
+                )
+            )
+        session.commit()
+
+    recompute_cluster_mean(cluster_id, cluster_db, vs)
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        mean = deserialize_embedding(cluster.mean_embedding)
+        assert mean is not None
+        # Mean of [1,0,...] and [0,1,...] normalized
+        expected = _zero_emb()
+        expected[0] = 0.5
+        expected[1] = 0.5
+        expected /= np.linalg.norm(expected)
+        np.testing.assert_allclose(mean, expected, atol=1e-6)
+
+
+def test_recompute_stale_faiss_id_skipped(cluster_db, vs):
+    """Face with faiss_id not in VectorStore is skipped gracefully."""
+    with cluster_db() as session:
+        person = Person(name="Stale")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.flush()
+        cluster_id = cluster.id
+        img = Image(file_path="/stale.jpg", file_size=100)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=999,  # not in vector store
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.9,
+                model_version="v1",
+                state=FaceState.IDENTIFIED,
+                person_id=person.id,
+                cluster_id=cluster_id,
+            )
+        )
+        session.commit()
+
+    recompute_cluster_mean(cluster_id, cluster_db, vs)
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        assert cluster.mean_embedding is None
+
+
+def test_recompute_nonexistent_cluster(cluster_db, vs):
+    """Recomputing a non-existent cluster ID is a no-op."""
+    recompute_cluster_mean(99999, cluster_db, vs)  # must not crash
+
+
+def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
+    """Mean with near-zero norm is treated as invalid and persisted as NULL."""
+    # A zero vector has norm 0; adding it to FAISS and computing the mean
+    # yields a zero vector whose norm is below the 1e-9 threshold.
+    emb = _zero_emb()
+    faiss_id = vs.add(emb)
+
+    with cluster_db() as session:
+        person = Person(name="ZeroNorm")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.flush()
+        cluster_id = cluster.id
+        img = Image(file_path="/zero.jpg", file_size=100)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.9,
+                model_version="v1",
+                state=FaceState.IDENTIFIED,
+                person_id=person.id,
+                cluster_id=cluster_id,
+            )
+        )
+        session.commit()
+
+    recompute_cluster_mean(cluster_id, cluster_db, vs)
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        assert cluster.mean_embedding is None
+
+
+# ── backfill_cluster_means ────────────────────────────────────────────────
+
+
+def test_backfill_populates_null_means(cluster_db, vs):
+    """backfill fills clusters that have NULL mean_embedding."""
+    emb = _unit_emb(0)
+    faiss_id = vs.add(emb)
+
+    with cluster_db() as session:
+        person = Person(name="Backfill")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.flush()
+        cluster_id = cluster.id
+        img = Image(file_path="/backfill.jpg", file_size=100)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.9,
+                model_version="v1",
+                state=FaceState.IDENTIFIED,
+                person_id=person.id,
+                cluster_id=cluster_id,
+            )
+        )
+        session.commit()
+
+    count = backfill_cluster_means(cluster_db, vs)
+    assert count == 1
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        assert cluster.mean_embedding is not None
+
+
+def test_backfill_skips_already_computed(cluster_db, vs):
+    """backfill clusters that already have a mean."""
+    emb = _unit_emb(0)
+    faiss_id = vs.add(emb)
+
+    with cluster_db() as session:
+        person = Person(name="Already")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id,
+            label="adult",
+            age_group="adult",
+            mean_embedding=serialize_embedding(emb),
+        )
+        session.add(cluster)
+        session.flush()
+        img = Image(file_path="/already.jpg", file_size=100)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.9,
+                model_version="v1",
+                state=FaceState.IDENTIFIED,
+                person_id=person.id,
+                cluster_id=cluster.id,
+            )
+        )
+        session.commit()
+
+    count = backfill_cluster_means(cluster_db, vs)
+    assert count == 0
+
+
+def test_backfill_empty_db(cluster_db, vs):
+    """backfill on empty DB is a no-op."""
+    count = backfill_cluster_means(cluster_db, vs)
+    assert count == 0
