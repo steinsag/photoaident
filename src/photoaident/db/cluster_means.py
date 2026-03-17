@@ -9,25 +9,46 @@ import numpy as np
 from sqlalchemy import exists, select
 
 from photoaident.db.database import EmbeddingCluster, Face, FaceState
+from photoaident.db.vector_store import VectorStore
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
 
-    from photoaident.db.vector_store import VectorStore
-
 logger = logging.getLogger(__name__)
-
-_EMBEDDING_DTYPE = np.float32
 
 
 def serialize_embedding(emb: np.ndarray) -> bytes:
-    """Convert a float32 embedding array to raw bytes for DB storage."""
-    return emb.astype(_EMBEDDING_DTYPE).tobytes()
+    """Convert a float32 embedding array to raw bytes for DB storage.
+
+    Raises:
+        ValueError: if *emb* is not a 1-D array of length ``_EMBEDDING_DIM``.
+    """
+    if emb.ndim != 1 or emb.shape[0] != VectorStore.DEFAULT_DIMENSION:
+        raise ValueError(
+            f"serialize_embedding expects shape ({VectorStore.DEFAULT_DIMENSION},),"
+            f" got {emb.shape}"
+        )
+    return emb.astype(VectorStore.EMBEDDING_DTYPE).tobytes()
 
 
-def deserialize_embedding(blob: bytes) -> np.ndarray:
-    """Convert raw bytes back to a float32 embedding array."""
-    return np.frombuffer(blob, dtype=_EMBEDDING_DTYPE).copy()
+def deserialize_embedding(blob: bytes) -> np.ndarray | None:
+    """Convert raw bytes back to a float32 embedding array.
+
+    Returns ``None`` and logs a warning if *blob* is corrupt (wrong length or
+    wrong dtype), so callers can treat the cluster mean as missing rather than
+    crashing at runtime.
+    """
+    expected_bytes = (
+        VectorStore.DEFAULT_DIMENSION * np.dtype(VectorStore.EMBEDDING_DTYPE).itemsize
+    )
+    if len(blob) != expected_bytes:
+        logger.warning(
+            "deserialize_embedding: expected %d bytes, got %d — treating as missing",
+            expected_bytes,
+            len(blob),
+        )
+        return None
+    return np.frombuffer(blob, dtype=VectorStore.EMBEDDING_DTYPE).copy()
 
 
 def recompute_cluster_mean(
@@ -62,7 +83,9 @@ def recompute_cluster_mean(
                 continue
 
         if embeddings:
-            mean_emb = np.mean(np.stack(embeddings), axis=0).astype(_EMBEDDING_DTYPE)
+            mean_emb = np.mean(np.stack(embeddings), axis=0).astype(
+                VectorStore.EMBEDDING_DTYPE
+            )
             norm = np.linalg.norm(mean_emb)
             if norm > 1e-9:
                 mean_blob = serialize_embedding(mean_emb / norm)

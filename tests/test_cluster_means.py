@@ -45,6 +45,7 @@ def test_serialize_deserialize_roundtrip():
     emb = np.random.default_rng(0).random(512).astype(np.float32)
     blob = serialize_embedding(emb)
     recovered = deserialize_embedding(blob)
+    assert recovered is not None
     np.testing.assert_array_equal(emb, recovered)
 
 
@@ -120,6 +121,7 @@ def test_recompute_with_one_face(cluster_db, vs):
         assert cluster is not None
         assert cluster.mean_embedding is not None
         mean = deserialize_embedding(cluster.mean_embedding)
+        assert mean is not None
         # Single face → mean equals the face's embedding
         np.testing.assert_allclose(mean, emb, atol=1e-6)
 
@@ -170,6 +172,7 @@ def test_recompute_with_multiple_faces(cluster_db, vs):
         cluster = session.get(EmbeddingCluster, cluster_id)
         assert cluster is not None
         mean = deserialize_embedding(cluster.mean_embedding)
+        assert mean is not None
         # Mean of [1,0,...] and [0,1,...] normalized
         expected = np.zeros(512, dtype=np.float32)
         expected[0] = 0.5

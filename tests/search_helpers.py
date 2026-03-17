@@ -26,7 +26,7 @@ _rng = np.random.default_rng(seed=42)
 
 
 def _rand_norm_emb() -> np.ndarray:
-    v = _rng.random(512).astype(np.float32)
+    v = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
     v /= np.linalg.norm(v)
     return v
 

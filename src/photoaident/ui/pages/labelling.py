@@ -19,6 +19,7 @@ from photoaident.db.database import (
     ImageMetadata,
     Person,
 )
+from photoaident.db.vector_store import VectorStore
 from photoaident.ui.widgets.cluster_table_widget import ClusterTableWidget
 from photoaident.ui.widgets.face_crop_widget import FaceCropWidget
 from photoaident.ui.widgets.image_preview_widget import ImagePreviewWidget
@@ -30,7 +31,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
 
-    from photoaident.db.vector_store import VectorStore
     from photoaident.paths import AppPaths
 
 
@@ -53,7 +53,7 @@ class LabellingPage(QtWidgets.QWidget):
         self,
         session_factory: "sessionmaker",
         paths: "AppPaths",
-        vector_store: "VectorStore",
+        vector_store: VectorStore,
         parent: Optional[QtWidgets.QWidget] = None,
     ) -> None:
         super().__init__(parent)
@@ -398,7 +398,7 @@ class LabellingPage(QtWidgets.QWidget):
         """
         assert self._query_embedding is not None
 
-        q = self._query_embedding.astype(np.float32).flatten()
+        q = self._query_embedding.astype(VectorStore.EMBEDDING_DTYPE).flatten()
         q_norm = np.linalg.norm(q)
         if q_norm < 1e-9:
             return {}
@@ -409,6 +409,8 @@ class LabellingPage(QtWidgets.QWidget):
             if cluster.mean_embedding is None:
                 continue
             mean_vec = deserialize_embedding(cluster.mean_embedding)
+            if mean_vec is None:
+                continue
             scores[age_key] = float(np.dot(q, mean_vec))
 
         return scores

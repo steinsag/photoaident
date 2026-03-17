@@ -197,7 +197,10 @@ def _load_person_cluster_means(
     for row in cluster_rows:
         if row.person_id not in person_names:
             continue
-        person_means.append((row.person_id, deserialize_embedding(row.mean_embedding)))
+        mean_vec = deserialize_embedding(row.mean_embedding)
+        if mean_vec is None:
+            continue
+        person_means.append((row.person_id, mean_vec))
 
     return person_names, person_means
 

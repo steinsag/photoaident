@@ -41,6 +41,7 @@ class VectorStore:
     """
 
     DEFAULT_DIMENSION = 512
+    EMBEDDING_DTYPE = np.float32
 
     def __init__(self, dimension: int = DEFAULT_DIMENSION):
         self.dimension = dimension
@@ -48,6 +49,22 @@ class VectorStore:
         # IndexFlatIP does not support IDs by default, but it returns the 0-indexed
         # position which acts as the faiss_id.
         self.index: Any = IndexFlatIP(self.dimension)
+
+    def _prepare_embedding(self, embedding: np.ndarray) -> np.ndarray:
+        """Validate and normalise an embedding for FAISS.
+
+        Accepts shape ``(D,)`` or ``(1, D)``, returns a 2-D ``float32`` array
+        of shape ``(1, D)``.  Raises ``ValueError`` for wrong ndim or dimension.
+        """
+        if embedding.ndim == 1:
+            embedding = embedding.reshape(1, -1)
+        elif embedding.ndim != 2:
+            raise ValueError(
+                f"Embedding must be a 1D or 2D array; got {embedding.ndim}D."
+            )
+        if embedding.shape[1] != self.dimension:
+            raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
+        return embedding.astype(VectorStore.EMBEDDING_DTYPE)
 
     @_locked
     def add(self, embedding: np.ndarray) -> int:
@@ -59,20 +76,7 @@ class VectorStore:
         Returns:
             The assigned faiss_id (the position in the index).
         """
-        # Ensure it's 2D for FAISS
-        if embedding.ndim == 1:
-            embedding = embedding.reshape(1, -1)
-        elif embedding.ndim != 2:
-            raise ValueError(
-                f"Embedding must be a 1D or 2D array; got {embedding.ndim}D."
-            )
-
-        if embedding.shape[1] != self.dimension:
-            raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
-
-        # Ensure float32
-        embedding = embedding.astype(np.float32)
-
+        embedding = self._prepare_embedding(embedding)
         faiss_id = self.index.ntotal
         self.index.add(embedding)
         return faiss_id
@@ -91,17 +95,7 @@ class VectorStore:
         Returns:
             A list of tuples (faiss_id, similarity_score) sorted by similarity.
         """
-        if query_embedding.ndim == 1:
-            query_embedding = query_embedding.reshape(1, -1)
-        elif query_embedding.ndim != 2:
-            raise ValueError(
-                f"Query embedding must be 1D or 2D; got {query_embedding.ndim}D."
-            )
-
-        if query_embedding.shape[1] != self.dimension:
-            raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
-
-        query_embedding = query_embedding.astype(np.float32)
+        query_embedding = self._prepare_embedding(query_embedding)
 
         if k <= 0:
             return []
