@@ -176,31 +176,30 @@ def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
 def _load_person_cluster_means(
     session_factory: "sessionmaker",
 ) -> tuple[dict[int, str], list[tuple[int, "np.ndarray"]]]:
-    """Load all persons and their persisted cluster mean embeddings from the DB.
+    """Load persons and their persisted cluster mean embeddings from the DB.
+
+    Issues a single joined query filtered to clusters with non-NULL means,
+    returning (person_id, person_name, mean_embedding) rows directly.
 
     Returns:
         A tuple of (person_names, person_means) where person_names maps
         person_id → name and person_means is a list of (person_id, mean_embedding).
     """
     with session_factory() as session:
-        person_rows = session.execute(select(Person.id, Person.name)).all()
-        cluster_rows = session.execute(
-            select(
-                EmbeddingCluster.person_id,
-                EmbeddingCluster.mean_embedding,
-            ).where(EmbeddingCluster.mean_embedding.isnot(None))
+        rows = session.execute(
+            select(Person.id, Person.name, EmbeddingCluster.mean_embedding)
+            .join(EmbeddingCluster, EmbeddingCluster.person_id == Person.id)
+            .where(EmbeddingCluster.mean_embedding.isnot(None))
         ).all()
 
-    person_names: dict[int, str] = {r.id: r.name for r in person_rows}
-
+    person_names: dict[int, str] = {}
     person_means: list[tuple[int, np.ndarray]] = []
-    for row in cluster_rows:
-        if row.person_id not in person_names:
-            continue
-        mean_vec = deserialize_embedding(row.mean_embedding)
+    for person_id, person_name, blob in rows:
+        mean_vec = deserialize_embedding(blob)
         if mean_vec is None:
             continue
-        person_means.append((row.person_id, mean_vec))
+        person_names[person_id] = person_name
+        person_means.append((person_id, mean_vec))
 
     return person_names, person_means
 
