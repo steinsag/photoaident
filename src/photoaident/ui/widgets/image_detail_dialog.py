@@ -226,7 +226,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         Color is green for identified/anonymous/matched-unidentified faces and
         red only for truly unknown (unidentified with no FAISS match) faces.
         """
-        # Pre-resolve unidentified faces in a single session to avoid N+1 queries
+        # Pre-resolve unidentified faces in one batch to avoid per-face (N+1) queries
         unidentified_ids = [
             f.faiss_id
             for f in self.image_data.faces
