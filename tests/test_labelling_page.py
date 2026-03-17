@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
-import numpy as np
 import pytest
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
@@ -24,6 +23,7 @@ from photoaident.db.database import (
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
 from photoaident.ui.pages.labelling import LabellingPage
+from tests.search_helpers import _ones_norm_emb, _unit_emb, _zero_emb
 
 
 @pytest.fixture
@@ -132,9 +132,7 @@ def _insert_identified_face(
     Also recomputes the cluster mean so that DB-based lookups work.
     Returns (face_id, faiss_id).
     """
-    rng = np.random.default_rng(42)
-    embedding = rng.standard_normal(512).astype(np.float32)
-    embedding /= np.linalg.norm(embedding)
+    embedding = _ones_norm_emb()
     faiss_id = vector_store.add(embedding)
     with session_factory() as session:
         face = Face(
@@ -384,9 +382,7 @@ def test_on_person_selected_with_embedding_shows_scores(
 ):
     """Selecting a person when a query embedding is present shows similarity scores."""
     img_id = _insert_image(session_factory, "/emb.jpg", "embhash")
-    unidentified_faiss_id = vector_store.add(
-        np.ones(512, dtype=np.float32) / np.sqrt(512)
-    )
+    unidentified_faiss_id = vector_store.add(_ones_norm_emb())
     with session_factory() as session:
         face = Face(
             image_id=img_id,
@@ -433,7 +429,7 @@ def test_on_person_selected_preselects_best_cluster(
 ):
     """The cluster with the highest score is pre-selected after person selection."""
     img_id = _insert_image(session_factory, "/pre.jpg", "prehash")
-    query_vec = np.ones(512, dtype=np.float32) / np.sqrt(512)
+    query_vec = _ones_norm_emb()
     unidentified_faiss_id = vector_store.add(query_vec.copy())
     with session_factory() as session:
         face = Face(
@@ -486,7 +482,7 @@ def test_compute_cluster_scores_returns_float(
     qtbot.addWidget(page)
 
     # Set a non-trivial query embedding
-    page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
+    page._query_embedding = _ones_norm_emb()
 
     cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
@@ -507,7 +503,7 @@ def test_compute_cluster_scores_zero_norm_query_returns_empty(
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
-    page._query_embedding = np.zeros(512, dtype=np.float32)
+    page._query_embedding = _zero_emb()
 
     cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
@@ -522,7 +518,7 @@ def test_compute_cluster_scores_empty_cluster_skipped(
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
-    page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
+    page._query_embedding = _ones_norm_emb()
 
     cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     scores = page._compute_cluster_scores(cluster_by_age)
@@ -1051,7 +1047,7 @@ def test_compute_cluster_scores_null_mean_skipped(
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
-    page._query_embedding = np.ones(512, dtype=np.float32) / np.sqrt(512)
+    page._query_embedding = _ones_norm_emb()
 
     cluster_by_age = _get_cluster_by_age(session_factory, person_id)
     # mean_embedding is None by default (no faces added)
@@ -1067,8 +1063,7 @@ def test_compute_cluster_scores_with_persisted_mean(
     person_id, cluster_id = _insert_person_with_cluster(session_factory, "ZNM", "adult")
 
     # Directly set a known mean_embedding on the cluster
-    mean = np.zeros(512, dtype=np.float32)
-    mean[0] = 1.0
+    mean = _unit_emb(0)
     with session_factory() as session:
         cluster = session.get(EmbeddingCluster, cluster_id)
         cluster.mean_embedding = serialize_embedding(mean)

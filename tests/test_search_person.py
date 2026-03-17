@@ -2,8 +2,6 @@
 
 from unittest.mock import patch
 
-import numpy as np
-
 import photoaident.core.search as search_module
 from photoaident.core.search import _find_images_by_person, search_images
 from photoaident.core.search_person import (
@@ -21,7 +19,9 @@ from tests.search_helpers import (
     _add_identified_face,
     _add_person_cluster,
     _add_unidentified_face,
+    _ones_norm_emb,
     _rand_norm_emb,
+    _unit_emb,
 )
 
 
@@ -64,13 +64,11 @@ def test_excludes_dissimilar_face(search_db, vector_store):
     """Face with orthogonal embedding (dot product = 0) is below threshold."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
-    emb_person = np.zeros(512, dtype=np.float32)
-    emb_person[0] = 1.0
+    emb_person = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb_person)
 
     # Orthogonal embedding → inner product = 0, below any positive threshold
-    emb_other = np.zeros(512, dtype=np.float32)
-    emb_other[1] = 1.0
+    emb_other = _unit_emb(1)
     other_image_id, _ = _add_unidentified_face(search_db, vector_store, emb_other)
 
     result = _find_images_by_person(search_db, vector_store, person_id, threshold=0.35)
@@ -166,13 +164,11 @@ def test_multi_cluster_union(search_db, vector_store):
         cluster2_id = c2.id
 
     # Cluster 1: unit vector along axis 0
-    emb_child = np.zeros(512, dtype=np.float32)
-    emb_child[0] = 1.0
+    emb_child = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster1_id, emb_child)
 
     # Cluster 2: unit vector along axis 1 (orthogonal to cluster 1)
-    emb_adult = np.zeros(512, dtype=np.float32)
-    emb_adult[1] = 1.0
+    emb_adult = _unit_emb(1)
     _add_identified_face(search_db, vector_store, person_id, cluster2_id, emb_adult)
 
     # One unidentified image similar to each cluster
@@ -249,8 +245,7 @@ def test_resolve_faces_to_persons_returns_match(search_db, vector_store):
     """Resolves an unidentified face to a person via cluster mean similarity."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
     # Add an unidentified face with the same embedding
@@ -265,8 +260,7 @@ def test_resolve_faces_to_persons_returns_match(search_db, vector_store):
 
 def test_resolve_faces_to_persons_no_persons(search_db, vector_store):
     """Returns None for all faces when no persons exist."""
-    emb = np.ones(512, dtype=np.float32)
-    emb /= np.linalg.norm(emb)
+    emb = _ones_norm_emb()
     faiss_id = vector_store.add(emb)
 
     results = resolve_faces_to_persons([faiss_id], search_db, vector_store)
@@ -278,13 +272,11 @@ def test_resolve_faces_to_persons_below_threshold(search_db, vector_store):
     person_id, cluster_id = _add_person_cluster(search_db)
 
     # Person's cluster embedding along axis 0
-    emb_person = np.zeros(512, dtype=np.float32)
-    emb_person[0] = 1.0
+    emb_person = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb_person)
 
     # Orthogonal embedding → dot product ≈ 0
-    emb_other = np.zeros(512, dtype=np.float32)
-    emb_other[1] = 1.0
+    emb_other = _unit_emb(1)
     _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb_other)
 
     results = resolve_faces_to_persons(
@@ -303,8 +295,7 @@ def test_resolve_faces_to_persons_index_error(search_db, vector_store):
     # Add an identified face so person_means is non-empty; otherwise
     # resolve_faces_to_persons returns early before reaching the IndexError path.
     person_id, cluster_id = _add_person_cluster(search_db)
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
     results = resolve_faces_to_persons([999], search_db, vector_store)
@@ -326,12 +317,10 @@ def test_resolve_faces_to_persons_multiple_faces(search_db, vector_store):
         p1_id, c1_id = p1.id, c1.id
         p2_id, c2_id = p2.id, c2.id
 
-    emb_alice = np.zeros(512, dtype=np.float32)
-    emb_alice[0] = 1.0
+    emb_alice = _unit_emb(0)
     _add_identified_face(search_db, vector_store, p1_id, c1_id, emb_alice)
 
-    emb_bob = np.zeros(512, dtype=np.float32)
-    emb_bob[1] = 1.0
+    emb_bob = _unit_emb(1)
     _add_identified_face(search_db, vector_store, p2_id, c2_id, emb_bob)
 
     # Unidentified faces matching each person
@@ -404,8 +393,7 @@ def test_resolve_faces_stale_faiss_id(search_db, vector_store):
     """Returns None for a faiss_id that is not in the vector store."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
     # faiss_id 9999 does not exist → IndexError path → maps to None

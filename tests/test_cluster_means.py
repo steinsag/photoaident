@@ -20,6 +20,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
+from tests.search_helpers import _unit_emb, _zero_emb
 
 
 @pytest.fixture
@@ -42,7 +43,11 @@ def vs():
 
 def test_serialize_deserialize_roundtrip():
     """Serializing then deserializing reproduces the original embedding."""
-    emb = np.random.default_rng(0).random(512).astype(np.float32)
+    emb = (
+        np.random.default_rng(0)
+        .random(VectorStore.DEFAULT_DIMENSION)
+        .astype(VectorStore.EMBEDDING_DTYPE)
+    )
     blob = serialize_embedding(emb)
     recovered = deserialize_embedding(blob)
     assert recovered is not None
@@ -50,9 +55,9 @@ def test_serialize_deserialize_roundtrip():
 
 
 def test_serialize_produces_correct_size():
-    """512 float32 values = 2048 bytes."""
-    emb = np.zeros(512, dtype=np.float32)
-    assert len(serialize_embedding(emb)) == 512 * 4
+    """Serialized embedding has DEFAULT_DIMENSION * sizeof(float32) bytes."""
+    emb = _zero_emb()
+    assert len(serialize_embedding(emb)) == VectorStore.DEFAULT_DIMENSION * 4
 
 
 # ── recompute_cluster_mean ────────────────────────────────────────────────
@@ -81,8 +86,7 @@ def test_recompute_with_no_faces(cluster_db, vs):
 
 def test_recompute_with_one_face(cluster_db, vs):
     """Single face → mean equals that face's normalized embedding."""
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     faiss_id = vs.add(emb)
 
     with cluster_db() as session:
@@ -128,10 +132,8 @@ def test_recompute_with_one_face(cluster_db, vs):
 
 def test_recompute_with_multiple_faces(cluster_db, vs):
     """Two faces → mean is the normalized average."""
-    emb1 = np.zeros(512, dtype=np.float32)
-    emb1[0] = 1.0
-    emb2 = np.zeros(512, dtype=np.float32)
-    emb2[1] = 1.0
+    emb1 = _unit_emb(0)
+    emb2 = _unit_emb(1)
     fid1 = vs.add(emb1)
     fid2 = vs.add(emb2)
 
@@ -174,7 +176,7 @@ def test_recompute_with_multiple_faces(cluster_db, vs):
         mean = deserialize_embedding(cluster.mean_embedding)
         assert mean is not None
         # Mean of [1,0,...] and [0,1,...] normalized
-        expected = np.zeros(512, dtype=np.float32)
+        expected = _zero_emb()
         expected[0] = 0.5
         expected[1] = 0.5
         expected /= np.linalg.norm(expected)
@@ -230,7 +232,7 @@ def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
     """Mean with near-zero norm is treated as invalid and persisted as NULL."""
     # A zero vector has norm 0; adding it to FAISS and computing the mean
     # yields a zero vector whose norm is below the 1e-9 threshold.
-    emb = np.zeros(512, dtype=np.float32)
+    emb = _zero_emb()
     faiss_id = vs.add(emb)
 
     with cluster_db() as session:
@@ -276,8 +278,7 @@ def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
 
 def test_backfill_populates_null_means(cluster_db, vs):
     """backfill fills clusters that have NULL mean_embedding."""
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     faiss_id = vs.add(emb)
 
     with cluster_db() as session:
@@ -321,8 +322,7 @@ def test_backfill_populates_null_means(cluster_db, vs):
 
 def test_backfill_skips_already_computed(cluster_db, vs):
     """backfill clusters that already have a mean."""
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     faiss_id = vs.add(emb)
 
     with cluster_db() as session:

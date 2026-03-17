@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
 from PySide6 import QtWidgets, QtGui
 
@@ -20,6 +19,7 @@ from photoaident.db.database import (
 )
 from photoaident.db.migrate import apply_migrations
 from photoaident.ui.pages.library import LibraryPage
+from tests.search_helpers import _unit_emb
 
 
 @pytest.fixture
@@ -52,8 +52,7 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
         person_id = p.id
         cluster_id = c.id
 
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
     faiss_id = vector_store.add(emb)
 
     with session_factory() as session:

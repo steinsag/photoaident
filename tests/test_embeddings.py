@@ -6,6 +6,7 @@ from PIL import Image
 
 from photoaident.core.embeddings import FaceEmbedder
 from photoaident.core.providers import select_providers
+from photoaident.db.vector_store import VectorStore
 
 
 def test_select_providers_cuda_first():
@@ -97,8 +98,10 @@ _rng = np.random.default_rng(seed=42)
 def _make_mock_face() -> MagicMock:
     face = MagicMock()
     face.bbox = np.array([10.0, 20.0, 50.0, 60.0])
-    face.normed_embedding = _rng.random(512).astype(np.float32)
-    face.det_score = np.float32(0.98)
+    face.normed_embedding = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+    face.det_score = VectorStore.EMBEDDING_DTYPE(0.98)
     face.gender = 1
     face.age = 25
     return face

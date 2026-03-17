@@ -23,6 +23,8 @@ from tests.search_helpers import (
     _add_image_with_metadata,
     _add_person_cluster,
     _rand_norm_emb,
+    _unit_emb,
+    _zero_emb,
 )
 
 
@@ -71,10 +73,8 @@ def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
     p1_id, c1_id = _add_person_cluster(search_db)
     p2_id, c2_id = _add_person_cluster(search_db)
 
-    emb1 = np.zeros(512, dtype=np.float32)
-    emb1[0] = 1.0
-    emb2 = np.zeros(512, dtype=np.float32)
-    emb2[1] = 1.0
+    emb1 = _unit_emb(0)
+    emb2 = _unit_emb(1)
 
     # Image with both persons
     with search_db() as session:
@@ -179,13 +179,11 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
     p2_id, c2_id = _add_person_cluster(search_db)
 
     # Orthogonal unit vectors — cluster means are exactly these after one face each.
-    emb_p1 = np.zeros(512, dtype=np.float32)
-    emb_p1[0] = 1.0
-    emb_p2 = np.zeros(512, dtype=np.float32)
-    emb_p2[1] = 1.0
+    emb_p1 = _unit_emb(0)
+    emb_p2 = _unit_emb(1)
 
     # 45-degree mix: cosine similarity ~0.707 with both emb_p1 and emb_p2.
-    emb_mix = np.zeros(512, dtype=np.float32)
+    emb_mix = _zero_emb()
     emb_mix[0] = 1.0
     emb_mix[1] = 1.0
     emb_mix /= np.linalg.norm(emb_mix)
@@ -435,8 +433,7 @@ def test_date_and_gps_intersection(search_db, tmp_path):
 def test_all_three_filters_combined(search_db, vector_store, tmp_path):
     """Person + GPS + date all combined in one search."""
     person_id, cluster_id = _add_person_cluster(search_db)
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
+    emb = _unit_emb(0)
 
     img_match_id, _ = _add_identified_face(
         search_db, vector_store, person_id, cluster_id, emb

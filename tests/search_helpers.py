@@ -24,9 +24,32 @@ from photoaident.db.vector_store import VectorStore
 
 _rng = np.random.default_rng(seed=42)
 
+_DIM = VectorStore.DEFAULT_DIMENSION
+_DTYPE = VectorStore.EMBEDDING_DTYPE
+
 
 def _rand_norm_emb() -> np.ndarray:
-    v = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    """Return a random unit-length embedding vector."""
+    v = _rng.random(_DIM).astype(_DTYPE)
+    v /= np.linalg.norm(v)
+    return v
+
+
+def _zero_emb() -> np.ndarray:
+    """Return a zero embedding vector."""
+    return np.zeros(_DIM, dtype=_DTYPE)
+
+
+def _unit_emb(axis: int) -> np.ndarray:
+    """Return a unit vector with 1.0 at the given axis index."""
+    v = np.zeros(_DIM, dtype=_DTYPE)
+    v[axis] = 1.0
+    return v
+
+
+def _ones_norm_emb() -> np.ndarray:
+    """Return a normalized all-ones embedding vector."""
+    v = np.ones(_DIM, dtype=_DTYPE)
     v /= np.linalg.norm(v)
     return v
 
