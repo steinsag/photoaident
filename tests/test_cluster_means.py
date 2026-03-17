@@ -317,7 +317,7 @@ def test_backfill_populates_null_means(cluster_db, vs):
 
 
 def test_backfill_skips_already_computed(cluster_db, vs):
-    """backfill with force=False skips clusters that already have a mean."""
+    """backfill clusters that already have a mean."""
     emb = np.zeros(512, dtype=np.float32)
     emb[0] = 1.0
     faiss_id = vs.add(emb)
@@ -354,57 +354,8 @@ def test_backfill_skips_already_computed(cluster_db, vs):
         )
         session.commit()
 
-    count = backfill_cluster_means(cluster_db, vs, force=False)
+    count = backfill_cluster_means(cluster_db, vs)
     assert count == 0
-
-
-def test_backfill_force_recomputes_all(cluster_db, vs):
-    """backfill with force=True recomputes even clusters with existing means."""
-    emb = np.zeros(512, dtype=np.float32)
-    emb[0] = 1.0
-    faiss_id = vs.add(emb)
-
-    with cluster_db() as session:
-        person = Person(name="Force")
-        session.add(person)
-        session.flush()
-        cluster = EmbeddingCluster(
-            person_id=person.id,
-            label="adult",
-            age_group="adult",
-            mean_embedding=b"dummy",
-        )
-        session.add(cluster)
-        session.flush()
-        cluster_id = cluster.id
-        img = Image(file_path="/force.jpg", file_size=100)
-        session.add(img)
-        session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=10,
-                bbox_h=10,
-                detection_confidence=0.9,
-                model_version="v1",
-                state=FaceState.IDENTIFIED,
-                person_id=person.id,
-                cluster_id=cluster_id,
-            )
-        )
-        session.commit()
-
-    count = backfill_cluster_means(cluster_db, vs, force=True)
-    assert count == 1
-
-    with cluster_db() as session:
-        cluster = session.get(EmbeddingCluster, cluster_id)
-        assert cluster is not None
-        mean = deserialize_embedding(cluster.mean_embedding)
-        np.testing.assert_allclose(mean, emb, atol=1e-6)
 
 
 def test_backfill_empty_db(cluster_db, vs):

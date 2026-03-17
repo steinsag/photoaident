@@ -84,26 +84,25 @@ def recompute_cluster_mean(
 def backfill_cluster_means(
     session_factory: sessionmaker,
     vector_store: VectorStore,
-    force: bool = False,
 ) -> int:
-    """Batch-recompute cluster means that are missing (or all if *force*).
+    """Batch-recompute cluster means that are missing.
 
-    Returns the number of clusters updated.
+    Only processes clusters whose ``mean_embedding`` is ``NULL`` and that have
+    at least one identified face.  Returns the number of clusters updated.
     """
     with session_factory() as session:
         stmt = select(EmbeddingCluster.id)
-        if not force:
-            has_identified_face = exists(
-                select(Face.id).where(
-                    Face.cluster_id == EmbeddingCluster.id,
-                    Face.state == FaceState.IDENTIFIED,
-                    Face.deleted_at.is_(None),
-                )
+        has_identified_face = exists(
+            select(Face.id).where(
+                Face.cluster_id == EmbeddingCluster.id,
+                Face.state == FaceState.IDENTIFIED,
+                Face.deleted_at.is_(None),
             )
-            stmt = stmt.where(
-                EmbeddingCluster.mean_embedding.is_(None),
-                has_identified_face,
-            )
+        )
+        stmt = stmt.where(
+            EmbeddingCluster.mean_embedding.is_(None),
+            has_identified_face,
+        )
         cluster_ids = list(session.scalars(stmt).all())
 
     count = 0
