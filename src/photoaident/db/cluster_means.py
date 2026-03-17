@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
-from sqlalchemy import select
+from sqlalchemy import exists, select
 
 from photoaident.db.database import EmbeddingCluster, Face, FaceState
 
@@ -93,7 +93,17 @@ def backfill_cluster_means(
     with session_factory() as session:
         stmt = select(EmbeddingCluster.id)
         if not force:
-            stmt = stmt.where(EmbeddingCluster.mean_embedding.is_(None))
+            has_identified_face = exists(
+                select(Face.id).where(
+                    Face.cluster_id == EmbeddingCluster.id,
+                    Face.state == FaceState.IDENTIFIED,
+                    Face.deleted_at.is_(None),
+                )
+            )
+            stmt = stmt.where(
+                EmbeddingCluster.mean_embedding.is_(None),
+                has_identified_face,
+            )
         cluster_ids = list(session.scalars(stmt).all())
 
     count = 0
