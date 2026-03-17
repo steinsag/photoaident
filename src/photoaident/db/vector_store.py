@@ -31,7 +31,10 @@ def _locked(
 
 
 class VectorStore:
-    """FAISS wrapper for 512-dimensional face embeddings using IndexFlatIP.
+    """FAISS wrapper for face embeddings using IndexFlatIP.
+
+    The vector dimensionality is configurable via the ``dimension`` argument
+    (defaulting to ``DEFAULT_DIMENSION``).
 
     IndexFlatIP uses Inner Product similarity, which for L2-normalized vectors
     is equivalent to cosine similarity.
@@ -51,7 +54,7 @@ class VectorStore:
         self.index: Any = IndexFlatIP(self.dimension)
 
     def _prepare_embedding(self, embedding: np.ndarray) -> np.ndarray:
-        """Validate and normalise an embedding for FAISS.
+        """Validate and cast an embedding for FAISS.
 
         Accepts shape ``(D,)`` or ``(1, D)``, returns a 2-D ``float32`` array
         of shape ``(1, D)``.  Raises ``ValueError`` for wrong ndim or dimension.
@@ -71,7 +74,8 @@ class VectorStore:
         """Adds an embedding to the index and returns its faiss_id.
 
         Args:
-            embedding: A 1D or 2D numpy array of shape (512,) or (1, 512).
+            embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
+                where ``D`` is the store's configured ``dimension``.
 
         Returns:
             The assigned faiss_id (the position in the index).
@@ -88,7 +92,8 @@ class VectorStore:
         """Searches for the k most similar embeddings.
 
         Args:
-            query_embedding: A 1D or 2D numpy array of shape (512,) or (1, 512).
+            query_embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
+                where ``D`` is the store's configured ``dimension``.
             k: Number of neighbors to return.
             threshold: Minimum similarity score to include in results.
 

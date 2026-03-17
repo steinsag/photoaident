@@ -55,9 +55,10 @@ def test_serialize_deserialize_roundtrip():
 
 
 def test_serialize_produces_correct_size():
-    """Serialized embedding has DEFAULT_DIMENSION * sizeof(float32) bytes."""
+    """Serialized embedding has DEFAULT_DIMENSION * sizeof(EMBEDDING_DTYPE) bytes."""
     emb = _zero_emb()
-    assert len(serialize_embedding(emb)) == VectorStore.DEFAULT_DIMENSION * 4
+    expected_size = VectorStore.DEFAULT_DIMENSION * np.dtype(VectorStore.EMBEDDING_DTYPE).itemsize
+    assert len(serialize_embedding(emb)) == expected_size
 
 
 # ── recompute_cluster_mean ────────────────────────────────────────────────

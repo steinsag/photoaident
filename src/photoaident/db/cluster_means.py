@@ -21,7 +21,8 @@ def serialize_embedding(emb: np.ndarray) -> bytes:
     """Convert a float32 embedding array to raw bytes for DB storage.
 
     Raises:
-        ValueError: if *emb* is not a 1-D array of length ``_EMBEDDING_DIM``.
+        ValueError: if *emb* is not a 1-D array of length
+        ``VectorStore.DEFAULT_DIMENSION``.
     """
     if emb.ndim != 1 or emb.shape[0] != VectorStore.DEFAULT_DIMENSION:
         raise ValueError(
@@ -34,9 +35,10 @@ def serialize_embedding(emb: np.ndarray) -> bytes:
 def deserialize_embedding(blob: bytes) -> np.ndarray | None:
     """Convert raw bytes back to a float32 embedding array.
 
-    Returns ``None`` and logs a warning if *blob* is corrupt (wrong length or
-    wrong dtype), so callers can treat the cluster mean as missing rather than
-    crashing at runtime.
+    Returns ``None`` and logs a warning if *blob* has an unexpected length,
+    so callers can treat the cluster mean as missing rather than crashing at
+    runtime. The blob is otherwise assumed to be encoded using
+    ``VectorStore.EMBEDDING_DTYPE``.
     """
     expected_bytes = (
         VectorStore.DEFAULT_DIMENSION * np.dtype(VectorStore.EMBEDDING_DTYPE).itemsize
