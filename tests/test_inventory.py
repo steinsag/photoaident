@@ -168,6 +168,64 @@ def test_inventory_task_cancel_during_batch_loop(tmp_path, db_engine):
     assert len(images) == 0
 
 
+def test_inventory_follows_symlinked_directory(tmp_path, session_factory, db_engine):
+    """Images inside a symlinked subdirectory are discovered."""
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    (real_dir / "img.jpg").write_bytes(b"x")
+
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    (collection / "link").symlink_to(real_dir)
+
+    task = InventoryTask(str(collection), session_factory)
+    task.run()
+
+    with Session(db_engine) as session:
+        images = session.scalars(select(Image)).all()
+    assert len(images) == 1
+    assert images[0].file_path.endswith("img.jpg")
+
+
+def test_inventory_handles_symlink_cycle(tmp_path, session_factory, db_engine):
+    """A symlink that points back to an ancestor does not cause infinite recursion."""
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    (collection / "img.jpg").write_bytes(b"x")
+
+    # Create a cycle: collection/loop -> collection
+    (collection / "loop").symlink_to(collection)
+
+    task = InventoryTask(str(collection), session_factory)
+    task.run()  # must terminate
+
+    with Session(db_engine) as session:
+        images = session.scalars(select(Image)).all()
+    assert len(images) == 1
+    assert images[0].file_path.endswith("img.jpg")
+
+
+def test_inventory_skips_files_via_duplicate_symlink(
+    tmp_path, session_factory, db_engine
+):
+    """Two symlinks pointing to the same real directory don't double-count images."""
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    (real_dir / "img.jpg").write_bytes(b"x")
+
+    collection = tmp_path / "collection"
+    collection.mkdir()
+    (collection / "link_a").symlink_to(real_dir)
+    (collection / "link_b").symlink_to(real_dir)
+
+    task = InventoryTask(str(collection), session_factory)
+    task.run()
+
+    with Session(db_engine) as session:
+        images = session.scalars(select(Image)).all()
+    assert len(images) == 1
+
+
 def test_inventory_task_skips_file_with_stat_error(
     tmp_path, session_factory, db_engine
 ):
