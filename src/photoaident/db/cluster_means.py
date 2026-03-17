@@ -64,9 +64,15 @@ def recompute_cluster_mean(
         if embeddings:
             mean_emb = np.mean(np.stack(embeddings), axis=0).astype(_EMBEDDING_DTYPE)
             norm = np.linalg.norm(mean_emb)
-            if norm > 0:
-                mean_emb = mean_emb / norm
-            mean_blob = serialize_embedding(mean_emb)
+            if norm > 1e-9:
+                mean_blob = serialize_embedding(mean_emb / norm)
+            else:
+                logger.warning(
+                    "Cluster %d: mean embedding norm is near-zero (%.2e);"
+                    " persisting NULL",
+                    cluster_id,
+                    norm,
+                )
 
     with session_factory() as session:
         cluster = session.get(EmbeddingCluster, cluster_id)

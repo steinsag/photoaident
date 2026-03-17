@@ -223,6 +223,51 @@ def test_recompute_nonexistent_cluster(cluster_db, vs):
     recompute_cluster_mean(99999, cluster_db, vs)  # must not crash
 
 
+def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
+    """Mean with near-zero norm is treated as invalid and persisted as NULL."""
+    # A zero vector has norm 0; adding it to FAISS and computing the mean
+    # yields a zero vector whose norm is below the 1e-9 threshold.
+    emb = np.zeros(512, dtype=np.float32)
+    faiss_id = vs.add(emb)
+
+    with cluster_db() as session:
+        person = Person(name="ZeroNorm")
+        session.add(person)
+        session.flush()
+        cluster = EmbeddingCluster(
+            person_id=person.id, label="adult", age_group="adult"
+        )
+        session.add(cluster)
+        session.flush()
+        cluster_id = cluster.id
+        img = Image(file_path="/zero.jpg", file_size=100)
+        session.add(img)
+        session.flush()
+        session.add(
+            Face(
+                image_id=img.id,
+                faiss_id=faiss_id,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.9,
+                model_version="v1",
+                state=FaceState.IDENTIFIED,
+                person_id=person.id,
+                cluster_id=cluster_id,
+            )
+        )
+        session.commit()
+
+    recompute_cluster_mean(cluster_id, cluster_db, vs)
+
+    with cluster_db() as session:
+        cluster = session.get(EmbeddingCluster, cluster_id)
+        assert cluster is not None
+        assert cluster.mean_embedding is None
+
+
 # ── backfill_cluster_means ────────────────────────────────────────────────
 
 
