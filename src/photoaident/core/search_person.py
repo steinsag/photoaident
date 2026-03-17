@@ -215,9 +215,10 @@ def resolve_faces_to_persons(
     Uses the same cluster-mean approach as the library person search so that
     search results and face highlighting in the detail dialog agree.
 
-    Embeddings are batched into an (N, 512) matrix and scored against all M
-    cluster means in a single (N, 512) @ (M, 512).T multiply, reducing Python
-    overhead to O(1) NumPy/BLAS calls instead of O(N × M) Python iterations.
+    Embeddings are batched into an (N, D) matrix (where D is the embedding
+    dimension) and scored against all M cluster means in a single
+    (N, D) @ (M, D).T multiply, reducing Python overhead to O(1) NumPy/BLAS
+    calls instead of O(N × M) Python iterations.
 
     Args:
         faiss_ids: FAISS index IDs of the faces to resolve.
@@ -264,7 +265,7 @@ def resolve_faces_to_persons(
             result[fid] = None
 
     if valid_fids:
-        emb_matrix = np.stack(embeddings)  # (N, 512)
+        emb_matrix = np.stack(embeddings)  # (N, D)
         scores = emb_matrix @ means_matrix.T  # (N, M)
 
         best_cols = np.argmax(scores, axis=1)  # (N,)
