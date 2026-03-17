@@ -6,6 +6,7 @@ from PIL import Image
 from insightface.app import FaceAnalysis
 
 from photoaident.core.providers import select_providers
+from photoaident.utils.image_utils import open_image
 
 
 class FaceEmbedder:
@@ -71,7 +72,8 @@ class FaceEmbedder:
         Returns:
             A PIL Image of the face crop.
         """
-        with Image.open(image_path) as img:
+        with open_image(image_path) as img:
+
             # bbox is [x1, y1, x2, y2]
             # Ensure bbox is within image bounds
             x1, y1, x2, y2 = bbox

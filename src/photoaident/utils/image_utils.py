@@ -40,6 +40,18 @@ def get_exif_transform(
     return m
 
 
+def open_image(image_path: Path) -> Image.Image:
+    """Open an image and apply EXIF orientation.
+
+    All PIL image loading should go through this function so that the
+    pixel layout matches what OpenCV (and therefore InsightFace) sees.
+    The caller is responsible for closing the returned image.
+    """
+    img = Image.open(image_path)
+    img = ImageOps.exif_transpose(img)
+    return img
+
+
 def generate_thumbnail(
     image_path: Path, output_path: Path, size: Tuple[int, int] = (200, 200)
 ) -> None:
@@ -48,10 +60,7 @@ def generate_thumbnail(
     The thumbnail is generated while preserving aspect ratio and
     respecting EXIF orientation.
     """
-    with Image.open(image_path) as img:
-        # Apply EXIF orientation
-        img = ImageOps.exif_transpose(img)
-
+    with open_image(image_path) as img:
         # Convert to RGB if necessary (e.g. for RGBA or CMYK)
         if img.mode != "RGB":
             img = img.convert("RGB")
