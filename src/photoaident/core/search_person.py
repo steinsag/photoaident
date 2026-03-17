@@ -237,9 +237,20 @@ def resolve_faces_to_persons(
     if not person_names or not person_means:
         return dict.fromkeys(faiss_ids)
 
-    # Build (M, 512) means matrix once; keep parallel person_id list for lookup.
+    # Validate that the vector store's embedding dimension matches the
+    # persisted cluster means' dimension so that emb_matrix @ means_matrix.T
+    # is well-defined.
+    means_dim = person_means[0][1].shape[0]
+    if hasattr(vector_store, "dimension") and vector_store.dimension != means_dim:
+        raise ValueError(
+            f"VectorStore dimension ({vector_store.dimension}) does not match "
+            f"persisted person cluster means dimension ({means_dim}). "
+            "Ensure both use the same embedding size."
+        )
+
+    # Build (M, D) means matrix once; keep parallel person_id list for lookup.
     mean_person_ids = [pid for pid, _ in person_means]
-    means_matrix = np.stack([emb for _, emb in person_means])  # (M, 512)
+    means_matrix = np.stack([emb for _, emb in person_means])  # (M, D)
 
     result: dict[int, tuple[str, float] | None] = {}
     valid_fids: list[int] = []

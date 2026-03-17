@@ -65,6 +65,12 @@ class VectorStore:
             raise ValueError(
                 f"Embedding must be a 1D or 2D array; got {embedding.ndim}D."
             )
+        # After reshaping/validation above, only a single embedding (1, D) is allowed.
+        if embedding.shape[0] != 1:
+            raise ValueError(
+                f"Batch embeddings with shape (N, D) where N != 1 are not supported; "
+                f"got shape {embedding.shape}."
+            )
         if embedding.shape[1] != self.dimension:
             raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
         return embedding.astype(VectorStore.EMBEDDING_DTYPE)
