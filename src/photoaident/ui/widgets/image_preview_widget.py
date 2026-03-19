@@ -3,8 +3,6 @@ from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from photoaident.utils.image_utils import get_exif_transform
-
 
 class ImagePreviewWidget(QtWidgets.QWidget):
     """Displays a full photo with a highlighted face bounding box."""
@@ -31,12 +29,11 @@ class ImagePreviewWidget(QtWidgets.QWidget):
             self._original_pixmap = None
             return
 
+        # Load with EXIF orientation applied. Bounding boxes stored in the DB
+        # are also in this EXIF-corrected coordinate space (process_image uses
+        # open_image which calls ImageOps.exif_transpose before detection).
         reader = QtGui.QImageReader(str(image_path))
-        # Do NOT call setAutoTransform: InsightFace/OpenCV bbox coordinates are
-        # in the un-rotated pixel space (cv2.imread ignores EXIF orientation).
-        # We draw the bbox in that space first, then rotate the whole pixmap so
-        # the box stays correctly aligned with the face after orientation is
-        # applied.
+        reader.setAutoTransform(True)
         qimage = reader.read()
         if qimage.isNull():
             self._label.setPixmap(QtGui.QPixmap())
@@ -53,12 +50,6 @@ class ImagePreviewWidget(QtWidgets.QWidget):
         x, y, w, h = bbox
         painter.drawRect(QtCore.QRect(x, y, w, h))
         painter.end()
-
-        exif_transform = get_exif_transform(reader.transformation())
-        if not exif_transform.isIdentity():
-            pixmap = pixmap.transformed(
-                exif_transform, QtCore.Qt.TransformationMode.SmoothTransformation
-            )
 
         self._original_pixmap = pixmap
         self._label.setText("")

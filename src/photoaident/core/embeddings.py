@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Any
 
 import cv2
+import numpy as np
 from PIL import Image
 from insightface.app import FaceAnalysis
 
@@ -37,12 +38,18 @@ class FaceEmbedder:
             - gender: 0 or 1
             - age: estimated age
         """
-        # InsightFace uses OpenCV (BGR) format
-        img = cv2.imread(str(image_path))
-        if img is None:
+        # Load via PIL so EXIF orientation is applied before detection.
+        # This ensures bboxes are in the same rotated coordinate space that
+        # extract_face_crop() uses, preventing misaligned crops.
+        with open_image(image_path) as pil_img:
+            rgb_array = np.array(pil_img.convert("RGB"))
+
+        if rgb_array.size == 0:
             return []
 
-        faces = self.app.get(img)
+        # InsightFace expects BGR
+        bgr_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
+        faces = self.app.get(bgr_array)
 
         results = []
         for face in faces:
