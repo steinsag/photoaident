@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Optional
 
 import exifread
-from PIL import Image as PILImage
 from PySide6 import QtCore
 from sqlalchemy import select, func
 from sqlalchemy.orm import sessionmaker
@@ -16,6 +15,7 @@ from photoaident.core.filepath_date import compile_pattern, extract_date_from_pa
 from photoaident.db.database import Image, Face, FaceState, ImageMetadata, TakenAtSource
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
+from photoaident.utils.image_utils import open_image
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +169,7 @@ class IndexingTask(QtCore.QObject):
     def _extract_exif_metadata(self, path: Path, image_id: int, session) -> None:
         """Extract EXIF metadata from an image file and persist it to image_metadata."""
         try:
-            with PILImage.open(path) as pil_img:
+            with open_image(path) as pil_img:
                 width, height = pil_img.size
 
             with open(path, "rb") as f:

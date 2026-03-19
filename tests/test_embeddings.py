@@ -81,15 +81,18 @@ def test_extract_face_crop(tmp_path):
         assert pixel > 200
 
 
-def test_process_image_returns_empty_when_unreadable(tmp_path, face_embedder):
-    """process_image returns [] when cv2.imread cannot read the file."""
+def test_process_image_raises_for_unreadable(tmp_path, face_embedder):
+    """process_image raises UnidentifiedImageError for corrupt/unreadable files.
+
+    The indexer's broad Exception handler logs and skips such files.
+    """
+    from PIL import UnidentifiedImageError
+
     bad_file = tmp_path / "bad.jpg"
     bad_file.write_bytes(b"not an image")
 
-    with patch("photoaident.core.embeddings.cv2.imread", return_value=None):
-        result = face_embedder.process_image(bad_file)
-
-    assert result == []
+    with pytest.raises(UnidentifiedImageError):
+        face_embedder.process_image(bad_file)
 
 
 _rng = np.random.default_rng(seed=42)

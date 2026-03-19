@@ -7,7 +7,6 @@ from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import Face, FaceState, Image as DBImage
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
-from photoaident.utils.image_utils import get_exif_transform
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -260,11 +259,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
             )
             return
 
-        # Load image with QImageReader. We do NOT call setAutoTransform(True) here
-        # because InsightFace/OpenCV bbox coordinates are in the un-rotated
-        # pixel space. We draw the bbox in that space first, then rotate the
-        # whole pixmap so the box stays correctly aligned with the face.
+        # Load with EXIF orientation applied. Bounding boxes stored in the DB
+        # are also in this EXIF-corrected coordinate space (process_image uses
+        # open_image which calls ImageOps.exif_transpose before detection).
         reader = QtGui.QImageReader(str(file_path))
+        reader.setAutoTransform(True)
         qimage = reader.read()
 
         if qimage.isNull():
@@ -290,27 +289,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
                 painter.drawRect(rect.toRect())
             painter.end()
 
-        # Apply EXIF transformation after drawing bounding boxes
-        exif_transform = get_exif_transform(reader.transformation())
-        if not exif_transform.isIdentity():
-            # Get the matrix that includes necessary translations
-            # to stay within the bounds of the transformed pixmap.
-            true_transform = QtGui.QPixmap.trueMatrix(
-                exif_transform, pixmap.width(), pixmap.height()
-            )
-            pixmap = pixmap.transformed(
-                exif_transform, QtCore.Qt.TransformationMode.SmoothTransformation
-            )
-            # Use true_transform for mapping rects so they land in [0, new_width/height]
-            exif_transform = true_transform
-
-        # Register tooltip regions (rect + text only)
-        # Note: Bounding boxes are in un-rotated space, but tooltip hit-testing
-        # needs to account for the rotation. We transform the rects as well.
-        tooltip_regions = []
-        for rect, _, tooltip in face_display:
-            transformed_rect = exif_transform.mapRect(rect)
-            tooltip_regions.append((transformed_rect, tooltip))
+        # Bboxes and pixmap are both in EXIF-corrected space — no post-transform needed.
+        tooltip_regions = [(rect, tooltip) for rect, _, tooltip in face_display]
 
         self.image_label.set_face_regions(
             pixmap_regions=tooltip_regions, pixmap_size=pixmap.size()
