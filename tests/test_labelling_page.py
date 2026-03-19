@@ -73,7 +73,6 @@ def _insert_face(session_factory, file_path: str = "/path/to/img.jpg") -> int:
 
         face = Face(
             image_id=img.id,
-            faiss_id=1,
             bbox_x=100,
             bbox_y=100,
             bbox_w=50,
@@ -87,12 +86,11 @@ def _insert_face(session_factory, file_path: str = "/path/to/img.jpg") -> int:
         return face.id
 
 
-def _insert_face_for_image(session_factory, image_id: int, faiss_id: int) -> int:
+def _insert_face_for_image(session_factory, image_id: int) -> int:
     """Insert an unidentified face for an existing image; return the face id."""
     with session_factory() as session:
         face = Face(
             image_id=image_id,
-            faiss_id=faiss_id,
             bbox_x=10,
             bbox_y=10,
             bbox_w=40,
@@ -126,18 +124,16 @@ def _insert_identified_face(
     person_id: int,
     cluster_id: int,
     image_id: int,
-) -> tuple[int, int]:
+) -> int:
     """Insert an identified face with a normalised embedding.
 
     Also recomputes the cluster mean so that DB-based lookups work.
-    Returns (face_id, faiss_id).
+    Returns face_id.
     """
     embedding = _ones_norm_emb()
-    faiss_id = vector_store.add(embedding)
     with session_factory() as session:
         face = Face(
             image_id=image_id,
-            faiss_id=faiss_id,
             person_id=person_id,
             cluster_id=cluster_id,
             bbox_x=0,
@@ -149,10 +145,12 @@ def _insert_identified_face(
             model_version="test",
         )
         session.add(face)
-        session.commit()
+        session.flush()
         face_id = face.id
+        vector_store.add(face_id, embedding)
+        session.commit()
     recompute_cluster_mean(cluster_id, session_factory, vector_store)
-    return face_id, faiss_id
+    return face_id
 
 
 def _get_cluster_by_age(session_factory, person_id: int) -> dict:
@@ -382,11 +380,9 @@ def test_on_person_selected_with_embedding_shows_scores(
 ):
     """Selecting a person when a query embedding is present shows similarity scores."""
     img_id = _insert_image(session_factory, "/emb.jpg", "embhash")
-    unidentified_faiss_id = vector_store.add(_ones_norm_emb())
     with session_factory() as session:
         face = Face(
             image_id=img_id,
-            faiss_id=unidentified_faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=40,
@@ -396,6 +392,8 @@ def test_on_person_selected_with_embedding_shows_scores(
             model_version="test",
         )
         session.add(face)
+        session.flush()
+        vector_store.add(face.id, _ones_norm_emb())
         session.commit()
 
     person_id, cluster_id = _insert_person_with_cluster(
@@ -430,11 +428,9 @@ def test_on_person_selected_preselects_best_cluster(
     """The cluster with the highest score is pre-selected after person selection."""
     img_id = _insert_image(session_factory, "/pre.jpg", "prehash")
     query_vec = _ones_norm_emb()
-    unidentified_faiss_id = vector_store.add(query_vec.copy())
     with session_factory() as session:
         face = Face(
             image_id=img_id,
-            faiss_id=unidentified_faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=40,
@@ -444,6 +440,8 @@ def test_on_person_selected_preselects_best_cluster(
             model_version="test",
         )
         session.add(face)
+        session.flush()
+        vector_store.add(face.id, query_vec.copy())
         session.commit()
 
     person_id, cluster_id = _insert_person_with_cluster(session_factory, "Pre", "adult")
@@ -813,9 +811,9 @@ def test_skip_image_skips_all_faces_of_current_image(
     are excluded from subsequent face queries."""
     img1_id = _insert_image(session_factory, "/si1.jpg", "sihash1")
     img2_id = _insert_image(session_factory, "/si2.jpg", "sihash2")
-    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=50)
-    face2_id = _insert_face_for_image(session_factory, img1_id, faiss_id=51)
-    face3_id = _insert_face_for_image(session_factory, img2_id, faiss_id=52)
+    face1_id = _insert_face_for_image(session_factory, img1_id)
+    face2_id = _insert_face_for_image(session_factory, img1_id)
+    face3_id = _insert_face_for_image(session_factory, img2_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -843,8 +841,8 @@ def test_skip_image_does_not_change_face_state(
 ):
     """_skip_image must not alter face state in the DB."""
     img_id = _insert_image(session_factory, "/sino.jpg", "sinohash")
-    face1_id = _insert_face_for_image(session_factory, img_id, faiss_id=60)
-    face2_id = _insert_face_for_image(session_factory, img_id, faiss_id=61)
+    face1_id = _insert_face_for_image(session_factory, img_id)
+    face2_id = _insert_face_for_image(session_factory, img_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -939,8 +937,8 @@ def test_priority_image_shows_image_faces_first(
     """refresh(priority_image_id=X) causes the first face to come from image X."""
     img1_id = _insert_image(session_factory, "/img1.jpg", "hash1")
     img2_id = _insert_image(session_factory, "/img2.jpg", "hash2")
-    _insert_face_for_image(session_factory, img2_id, faiss_id=10)
-    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=11)
+    _insert_face_for_image(session_factory, img2_id)
+    face1_id = _insert_face_for_image(session_factory, img1_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -956,8 +954,8 @@ def test_priority_clears_after_all_image_faces_done(
     """After all priority-image faces are labelled, priority is cleared."""
     img1_id = _insert_image(session_factory, "/p1.jpg", "phash1")
     img2_id = _insert_image(session_factory, "/p2.jpg", "phash2")
-    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=20)
-    _insert_face_for_image(session_factory, img2_id, faiss_id=21)
+    face1_id = _insert_face_for_image(session_factory, img1_id)
+    _insert_face_for_image(session_factory, img2_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -977,9 +975,9 @@ def test_maybe_clear_priority_with_skipped_faces(
     """_maybe_clear_priority counts remaining faces excluding skipped ones."""
     img1_id = _insert_image(session_factory, "/mcp.jpg", "mcphash")
     img2_id = _insert_image(session_factory, "/mcp2.jpg", "mcphash2")
-    face1_id = _insert_face_for_image(session_factory, img1_id, faiss_id=80)
-    face2_id = _insert_face_for_image(session_factory, img1_id, faiss_id=81)
-    _insert_face_for_image(session_factory, img2_id, faiss_id=82)
+    face1_id = _insert_face_for_image(session_factory, img1_id)
+    face2_id = _insert_face_for_image(session_factory, img1_id)
+    _insert_face_for_image(session_factory, img2_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -1001,7 +999,7 @@ def test_refresh_without_priority_clears_priority(
 ):
     """Calling refresh() without arguments clears any previously set priority."""
     img_id = _insert_image(session_factory, "/clr.jpg", "clrhash")
-    _insert_face_for_image(session_factory, img_id, faiss_id=40)
+    _insert_face_for_image(session_factory, img_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -1018,9 +1016,9 @@ def test_skip_image_clears_priority_when_all_image_faces_skipped(
     """Skipping the priority image via _skip_image clears priority in one click."""
     img1_id = _insert_image(session_factory, "/pri1.jpg", "prihash1")
     img2_id = _insert_image(session_factory, "/pri2.jpg", "prihash2")
-    _insert_face_for_image(session_factory, img1_id, faiss_id=70)
-    _insert_face_for_image(session_factory, img1_id, faiss_id=72)
-    _insert_face_for_image(session_factory, img2_id, faiss_id=71)
+    _insert_face_for_image(session_factory, img1_id)
+    _insert_face_for_image(session_factory, img1_id)
+    _insert_face_for_image(session_factory, img2_id)
 
     page = LabellingPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
@@ -1101,7 +1099,6 @@ def _insert_face_with_taken_at(
 
         face = Face(
             image_id=img.id,
-            faiss_id=1,
             bbox_x=10,
             bbox_y=10,
             bbox_w=40,

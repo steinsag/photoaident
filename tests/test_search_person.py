@@ -89,18 +89,17 @@ def test_person_with_no_clusters_returns_empty(search_db, vector_store):
     assert result == []
 
 
-def test_stale_faiss_id_causes_indexerror_skipped(search_db, vector_store):
-    """Face with faiss_id absent from VectorStore is skipped."""
+def test_stale_face_id_causes_indexerror_skipped(search_db, vector_store):
+    """Face whose id is absent from VectorStore is skipped."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
-    # Insert face with faiss_id=99 but never add that vector to 'vector_store'
+    # Insert face but never add its embedding to 'vector_store'
     with search_db() as session:
         img = Image(file_path="/stale_img.jpg", file_size=100)
         session.add(img)
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=99,  # does not exist in 'vector_store' (which is empty)
             bbox_x=0,
             bbox_y=0,
             bbox_w=50,
@@ -115,22 +114,21 @@ def test_stale_faiss_id_causes_indexerror_skipped(search_db, vector_store):
         session.commit()
 
     result = _find_images_by_person(search_db, vector_store, person_id)
-    # faiss_id 99 raises IndexError → cluster is skipped → no results
+    # face.id not in vector_store raises IndexError → cluster is skipped → no results
     assert result == []
 
 
-def test_cluster_with_all_stale_faiss_ids_skipped(search_db, vector_store):
+def test_cluster_with_all_stale_face_ids_skipped(search_db, vector_store):
     """All embeddings raise IndexError → cluster skipped entirely."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
     with search_db() as session:
-        # Cluster 1 face with invalid faiss_id
+        # Cluster 1 face without embedding in vector store
         img1 = Image(file_path="/stale1.jpg", file_size=100)
         session.add(img1)
         session.flush()
         face1 = Face(
             image_id=img1.id,
-            faiss_id=999,
             bbox_x=0,
             bbox_y=0,
             bbox_w=50,
@@ -144,7 +142,7 @@ def test_cluster_with_all_stale_faiss_ids_skipped(search_db, vector_store):
         session.add(face1)
         session.commit()
 
-    # vector_store is empty → faiss_id=999 raises IndexError → embeddings=[] → line 82
+    # vector_store is empty → face.id raises IndexError → embeddings=[]
     result = _find_images_by_person(search_db, vector_store, person_id)
     assert result == []
 
@@ -249,10 +247,10 @@ def test_resolve_faces_to_persons_returns_match(search_db, vector_store):
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
     # Add an unidentified face with the same embedding
-    _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb.copy())
+    _, unid_face_id = _add_unidentified_face(search_db, vector_store, emb.copy())
 
-    results = resolve_faces_to_persons([unid_faiss_id], search_db, vector_store)
-    match = results[unid_faiss_id]
+    results = resolve_faces_to_persons([unid_face_id], search_db, vector_store)
+    match = results[unid_face_id]
     assert match is not None
     assert match[0] == "Test Person"
     assert match[1] > 0.5
@@ -261,10 +259,10 @@ def test_resolve_faces_to_persons_returns_match(search_db, vector_store):
 def test_resolve_faces_to_persons_no_persons(search_db, vector_store):
     """Returns None for all faces when no persons exist."""
     emb = _ones_norm_emb()
-    faiss_id = vector_store.add(emb)
+    _, face_id = _add_unidentified_face(search_db, vector_store, emb)
 
-    results = resolve_faces_to_persons([faiss_id], search_db, vector_store)
-    assert results[faiss_id] is None
+    results = resolve_faces_to_persons([face_id], search_db, vector_store)
+    assert results[face_id] is None
 
 
 def test_resolve_faces_to_persons_below_threshold(search_db, vector_store):
@@ -277,12 +275,12 @@ def test_resolve_faces_to_persons_below_threshold(search_db, vector_store):
 
     # Orthogonal embedding → dot product ≈ 0
     emb_other = _unit_emb(1)
-    _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb_other)
+    _, unid_face_id = _add_unidentified_face(search_db, vector_store, emb_other)
 
     results = resolve_faces_to_persons(
-        [unid_faiss_id], search_db, vector_store, threshold=0.35
+        [unid_face_id], search_db, vector_store, threshold=0.35
     )
-    assert results[unid_faiss_id] is None
+    assert results[unid_face_id] is None
 
 
 def test_resolve_faces_to_persons_empty_input(search_db, vector_store):
@@ -291,7 +289,7 @@ def test_resolve_faces_to_persons_empty_input(search_db, vector_store):
 
 
 def test_resolve_faces_to_persons_index_error(search_db, vector_store):
-    """Returns None for faiss_id out of bounds in the vector store."""
+    """Returns None for face_id out of bounds in the vector store."""
     # Add an identified face so person_means is non-empty; otherwise
     # resolve_faces_to_persons returns early before reaching the IndexError path.
     person_id, cluster_id = _add_person_cluster(search_db)
@@ -324,17 +322,17 @@ def test_resolve_faces_to_persons_multiple_faces(search_db, vector_store):
     _add_identified_face(search_db, vector_store, p2_id, c2_id, emb_bob)
 
     # Unidentified faces matching each person
-    _, fid_alice = _add_unidentified_face(search_db, vector_store, emb_alice.copy())
-    _, fid_bob = _add_unidentified_face(search_db, vector_store, emb_bob.copy())
+    _, face_id_alice = _add_unidentified_face(search_db, vector_store, emb_alice.copy())
+    _, face_id_bob = _add_unidentified_face(search_db, vector_store, emb_bob.copy())
 
     results = resolve_faces_to_persons(
-        [fid_alice, fid_bob], search_db, vector_store, threshold=0.0
+        [face_id_alice, face_id_bob], search_db, vector_store, threshold=0.0
     )
 
-    match_alice = results[fid_alice]
+    match_alice = results[face_id_alice]
     assert match_alice is not None
     assert match_alice[0] == "Alice"
-    match_bob = results[fid_bob]
+    match_bob = results[face_id_bob]
     assert match_bob is not None
     assert match_bob[0] == "Bob"
 
@@ -346,7 +344,7 @@ def test_resolve_faces_to_persons_consistent_with_search(search_db, vector_store
 
     emb = _rand_norm_emb()
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
-    _, unid_faiss_id = _add_unidentified_face(search_db, vector_store, emb.copy())
+    _, unid_face_id = _add_unidentified_face(search_db, vector_store, emb.copy())
 
     # Search finds the image
     search_results = _find_images_by_person(search_db, vector_store, person_id)
@@ -354,8 +352,8 @@ def test_resolve_faces_to_persons_consistent_with_search(search_db, vector_store
     assert len(search_image_ids) > 0
 
     # Resolution also matches the same face
-    resolve_results = resolve_faces_to_persons([unid_faiss_id], search_db, vector_store)
-    match = resolve_results[unid_faiss_id]
+    resolve_results = resolve_faces_to_persons([unid_face_id], search_db, vector_store)
+    match = resolve_results[unid_face_id]
     assert match is not None
     assert match[0] == "Test Person"
 
@@ -385,17 +383,17 @@ def test_intersect_and_rank_multiple_persons():
 
 
 # ===========================================================================
-# resolve_faces_to_persons — stale faiss_id
+# resolve_faces_to_persons — stale face_id
 # ===========================================================================
 
 
-def test_resolve_faces_stale_faiss_id(search_db, vector_store):
-    """Returns None for a faiss_id that is not in the vector store."""
+def test_resolve_faces_stale_face_id(search_db, vector_store):
+    """Returns None for a face_id that is not in the vector store."""
     person_id, cluster_id = _add_person_cluster(search_db)
 
     emb = _unit_emb(0)
     _add_identified_face(search_db, vector_store, person_id, cluster_id, emb)
 
-    # faiss_id 9999 does not exist → IndexError path → maps to None
+    # face_id 9999 does not exist in vector store → IndexError path → maps to None
     result = resolve_faces_to_persons([9999], search_db, vector_store, threshold=0.0)
     assert result == {9999: None}

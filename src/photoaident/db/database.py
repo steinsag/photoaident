@@ -179,7 +179,7 @@ class Face(Base):
     image_id: Mapped[int] = mapped_column(
         ForeignKey(_FK_IMAGES), nullable=False, index=True
     )
-    faiss_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    faiss_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     bbox_x: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_y: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_w: Mapped[int] = mapped_column(Integer, nullable=False)

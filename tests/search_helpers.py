@@ -27,6 +27,15 @@ _rng = np.random.default_rng(seed=42)
 _DIM = VectorStore.DEFAULT_DIMENSION
 _DTYPE = VectorStore.EMBEDDING_DTYPE
 
+_path_counter = 0
+
+
+def _next_path(prefix: str) -> str:
+    """Return a unique file path for test images."""
+    global _path_counter
+    _path_counter += 1
+    return f"/test/{prefix}_{_path_counter}.jpg"
+
 
 def _rand_norm_emb() -> np.ndarray:
     """Return a random unit-length embedding vector."""
@@ -75,16 +84,14 @@ def _add_identified_face(
 ) -> tuple[int, int]:
     """Insert an identified Face and update the cluster mean.
 
-    Returns (image_id, faiss_id).
+    Returns (image_id, face_id).
     """
-    faiss_id = vector_store.add(embedding)
     with session_factory() as session:
-        img = Image(file_path=f"/test/img_{faiss_id}.jpg", file_size=100)
+        img = Image(file_path=_next_path("img"), file_size=100)
         session.add(img)
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=100,
@@ -96,10 +103,13 @@ def _add_identified_face(
             model_version="test",
         )
         session.add(face)
-        session.commit()
+        session.flush()
+        face_id = face.id
         image_id = img.id
+        vector_store.add(face_id, embedding)
+        session.commit()
     recompute_cluster_mean(cluster_id, session_factory, vector_store)
-    return image_id, faiss_id
+    return image_id, face_id
 
 
 def _add_unidentified_face(
@@ -107,15 +117,13 @@ def _add_unidentified_face(
     vector_store: VectorStore,
     embedding: np.ndarray,
 ) -> tuple[int, int]:
-    """Insert an unidentified Face in FAISS+DB; return (image_id, faiss_id)."""
-    faiss_id = vector_store.add(embedding)
+    """Insert an unidentified Face in FAISS+DB; return (image_id, face_id)."""
     with session_factory() as session:
-        img = Image(file_path=f"/test/unid_{faiss_id}.jpg", file_size=100)
+        img = Image(file_path=_next_path("unid"), file_size=100)
         session.add(img)
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=100,
@@ -125,8 +133,12 @@ def _add_unidentified_face(
             model_version="test",
         )
         session.add(face)
+        session.flush()
+        face_id = face.id
+        image_id = img.id
+        vector_store.add(face_id, embedding)
         session.commit()
-        return img.id, faiss_id
+        return image_id, face_id
 
 
 def _add_face_for_image(
@@ -140,26 +152,25 @@ def _add_face_for_image(
     """Insert an Image with the given path and an identified Face; return image_id."""
     from photoaident.db.database import Face, FaceState, Image
 
-    faiss_id = vector_store.add(embedding)
     with session_factory() as session:
         img = Image(file_path=file_path, file_size=100)
         session.add(img)
         session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=100,
-                bbox_h=100,
-                detection_confidence=0.9,
-                person_id=person_id,
-                cluster_id=cluster_id,
-                state=FaceState.IDENTIFIED,
-                model_version="test",
-            )
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=100,
+            bbox_h=100,
+            detection_confidence=0.9,
+            person_id=person_id,
+            cluster_id=cluster_id,
+            state=FaceState.IDENTIFIED,
+            model_version="test",
         )
+        session.add(face)
+        session.flush()
+        vector_store.add(face.id, embedding)
         session.commit()
         image_id = img.id
     recompute_cluster_mean(cluster_id, session_factory, vector_store)

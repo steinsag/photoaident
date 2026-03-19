@@ -199,7 +199,6 @@ def test_label_button_enabled_with_unidentified_face(
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=0,
             bbox_x=10,
             bbox_y=10,
             bbox_w=50,
@@ -234,7 +233,6 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=0,
             bbox_x=10,
             bbox_y=10,
             bbox_w=50,
@@ -576,7 +574,6 @@ def test_has_unidentified_faces_true(tmp_app_paths):
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=0,
             bbox_x=0,
             bbox_y=0,
             bbox_w=10,
@@ -609,7 +606,6 @@ def test_has_unidentified_faces_false_identified(tmp_app_paths):
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=0,
             bbox_x=0,
             bbox_y=0,
             bbox_w=10,

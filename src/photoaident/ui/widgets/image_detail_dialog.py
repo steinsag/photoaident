@@ -210,7 +210,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             return green, self.tr("Anonymous")
 
         # UNIDENTIFIED (or IDENTIFIED without a person): check cached FAISS match
-        match = self._resolved_names.get(face.faiss_id)
+        match = self._resolved_names.get(face.id)
         if match:
             name, score = match
             return green, f"{name} ({score:.0%})"
@@ -227,11 +227,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
         """
         # Pre-resolve unidentified faces in one batch to avoid per-face (N+1) queries
         unidentified_ids = [
-            f.faiss_id
+            f.id
             for f in self.image_data.faces
             if f.state == FaceState.UNIDENTIFIED
             and f.deleted_at is None
-            and f.faiss_id not in self._resolved_names
+            and f.id not in self._resolved_names
         ]
 
         if unidentified_ids:

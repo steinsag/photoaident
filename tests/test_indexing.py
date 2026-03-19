@@ -135,8 +135,6 @@ def test_indexing_task_success(
         assert face.bbox_y == 10
         assert face.bbox_w == 50
         assert face.bbox_h == 50
-        assert face.faiss_id == 0
-
     # Verify FAISS
     assert vector_store.index.ntotal == 1
 

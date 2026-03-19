@@ -229,11 +229,9 @@ class IndexingTask(QtCore.QObject):
         faces_info = embedder.process_image(path)
         new_faces = []
         for info in faces_info:
-            faiss_id = self.vector_store.add(info["embedding"])
             bbox = info["bbox"]
             face = Face(
                 image_id=img.id,
-                faiss_id=faiss_id,
                 bbox_x=bbox[0],
                 bbox_y=bbox[1],
                 bbox_w=bbox[2] - bbox[0],
@@ -243,6 +241,8 @@ class IndexingTask(QtCore.QObject):
                 model_version="buffalo_l",
             )
             session.add(face)
+            session.flush()
+            self.vector_store.add(face.id, info["embedding"])
             new_faces.append((face, bbox))
 
         self._extract_exif_metadata(path, img.id, session)

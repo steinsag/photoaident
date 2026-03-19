@@ -82,36 +82,34 @@ def test_search_images_multiple_persons(search_db, vector_store, tmp_path):
         session.add(img_both)
         session.flush()
         both_id = img_both.id
-        session.add_all(
-            [
-                Face(
-                    image_id=both_id,
-                    faiss_id=vector_store.add(emb1),
-                    bbox_x=0,
-                    bbox_y=0,
-                    bbox_w=50,
-                    bbox_h=50,
-                    detection_confidence=0.9,
-                    person_id=p1_id,
-                    cluster_id=c1_id,
-                    state=FaceState.IDENTIFIED,
-                    model_version="test",
-                ),
-                Face(
-                    image_id=both_id,
-                    faiss_id=vector_store.add(emb2),
-                    bbox_x=60,
-                    bbox_y=0,
-                    bbox_w=50,
-                    bbox_h=50,
-                    detection_confidence=0.9,
-                    person_id=p2_id,
-                    cluster_id=c2_id,
-                    state=FaceState.IDENTIFIED,
-                    model_version="test",
-                ),
-            ]
+        face_p1 = Face(
+            image_id=both_id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.9,
+            person_id=p1_id,
+            cluster_id=c1_id,
+            state=FaceState.IDENTIFIED,
+            model_version="test",
         )
+        face_p2 = Face(
+            image_id=both_id,
+            bbox_x=60,
+            bbox_y=0,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.9,
+            person_id=p2_id,
+            cluster_id=c2_id,
+            state=FaceState.IDENTIFIED,
+            model_version="test",
+        )
+        session.add_all([face_p1, face_p2])
+        session.flush()
+        vector_store.add(face_p1.id, emb1)
+        vector_store.add(face_p2.id, emb2)
         session.commit()
 
     recompute_cluster_mean(c1_id, search_db, vector_store)
@@ -194,61 +192,59 @@ def test_search_images_ranking(search_db, vector_store, tmp_path):
         session.add_all([img1, img2])
         session.flush()
 
-        session.add_all(
-            [
-                # img1: one identified face per person — cluster mean = that embedding.
-                Face(
-                    image_id=img1.id,
-                    faiss_id=vector_store.add(emb_p1),
-                    bbox_x=0,
-                    bbox_y=0,
-                    bbox_w=100,
-                    bbox_h=100,
-                    detection_confidence=0.9,
-                    person_id=p1_id,
-                    cluster_id=c1_id,
-                    state=FaceState.IDENTIFIED,
-                    model_version="test",
-                ),
-                Face(
-                    image_id=img1.id,
-                    faiss_id=vector_store.add(emb_p2),
-                    bbox_x=110,
-                    bbox_y=0,
-                    bbox_w=100,
-                    bbox_h=100,
-                    detection_confidence=0.9,
-                    person_id=p2_id,
-                    cluster_id=c2_id,
-                    state=FaceState.IDENTIFIED,
-                    model_version="test",
-                ),
-                # img2: unidentified faces — excluded from cluster mean computation
-                # but still found by FAISS search (cosine ~0.707, above threshold).
-                Face(
-                    image_id=img2.id,
-                    faiss_id=vector_store.add(emb_mix),
-                    bbox_x=0,
-                    bbox_y=0,
-                    bbox_w=100,
-                    bbox_h=100,
-                    detection_confidence=0.9,
-                    state=FaceState.UNIDENTIFIED,
-                    model_version="test",
-                ),
-                Face(
-                    image_id=img2.id,
-                    faiss_id=vector_store.add(emb_mix),
-                    bbox_x=110,
-                    bbox_y=0,
-                    bbox_w=100,
-                    bbox_h=100,
-                    detection_confidence=0.9,
-                    state=FaceState.UNIDENTIFIED,
-                    model_version="test",
-                ),
-            ]
+        # img1: one identified face per person — cluster mean = that embedding.
+        face_i1_p1 = Face(
+            image_id=img1.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=100,
+            bbox_h=100,
+            detection_confidence=0.9,
+            person_id=p1_id,
+            cluster_id=c1_id,
+            state=FaceState.IDENTIFIED,
+            model_version="test",
         )
+        face_i1_p2 = Face(
+            image_id=img1.id,
+            bbox_x=110,
+            bbox_y=0,
+            bbox_w=100,
+            bbox_h=100,
+            detection_confidence=0.9,
+            person_id=p2_id,
+            cluster_id=c2_id,
+            state=FaceState.IDENTIFIED,
+            model_version="test",
+        )
+        # img2: unidentified faces — excluded from cluster mean computation
+        # but still found by FAISS search (cosine ~0.707, above threshold).
+        face_i2_u1 = Face(
+            image_id=img2.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=100,
+            bbox_h=100,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        face_i2_u2 = Face(
+            image_id=img2.id,
+            bbox_x=110,
+            bbox_y=0,
+            bbox_w=100,
+            bbox_h=100,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        session.add_all([face_i1_p1, face_i1_p2, face_i2_u1, face_i2_u2])
+        session.flush()
+        vector_store.add(face_i1_p1.id, emb_p1)
+        vector_store.add(face_i1_p2.id, emb_p2)
+        vector_store.add(face_i2_u1.id, emb_mix)
+        vector_store.add(face_i2_u2.id, emb_mix)
         session.commit()
         img1_id, img2_id = img1.id, img2.id
 

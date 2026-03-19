@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable, Concatenate, List, ParamSpec, Tuple, TypeVar
 
 import numpy as np
-from faiss import IndexFlatIP, read_index, write_index
+from faiss import IndexFlatIP, IndexIDMap2, read_index, write_index
 
 FACE_MATCH_THRESHOLD: float = 0.35
 """Minimum cosine similarity for a face embedding match.
@@ -31,13 +31,14 @@ def _locked(
 
 
 class VectorStore:
-    """FAISS wrapper for face embeddings using IndexFlatIP.
+    """FAISS wrapper for face embeddings using IndexIDMap2(IndexFlatIP).
 
     The vector dimensionality is configurable via the ``dimension`` argument
     (defaulting to ``DEFAULT_DIMENSION``).
 
     IndexFlatIP uses Inner Product similarity, which for L2-normalized vectors
-    is equivalent to cosine similarity.
+    is equivalent to cosine similarity.  IndexIDMap2 allows storing embeddings
+    with database-assigned Face IDs instead of sequential positions.
 
     All public methods are guarded by a lock so the store can be safely shared
     between the indexing background thread and the UI thread.
@@ -49,9 +50,7 @@ class VectorStore:
     def __init__(self, dimension: int = DEFAULT_DIMENSION):
         self.dimension = dimension
         self._lock = threading.Lock()
-        # IndexFlatIP does not support IDs by default, but it returns the 0-indexed
-        # position which acts as the faiss_id.
-        self.index: Any = IndexFlatIP(self.dimension)
+        self.index: Any = IndexIDMap2(IndexFlatIP(self.dimension))
 
     def _prepare_embedding(self, embedding: np.ndarray) -> np.ndarray:
         """Validate and cast an embedding for FAISS.
@@ -76,26 +75,32 @@ class VectorStore:
         return embedding.astype(VectorStore.EMBEDDING_DTYPE)
 
     @_locked
-    def add(self, embedding: np.ndarray) -> int:
-        """Adds an embedding to the index and returns its faiss_id.
+    def add(self, face_id: int, embedding: np.ndarray) -> None:
+        """Add an embedding to the index with the given face ID.
 
         Args:
+            face_id: The database Face.id to use as the FAISS key.
             embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
                 where ``D`` is the store's configured ``dimension``.
-
-        Returns:
-            The assigned faiss_id (the position in the index).
         """
         embedding = self._prepare_embedding(embedding)
-        faiss_id = self.index.ntotal
-        self.index.add(embedding)
-        return faiss_id
+        ids = np.array([face_id], dtype=np.int64)
+        self.index.add_with_ids(embedding, ids)
+
+    @_locked
+    def remove(self, face_id: int) -> None:
+        """Remove an embedding from the index by its face ID.
+
+        Args:
+            face_id: The ID of the embedding to remove.
+        """
+        self.index.remove_ids(np.array([face_id], dtype=np.int64))
 
     @_locked
     def search(
         self, query_embedding: np.ndarray, k: int, threshold: float = 0.0
     ) -> List[Tuple[int, float]]:
-        """Searches for the k most similar embeddings.
+        """Search for the k most similar embeddings.
 
         Args:
             query_embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
@@ -104,7 +109,7 @@ class VectorStore:
             threshold: Minimum similarity score to include in results.
 
         Returns:
-            A list of tuples (faiss_id, similarity_score) sorted by similarity.
+            A list of tuples (face_id, similarity_score) sorted by similarity.
         """
         query_embedding = self._prepare_embedding(query_embedding)
 
@@ -125,27 +130,28 @@ class VectorStore:
         return results
 
     @_locked
-    def get_embedding(self, faiss_id: int) -> np.ndarray:
-        """Retrieves an embedding by its faiss_id.
+    def get_embedding(self, face_id: int) -> np.ndarray:
+        """Retrieve an embedding by its face ID.
 
         Args:
-            faiss_id: The ID of the embedding to retrieve.
+            face_id: The ID of the embedding to retrieve.
 
         Returns:
             The embedding as a numpy array.
         """
-        if faiss_id < 0 or faiss_id >= self.index.ntotal:
-            raise IndexError(f"faiss_id {faiss_id} is out of bounds.")
-        return self.index.reconstruct(faiss_id)
+        try:
+            return self.index.reconstruct(face_id)
+        except RuntimeError as exc:
+            raise IndexError(f"face_id {face_id} not found in the index.") from exc
 
     @_locked
     def reset(self) -> None:
-        """Clears all embeddings from the index."""
+        """Clear all embeddings from the index."""
         self.index.reset()
 
     @_locked
     def save(self, path: Path) -> None:
-        """Saves the FAISS index to a file.
+        """Save the FAISS index to a file.
 
         Args:
             path: Path to the .index file.
@@ -155,7 +161,7 @@ class VectorStore:
 
     @_locked
     def load(self, path: Path) -> None:
-        """Loads a FAISS index from a file.
+        """Load a FAISS index from a file.
 
         Args:
             path: Path to the .index file.
@@ -170,3 +176,12 @@ class VectorStore:
                 f"does not match {self.dimension}."
             )
         self.index = loaded
+
+    @_locked
+    def needs_migration(self) -> bool:
+        """Check if the loaded index uses the old format (not IndexIDMap2).
+
+        Returns:
+            True if the index needs migration to IndexIDMap2.
+        """
+        return not isinstance(self.index, IndexIDMap2)
