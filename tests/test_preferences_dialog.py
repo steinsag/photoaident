@@ -158,7 +158,8 @@ def test_translate_pattern_error_empty(qtbot):
     """EMPTY code maps to the 'must not be empty' translated string."""
     dialog = PreferencesDialog("/path", 0, 0)
     qtbot.add_widget(dialog)
-    assert dialog._translate_pattern_error(PatternErrorCode.EMPTY) == dialog.tr(
+    widget = dialog._filepath_date_widget
+    assert widget._translate_pattern_error(PatternErrorCode.EMPTY) == widget.tr(
         "Pattern must not be empty."
     )
 
@@ -167,7 +168,8 @@ def test_translate_pattern_error_year_missing(qtbot):
     """YEAR_MISSING code maps to the missing-year translated string."""
     dialog = PreferencesDialog("/path", 0, 0)
     qtbot.add_widget(dialog)
-    assert dialog._translate_pattern_error(PatternErrorCode.YEAR_MISSING) == dialog.tr(
+    widget = dialog._filepath_date_widget
+    assert widget._translate_pattern_error(PatternErrorCode.YEAR_MISSING) == widget.tr(
         "Pattern must contain exactly one {YYYY} placeholder."
     )
 
@@ -176,8 +178,9 @@ def test_translate_pattern_error_covers_all_codes(qtbot):
     """_translate_pattern_error returns a non-empty string for every error code."""
     dialog = PreferencesDialog("/path", 0, 0)
     qtbot.add_widget(dialog)
+    widget = dialog._filepath_date_widget
     for code in PatternErrorCode:
-        msg = dialog._translate_pattern_error(code)
+        msg = widget._translate_pattern_error(code)
         assert isinstance(msg, str) and msg
 
 

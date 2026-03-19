@@ -241,13 +241,18 @@ class MainWindow(QtWidgets.QMainWindow):
         dialog = OnboardingDialog(self)
         if dialog.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
-        if path := dialog.selected_path():
-            self._on_onboarding_accepted(path)
-
-    def _on_onboarding_accepted(self, path: str) -> None:
-        """Save the selected collection path and start the initial inventory scan."""
+        path = dialog.selected_path()
+        if not path:
+            return
         self._settings.collection_path = path
+        self._settings.filepath_date_enabled = dialog.is_filepath_date_enabled()
+        self._settings.filepath_date_pattern = dialog.get_filepath_date_pattern()
         self._settings.save(self._paths.config_file)
+        self._indexing_controller.filepath_date_pattern = (
+            self._settings.filepath_date_pattern
+            if self._settings.filepath_date_enabled
+            else ""
+        )
         self._run_inventory_scan(path)
 
     def _maybe_start_indexing(self) -> None:
