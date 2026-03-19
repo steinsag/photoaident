@@ -11,9 +11,17 @@ def open_image(image_path: Path) -> Image.Image:
     pixel layout matches what OpenCV (and therefore InsightFace) sees.
     The caller is responsible for closing the returned image.
     """
-    img = Image.open(image_path)
-    img = ImageOps.exif_transpose(img)
-    return img
+    original = Image.open(image_path)
+    try:
+        transposed = ImageOps.exif_transpose(original)
+    except Exception:
+        original.close()
+        raise
+    # exif_transpose returns a new Image when rotation is needed; close the
+    # original in that case so we don't leak the file handle.
+    if transposed is not original:
+        original.close()
+    return transposed
 
 
 def generate_thumbnail(
