@@ -222,7 +222,7 @@ def test_onboarding_not_triggered_when_path_set(qtbot, tmp_app_paths, monkeypatc
 def test_onboarding_accepted_saves_settings_and_starts_scan(
     qtbot, tmp_app_paths, monkeypatch
 ):
-    """_on_onboarding_accepted persists the path and kicks off the inventory scan."""
+    """_show_onboarding persists the path and kicks off the inventory scan."""
     collection_dir = _make_collection_dir(tmp_app_paths)
 
     window = _make_window(tmp_app_paths, qtbot)
@@ -232,7 +232,13 @@ def test_onboarding_accepted_saves_settings_and_starts_scan(
         window, "_run_inventory_scan", lambda p: scan_called_with.append(p)
     )
 
-    window._on_onboarding_accepted(str(collection_dir))
+    def mock_exec(self):
+        self._selected_path = str(collection_dir)
+        return QtWidgets.QDialog.DialogCode.Accepted
+
+    monkeypatch.setattr(OnboardingDialog, "exec", mock_exec)
+
+    window._show_onboarding()
 
     assert window._settings.collection_path == str(collection_dir)
     assert scan_called_with == [str(collection_dir)]
@@ -334,16 +340,17 @@ def test_show_onboarding_cancelled_does_nothing(tmp_app_paths, qtbot, monkeypatc
         "exec",
         lambda _self: QtWidgets.QDialog.DialogCode.Rejected,
     )
-    called: list[str] = []
-    monkeypatch.setattr(window, "_on_onboarding_accepted", lambda p: called.append(p))
+    scan_called: list[str] = []
+    monkeypatch.setattr(window, "_run_inventory_scan", lambda p: scan_called.append(p))
 
     window._show_onboarding()
 
-    assert called == []
+    assert scan_called == []
+    assert window._settings.collection_path == ""
 
 
 def test_show_onboarding_accepted_calls_handler(tmp_app_paths, qtbot, monkeypatch):
-    """_show_onboarding calls _on_onboarding_accepted with the chosen folder."""
+    """_show_onboarding saves the path and starts an inventory scan when accepted."""
     collection_dir = _make_collection_dir(tmp_app_paths)
 
     window = _make_window(tmp_app_paths, qtbot)
@@ -353,12 +360,13 @@ def test_show_onboarding_accepted_calls_handler(tmp_app_paths, qtbot, monkeypatc
         return QtWidgets.QDialog.DialogCode.Accepted
 
     monkeypatch.setattr(OnboardingDialog, "exec", fake_exec)
-    called: list[str] = []
-    monkeypatch.setattr(window, "_on_onboarding_accepted", lambda p: called.append(p))
+    scan_called: list[str] = []
+    monkeypatch.setattr(window, "_run_inventory_scan", lambda p: scan_called.append(p))
 
     window._show_onboarding()
 
-    assert called == [str(collection_dir)]
+    assert scan_called == [str(collection_dir)]
+    assert window._settings.collection_path == str(collection_dir)
 
 
 # ---------------------------------------------------------------------------
