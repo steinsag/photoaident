@@ -122,6 +122,75 @@
     </message>
 </context>
 <context>
+    <name>FilepathDateWidget</name>
+    <message>
+        <source>Date from File Path</source>
+        <translation>Date from File Path</translation>
+    </message>
+    <message>
+        <source>Extract dates from file paths when EXIF is missing</source>
+        <translation>Extract dates from file paths when EXIF is missing</translation>
+    </message>
+    <message>
+        <source>Use placeholders to describe the date format in your folder names or file names. Supported placeholders: {YYYY} (year), {MM} (2-digit month), {M} (1-or-2-digit month), {DD} (2-digit day), {D} (1-or-2-digit day).
+Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</source>
+        <translation>Use placeholders to describe the date format in your folder names or file names. Supported placeholders: {YYYY} (year), {MM} (2-digit month), {M} (1-or-2-digit month), {DD} (2-digit day), {D} (1-or-2-digit day).
+Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translation>
+    </message>
+    <message>
+        <source>Pattern:</source>
+        <translation>Pattern:</translation>
+    </message>
+    <message>
+        <source>Pattern must not be empty.</source>
+        <translation>Pattern must not be empty.</translation>
+    </message>
+    <message>
+        <source>Pattern must contain exactly one {YYYY} placeholder.</source>
+        <translation>Pattern must contain exactly one {YYYY} placeholder.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {YYYY} more than once.</source>
+        <translation>Pattern must not contain {YYYY} more than once.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain both {MM} and {M}.</source>
+        <translation>Pattern must not contain both {MM} and {M}.</translation>
+    </message>
+    <message>
+        <source>Pattern must contain a month placeholder ({MM} or {M}).</source>
+        <translation>Pattern must contain a month placeholder ({MM} or {M}).</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {MM} more than once.</source>
+        <translation>Pattern must not contain {MM} more than once.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {M} more than once.</source>
+        <translation>Pattern must not contain {M} more than once.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain both {DD} and {D}.</source>
+        <translation>Pattern must not contain both {DD} and {D}.</translation>
+    </message>
+    <message>
+        <source>Pattern must contain a day placeholder ({DD} or {D}).</source>
+        <translation>Pattern must contain a day placeholder ({DD} or {D}).</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {DD} more than once.</source>
+        <translation>Pattern must not contain {DD} more than once.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {D} more than once.</source>
+        <translation>Pattern must not contain {D} more than once.</translation>
+    </message>
+    <message>
+        <source>Invalid Pattern</source>
+        <translation>Invalid Pattern</translation>
+    </message>
+</context>
+<context>
     <name>GpuChecker</name>
     <message>
         <source>CPU only</source>
@@ -549,74 +618,8 @@ To get started, please select your photo collection folder.</translation>
         <translation>Path:</translation>
     </message>
     <message>
-        <source>Date from File Path</source>
-        <translation>Date from File Path</translation>
-    </message>
-    <message>
-        <source>Extract dates from file paths when EXIF is missing</source>
-        <translation>Extract dates from file paths when EXIF is missing</translation>
-    </message>
-    <message>
-        <source>Use placeholders to describe the date format in your folder names or file names. Supported placeholders: {YYYY} (year), {MM} (2-digit month), {M} (1-or-2-digit month), {DD} (2-digit day), {D} (1-or-2-digit day).
-Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</source>
-        <translation>Use placeholders to describe the date format in your folder names or file names. Supported placeholders: {YYYY} (year), {MM} (2-digit month), {M} (1-or-2-digit month), {DD} (2-digit day), {D} (1-or-2-digit day).
-Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translation>
-    </message>
-    <message>
-        <source>Pattern:</source>
-        <translation>Pattern:</translation>
-    </message>
-    <message>
         <source>Select Photo Collection Folder</source>
         <translation>Select Photo Collection Folder</translation>
-    </message>
-    <message>
-        <source>Pattern must not be empty.</source>
-        <translation>Pattern must not be empty.</translation>
-    </message>
-    <message>
-        <source>Pattern must contain exactly one {YYYY} placeholder.</source>
-        <translation>Pattern must contain exactly one {YYYY} placeholder.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {YYYY} more than once.</source>
-        <translation>Pattern must not contain {YYYY} more than once.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain both {MM} and {M}.</source>
-        <translation>Pattern must not contain both {MM} and {M}.</translation>
-    </message>
-    <message>
-        <source>Pattern must contain a month placeholder ({MM} or {M}).</source>
-        <translation>Pattern must contain a month placeholder ({MM} or {M}).</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {MM} more than once.</source>
-        <translation>Pattern must not contain {MM} more than once.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {M} more than once.</source>
-        <translation>Pattern must not contain {M} more than once.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain both {DD} and {D}.</source>
-        <translation>Pattern must not contain both {DD} and {D}.</translation>
-    </message>
-    <message>
-        <source>Pattern must contain a day placeholder ({DD} or {D}).</source>
-        <translation>Pattern must contain a day placeholder ({DD} or {D}).</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {DD} more than once.</source>
-        <translation>Pattern must not contain {DD} more than once.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {D} more than once.</source>
-        <translation>Pattern must not contain {D} more than once.</translation>
-    </message>
-    <message>
-        <source>Invalid Pattern</source>
-        <translation>Invalid Pattern</translation>
     </message>
 </context>
 <context>

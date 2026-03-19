@@ -1,5 +1,7 @@
 from PySide6 import QtWidgets
 
+from photoaident.ui.widgets.filepath_date_widget import FilepathDateWidget
+
 
 class OnboardingDialog(QtWidgets.QDialog):
     """First-run dialog that asks the user to select their photo collection folder.
@@ -37,6 +39,10 @@ class OnboardingDialog(QtWidgets.QDialog):
         layout.addLayout(path_layout)
         layout.addSpacing(12)
 
+        self._filepath_date_widget = FilepathDateWidget(parent=self)
+        layout.addWidget(self._filepath_date_widget)
+        layout.addSpacing(12)
+
         button_box = QtWidgets.QDialogButtonBox()
         self._start_btn = button_box.addButton(
             self.tr("Start Indexing"),
@@ -58,10 +64,20 @@ class OnboardingDialog(QtWidgets.QDialog):
             self._start_btn.setEnabled(True)
 
     def _on_accept(self) -> None:
-        """Store the chosen path and accept the dialog."""
+        """Validate settings, store the chosen path, and accept the dialog."""
+        if not self._filepath_date_widget.validate():
+            return
         self._selected_path = self._path_edit.text()
         self.accept()
 
     def selected_path(self) -> str:
         """Return the folder path chosen by the user (empty string if none)."""
         return self._selected_path
+
+    def is_filepath_date_enabled(self) -> bool:
+        """Return whether filepath date extraction is enabled."""
+        return self._filepath_date_widget.is_enabled()
+
+    def get_filepath_date_pattern(self) -> str:
+        """Return the configured filepath date pattern."""
+        return self._filepath_date_widget.pattern()

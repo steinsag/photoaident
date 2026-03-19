@@ -122,6 +122,75 @@
     </message>
 </context>
 <context>
+    <name>FilepathDateWidget</name>
+    <message>
+        <source>Date from File Path</source>
+        <translation>Datum aus Dateipfad</translation>
+    </message>
+    <message>
+        <source>Extract dates from file paths when EXIF is missing</source>
+        <translation>Datum aus Dateipfaden extrahieren, wenn EXIF fehlt</translation>
+    </message>
+    <message>
+        <source>Use placeholders to describe the date format in your folder names or file names. Supported placeholders: {YYYY} (year), {MM} (2-digit month), {M} (1-or-2-digit month), {DD} (2-digit day), {D} (1-or-2-digit day).
+Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</source>
+        <translation>Verwende Platzhalter, um das Datumsformat in deinen Ordner- oder Dateinamen zu beschreiben. Unterstützte Platzhalter: {YYYY} (Jahr), {MM} (2-stelliger Monat), {M} (1- oder 2-stelliger Monat), {DD} (2-stelliger Tag), {D} (1- oder 2-stelliger Tag).
+Beispiele: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translation>
+    </message>
+    <message>
+        <source>Pattern:</source>
+        <translation>Muster:</translation>
+    </message>
+    <message>
+        <source>Pattern must not be empty.</source>
+        <translation>Muster darf nicht leer sein.</translation>
+    </message>
+    <message>
+        <source>Pattern must contain exactly one {YYYY} placeholder.</source>
+        <translation>Muster muss genau einen {YYYY}-Platzhalter enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {YYYY} more than once.</source>
+        <translation>Das Muster darf {YYYY} nicht mehr als einmal enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain both {MM} and {M}.</source>
+        <translation>Muster darf nicht sowohl {MM} als auch {M} enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must contain a month placeholder ({MM} or {M}).</source>
+        <translation>Muster muss einen Monatsplatzhalter enthalten ({MM} oder {M}).</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {MM} more than once.</source>
+        <translation>Das Muster darf {MM} nicht mehr als einmal enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {M} more than once.</source>
+        <translation>Das Muster darf {M} nicht mehr als einmal enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain both {DD} and {D}.</source>
+        <translation>Muster darf nicht sowohl {DD} als auch {D} enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must contain a day placeholder ({DD} or {D}).</source>
+        <translation>Muster muss einen Tagesplatzhalter enthalten ({DD} oder {D}).</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {DD} more than once.</source>
+        <translation>Das Muster darf {DD} nicht mehr als einmal enthalten.</translation>
+    </message>
+    <message>
+        <source>Pattern must not contain {D} more than once.</source>
+        <translation>Das Muster darf {D} nicht mehr als einmal enthalten.</translation>
+    </message>
+    <message>
+        <source>Invalid Pattern</source>
+        <translation>Ungültiges Muster</translation>
+    </message>
+</context>
+<context>
     <name>GpuChecker</name>
     <message>
         <source>CPU only</source>
@@ -551,74 +620,8 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
         <translation>Pfad:</translation>
     </message>
     <message>
-        <source>Date from File Path</source>
-        <translation>Datum aus Dateipfad</translation>
-    </message>
-    <message>
-        <source>Extract dates from file paths when EXIF is missing</source>
-        <translation>Datum aus Dateipfaden extrahieren, wenn EXIF fehlt</translation>
-    </message>
-    <message>
-        <source>Use placeholders to describe the date format in your folder names or file names. Supported placeholders: {YYYY} (year), {MM} (2-digit month), {M} (1-or-2-digit month), {DD} (2-digit day), {D} (1-or-2-digit day).
-Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</source>
-        <translation>Verwende Platzhalter, um das Datumsformat in deinen Ordner- oder Dateinamen zu beschreiben. Unterstützte Platzhalter: {YYYY} (Jahr), {MM} (2-stelliger Monat), {M} (1- oder 2-stelliger Monat), {DD} (2-stelliger Tag), {D} (1- oder 2-stelliger Tag).
-Beispiele: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translation>
-    </message>
-    <message>
-        <source>Pattern:</source>
-        <translation>Muster:</translation>
-    </message>
-    <message>
         <source>Select Photo Collection Folder</source>
         <translation>Fotosammlungsordner auswählen</translation>
-    </message>
-    <message>
-        <source>Pattern must not be empty.</source>
-        <translation>Muster darf nicht leer sein.</translation>
-    </message>
-    <message>
-        <source>Pattern must contain exactly one {YYYY} placeholder.</source>
-        <translation>Muster muss genau einen {YYYY}-Platzhalter enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {YYYY} more than once.</source>
-        <translation>Das Muster darf {YYYY} nicht mehr als einmal enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain both {MM} and {M}.</source>
-        <translation>Muster darf nicht sowohl {MM} als auch {M} enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must contain a month placeholder ({MM} or {M}).</source>
-        <translation>Muster muss einen Monatsplatzhalter enthalten ({MM} oder {M}).</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {MM} more than once.</source>
-        <translation>Das Muster darf {MM} nicht mehr als einmal enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {M} more than once.</source>
-        <translation>Das Muster darf {M} nicht mehr als einmal enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain both {DD} and {D}.</source>
-        <translation>Muster darf nicht sowohl {DD} als auch {D} enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must contain a day placeholder ({DD} or {D}).</source>
-        <translation>Muster muss einen Tagesplatzhalter enthalten ({DD} oder {D}).</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {DD} more than once.</source>
-        <translation>Das Muster darf {DD} nicht mehr als einmal enthalten.</translation>
-    </message>
-    <message>
-        <source>Pattern must not contain {D} more than once.</source>
-        <translation>Das Muster darf {D} nicht mehr als einmal enthalten.</translation>
-    </message>
-    <message>
-        <source>Invalid Pattern</source>
-        <translation>Ungültiges Muster</translation>
     </message>
 </context>
 <context>
