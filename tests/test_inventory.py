@@ -11,6 +11,18 @@ from photoaident.db.database import Image
 
 
 @pytest.fixture
+def require_symlinks(tmp_path: pathlib.Path) -> None:
+    """Skip the test if the platform does not support directory symlinks."""
+    probe_target = tmp_path / "_symlink_probe_target"
+    probe_target.mkdir()
+    probe_link = tmp_path / "_symlink_probe_link"
+    try:
+        probe_link.symlink_to(probe_target)
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"Directory symlinks not supported on this platform: {exc}")
+
+
+@pytest.fixture
 def session_factory(db_engine):
     """Factory for transactional sessions."""
 
@@ -168,7 +180,9 @@ def test_inventory_task_cancel_during_batch_loop(tmp_path, db_engine):
     assert len(images) == 0
 
 
-def test_inventory_follows_symlinked_directory(tmp_path, session_factory, db_engine):
+def test_inventory_follows_symlinked_directory(
+    tmp_path, session_factory, db_engine, require_symlinks
+):
     """Images inside a symlinked subdirectory are discovered."""
     real_dir = tmp_path / "real"
     real_dir.mkdir()
@@ -187,7 +201,9 @@ def test_inventory_follows_symlinked_directory(tmp_path, session_factory, db_eng
     assert images[0].file_path.endswith("img.jpg")
 
 
-def test_inventory_handles_symlink_cycle(tmp_path, session_factory, db_engine):
+def test_inventory_handles_symlink_cycle(
+    tmp_path, session_factory, db_engine, require_symlinks
+):
     """A symlink that points back to an ancestor does not cause infinite recursion."""
     collection = tmp_path / "collection"
     collection.mkdir()
@@ -206,7 +222,7 @@ def test_inventory_handles_symlink_cycle(tmp_path, session_factory, db_engine):
 
 
 def test_inventory_skips_files_via_duplicate_symlink(
-    tmp_path, session_factory, db_engine
+    tmp_path, session_factory, db_engine, require_symlinks
 ):
     """Two symlinks pointing to the same real directory don't double-count images."""
     real_dir = tmp_path / "real"
