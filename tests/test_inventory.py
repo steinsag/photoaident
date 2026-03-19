@@ -17,7 +17,7 @@ def require_symlinks(tmp_path: pathlib.Path) -> None:
     probe_target.mkdir()
     probe_link = tmp_path / "_symlink_probe_link"
     try:
-        probe_link.symlink_to(probe_target)
+        probe_link.symlink_to(probe_target, target_is_directory=True)
     except (OSError, NotImplementedError) as exc:
         pytest.skip(f"Directory symlinks not supported on this platform: {exc}")
 
@@ -190,7 +190,7 @@ def test_inventory_follows_symlinked_directory(
 
     collection = tmp_path / "collection"
     collection.mkdir()
-    (collection / "link").symlink_to(real_dir)
+    (collection / "link").symlink_to(real_dir, target_is_directory=True)
 
     task = InventoryTask(str(collection), session_factory)
     task.run()
@@ -210,7 +210,7 @@ def test_inventory_handles_symlink_cycle(
     (collection / "img.jpg").write_bytes(b"x")
 
     # Create a cycle: collection/loop -> collection
-    (collection / "loop").symlink_to(collection)
+    (collection / "loop").symlink_to(collection, target_is_directory=True)
 
     task = InventoryTask(str(collection), session_factory)
     task.run()  # must terminate
@@ -231,8 +231,8 @@ def test_inventory_skips_files_via_duplicate_symlink(
 
     collection = tmp_path / "collection"
     collection.mkdir()
-    (collection / "link_a").symlink_to(real_dir)
-    (collection / "link_b").symlink_to(real_dir)
+    (collection / "link_a").symlink_to(real_dir, target_is_directory=True)
+    (collection / "link_b").symlink_to(real_dir, target_is_directory=True)
 
     task = InventoryTask(str(collection), session_factory)
     task.run()
