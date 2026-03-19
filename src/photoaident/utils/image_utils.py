@@ -2,42 +2,26 @@ from pathlib import Path
 from typing import Tuple
 
 from PIL import Image, ImageOps
-from PySide6 import QtGui
 
 
-def get_exif_transform(
-    transformation: QtGui.QImageIOHandler.Transformation,
-) -> QtGui.QTransform:
-    """Return the QTransform that corresponds to a QImageIOHandler.Transformation.
+def open_image(image_path: Path) -> Image.Image:
+    """Open an image and apply EXIF orientation.
 
-    Replicates the logic Qt applies internally when
-    ``QImageReader.setAutoTransform(True)`` is used, so callers can apply the
-    same orientation correction manually after drawing overlays in the
-    un-rotated coordinate space.
-
-    The implementation mirrors the switch statement in Qt's own
-    ``exifTransform`` helper (qtbase/src/gui/image/qimagereader.cpp).
+    All PIL image loading should go through this function so that the
+    pixel layout matches what OpenCV (and therefore InsightFace) sees.
+    The caller is responsible for closing the returned image.
     """
-    m = QtGui.QTransform()
-    T = QtGui.QImageIOHandler.Transformation
-    if transformation == T.TransformationMirror:
-        m.scale(-1.0, 1.0)
-    elif transformation == T.TransformationFlip:
-        m.scale(1.0, -1.0)
-    elif transformation == T.TransformationRotate180:
-        m.rotate(180.0)
-    elif transformation == T.TransformationRotate90:
-        m.rotate(90.0)
-    elif transformation == T.TransformationMirrorAndRotate90:
-        m.scale(-1.0, 1.0)
-        m.rotate(90.0)
-    elif transformation == T.TransformationFlipAndRotate90:
-        m.scale(1.0, -1.0)
-        m.rotate(90.0)
-    elif transformation == T.TransformationRotate270:
-        m.rotate(270.0)
-    # TransformationNone → identity, already initialised above
-    return m
+    original = Image.open(image_path)
+    try:
+        transposed = ImageOps.exif_transpose(original)
+    except Exception:
+        original.close()
+        raise
+    # exif_transpose returns a new Image when rotation is needed; close the
+    # original in that case so we don't leak the file handle.
+    if transposed is not original:
+        original.close()
+    return transposed
 
 
 def generate_thumbnail(
@@ -48,10 +32,7 @@ def generate_thumbnail(
     The thumbnail is generated while preserving aspect ratio and
     respecting EXIF orientation.
     """
-    with Image.open(image_path) as img:
-        # Apply EXIF orientation
-        img = ImageOps.exif_transpose(img)
-
+    with open_image(image_path) as img:
         # Convert to RGB if necessary (e.g. for RGBA or CMYK)
         if img.mode != "RGB":
             img = img.convert("RGB")

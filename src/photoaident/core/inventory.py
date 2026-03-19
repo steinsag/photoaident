@@ -31,11 +31,21 @@ class InventoryTask(QtCore.QObject):
         self._is_cancelled = True
 
     def _scan_image_files(self, extensions: set) -> Optional[List[Path]]:
-        """Walk root_path for matching files. Returns None if cancelled."""
+        """Walk root_path for matching files. Returns None if cancelled.
+
+        Follows symlinks but skips directories already visited (by real path)
+        to prevent infinite loops from circular symlinks.
+        """
         image_paths: List[Path] = []
-        for root, _, files in os.walk(self.root_path):
+        visited: set[str] = set()
+        for root, dirs, files in os.walk(self.root_path, followlinks=True):
             if self._is_cancelled:
                 return None
+            real_root = os.path.realpath(root)
+            if real_root in visited:
+                dirs.clear()  # prevent os.walk from descending further
+                continue
+            visited.add(real_root)
             for file in files:
                 ext = os.path.splitext(file)[1].lower()
                 if ext in extensions:
