@@ -87,7 +87,7 @@ def test_migration_remaps_positional_ids_to_face_ids(search_db):
         session.commit()
         face_ids = (f0.id, f1.id)
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert new_store.index.ntotal == 2
     assert np.allclose(new_store.get_embedding(face_ids[0]), v0, atol=1e-5)
@@ -103,7 +103,7 @@ def test_migration_returns_indexidmap2(search_db):
         _insert_face(session, img.id, faiss_id=0)
         session.commit()
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert not new_store.needs_migration()
 
@@ -119,7 +119,7 @@ def test_migration_embeddings_are_searchable(search_db):
         session.commit()
         face_id = face.id
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     results = new_store.search(v0, k=1)
     assert len(results) == 1
@@ -143,7 +143,7 @@ def test_migration_skips_faces_with_null_faiss_id(search_db):
         _insert_face(session, img.id, faiss_id=None)  # should be skipped
         session.commit()
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert new_store.index.ntotal == 1
 
@@ -158,7 +158,7 @@ def test_migration_skips_deleted_faces(search_db):
         _insert_face(session, img.id, faiss_id=0, deleted=True)
         session.commit()
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert new_store.index.ntotal == 0
 
@@ -174,7 +174,7 @@ def test_migration_skips_out_of_bounds_faiss_id(search_db):
         _insert_face(session, img.id, faiss_id=999)  # out of bounds
         session.commit()
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert new_store.index.ntotal == 1
 
@@ -188,7 +188,7 @@ def test_migration_empty_database(search_db):
     """Migration with no face rows produces an empty store."""
     old_store = _old_format_store([])
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert new_store.index.ntotal == 0
 
@@ -204,7 +204,7 @@ def test_migration_preserves_embedding_values(search_db):
         session.commit()
         face_ids = [f.id for f in faces]
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     for face_id, original in zip(face_ids, vectors):
         retrieved = new_store.get_embedding(face_id)
@@ -226,7 +226,7 @@ def test_migration_mixed_valid_and_invalid(search_db):
         session.commit()
         good_id = good.id
 
-    new_store = rebuild_faiss_with_face_ids(old_store, search_db, dimension=_DIM)
+    new_store = rebuild_faiss_with_face_ids(old_store, search_db)
 
     assert new_store.index.ntotal == 1
     assert np.allclose(new_store.get_embedding(good_id), v0, atol=1e-5)

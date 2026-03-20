@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 def rebuild_faiss_with_face_ids(
     old_vector_store: VectorStore,
     session_factory: "sessionmaker",
-    dimension: int = VectorStore.DEFAULT_DIMENSION,
 ) -> VectorStore:
     """Rebuild the FAISS index using Face.id as the FAISS key.
 
@@ -34,7 +33,6 @@ def rebuild_faiss_with_face_ids(
     Args:
         old_vector_store: The existing VectorStore with positional IDs.
         session_factory: SQLAlchemy session factory.
-        dimension: Embedding dimensionality (default 512).
 
     Returns:
         A new VectorStore with Face.id-keyed embeddings.
@@ -47,7 +45,7 @@ def rebuild_faiss_with_face_ids(
             )
         ).all()
 
-    new_store = VectorStore(dimension=dimension)
+    new_store = VectorStore(dimension=old_vector_store.dimension)
     migrated = 0
     skipped = 0
 
