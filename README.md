@@ -69,7 +69,8 @@ One command to auto-fix formatting/lints, run type checks, and tests:
 
       uv run scripts/verify.py
 
-This runs, in order: `black --target-version py312 .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`, `pytest`.
+This runs, in order: `black --target-version py312 .`, `ruff check --fix .`, `pyright src/ tests/`, `ty check`,
+`pytest`.
 
 ## Translations (i18n)
 
@@ -234,7 +235,7 @@ erDiagram
     faces {
         int id PK
         int image_id FK
-        int faiss_id
+        int faiss_id "nullable, deprecated"
         int bbox_x
         int bbox_y
         int bbox_w

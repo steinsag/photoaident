@@ -86,7 +86,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._vector_store = rebuild_faiss_with_face_ids(
                     self._vector_store,
                     self._session_factory,
-                    VectorStore.DEFAULT_DIMENSION,
+                    self._vector_store.dimension,
                 )
                 self._vector_store.save(self._paths.faiss_path)
             backfill_cluster_means(self._session_factory, self._vector_store)
