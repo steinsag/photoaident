@@ -49,10 +49,10 @@ def rebuild_faiss_with_face_ids(
     with session_factory() as session:
         for face_id, faiss_id in session.execute(stmt).yield_per(1000):
             try:
-                embedding = old_vector_store.get_embedding(faiss_id)
+                embedding = old_vector_store.index.reconstruct(faiss_id)
                 new_store.add(face_id, embedding)
                 migrated += 1
-            except IndexError:
+            except (RuntimeError, IndexError):
                 skipped += 1
                 logger.debug(
                     "Skipping face %d: old faiss_id %d not found in index",

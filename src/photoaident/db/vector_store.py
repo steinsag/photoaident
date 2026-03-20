@@ -121,6 +121,7 @@ class VectorStore:
         Returns:
             A list of tuples (face_id, similarity_score) sorted by similarity.
         """
+        self._require_id_map()
         query_embedding = self._prepare_embedding(query_embedding)
 
         if k <= 0:
@@ -149,6 +150,7 @@ class VectorStore:
         Returns:
             The embedding as a numpy array.
         """
+        self._require_id_map()
         try:
             return self.index.reconstruct(face_id)
         except RuntimeError as exc:

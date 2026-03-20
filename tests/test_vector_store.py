@@ -306,6 +306,21 @@ def test_remove_raises_on_unmigrated_index():
         store.remove(1)
 
 
+def test_search_raises_on_unmigrated_index():
+    """search() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    v = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.search(v, k=5)
+
+
+def test_get_embedding_raises_on_unmigrated_index():
+    """get_embedding() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.get_embedding(1)
+
+
 # ===========================================================================
 # concurrent access
 # ===========================================================================
