@@ -22,9 +22,9 @@ def rebuild_faiss_with_face_ids(
 ) -> VectorStore:
     """Rebuild the FAISS index using Face.id as the FAISS key.
 
-    Reads all non-deleted faces from the database, retrieves their embeddings
-    from the old positional index via ``faiss_id``, and inserts them into a new
-    ``IndexIDMap2``-backed store keyed by ``Face.id``.
+    Streams non-deleted faces from the database in chunks, retrieves their
+    embeddings from the old positional index via ``faiss_id``, and inserts them
+    into a new ``IndexIDMap2``-backed store keyed by ``Face.id``.
 
     Faces whose old ``faiss_id`` is missing from the index (orphaned or
     corrupted) are skipped with a debug-level log per face and an info-level
@@ -37,30 +37,28 @@ def rebuild_faiss_with_face_ids(
     Returns:
         A new VectorStore with Face.id-keyed embeddings.
     """
-    with session_factory() as session:
-        rows = session.execute(
-            select(Face.id, Face.faiss_id).where(
-                Face.deleted_at.is_(None),
-                Face.faiss_id.isnot(None),
-            )
-        ).all()
-
     new_store = VectorStore(dimension=old_vector_store.dimension)
     migrated = 0
     skipped = 0
 
-    for face_id, faiss_id in rows:
-        try:
-            embedding = old_vector_store.get_embedding(faiss_id)
-            new_store.add(face_id, embedding)
-            migrated += 1
-        except IndexError:
-            skipped += 1
-            logger.debug(
-                "Skipping face %d: old faiss_id %d not found in index",
-                face_id,
-                faiss_id,
-            )
+    stmt = select(Face.id, Face.faiss_id).where(
+        Face.deleted_at.is_(None),
+        Face.faiss_id.isnot(None),
+    )
+
+    with session_factory() as session:
+        for face_id, faiss_id in session.execute(stmt).yield_per(1000):
+            try:
+                embedding = old_vector_store.get_embedding(faiss_id)
+                new_store.add(face_id, embedding)
+                migrated += 1
+            except IndexError:
+                skipped += 1
+                logger.debug(
+                    "Skipping face %d: old faiss_id %d not found in index",
+                    face_id,
+                    faiss_id,
+                )
 
     logger.info(
         "FAISS migration complete: %d vectors migrated, %d skipped",
