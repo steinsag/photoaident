@@ -27,9 +27,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("faces") as batch_op:
-        batch_op.alter_column(
-            "faiss_id",
-            existing_type=sa.Integer(),
-            nullable=False,
-        )
+    # This migration makes faces.faiss_id nullable. After upgrading, new rows
+    # may legitimately have faiss_id = NULL. Making the column non-nullable
+    # again would either fail if NULLs exist or require inventing placeholder
+    # values, and in either case would not restore the original FAISS index
+    # positional invariants. To avoid unsafe or lossy downgrades, this
+    # migration is explicitly marked as irreversible.
+    raise RuntimeError(
+        "Downgrade of migration e5f6a7b8c9d0 is not supported: "
+        "faces.faiss_id may contain NULL values and FAISS positional "
+        "invariants cannot be safely restored."
+    )
