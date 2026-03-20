@@ -28,7 +28,8 @@ def rebuild_faiss_with_face_ids(
     ``IndexIDMap2``-backed store keyed by ``Face.id``.
 
     Faces whose old ``faiss_id`` is missing from the index (orphaned or
-    corrupted) are silently skipped.
+    corrupted) are skipped with a debug-level log per face and an info-level
+    summary at the end.
 
     Args:
         old_vector_store: The existing VectorStore with positional IDs.
@@ -57,7 +58,7 @@ def rebuild_faiss_with_face_ids(
             migrated += 1
         except IndexError:
             skipped += 1
-            logger.warning(
+            logger.debug(
                 "Skipping face %d: old faiss_id %d not found in index",
                 face_id,
                 faiss_id,
