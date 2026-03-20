@@ -228,22 +228,32 @@ class IndexingTask(QtCore.QObject):
 
         faces_info = embedder.process_image(path)
         new_faces = []
-        for info in faces_info:
-            bbox = info["bbox"]
-            face = Face(
-                image_id=img.id,
-                bbox_x=bbox[0],
-                bbox_y=bbox[1],
-                bbox_w=bbox[2] - bbox[0],
-                bbox_h=bbox[3] - bbox[1],
-                detection_confidence=info["det_score"],
-                state=FaceState.UNIDENTIFIED,
-                model_version="buffalo_l",
-            )
-            session.add(face)
-            session.flush()
-            self.vector_store.add(face.id, info["embedding"])
-            new_faces.append((face, bbox))
+        added_face_ids: list[int] = []
+        try:
+            with session.begin_nested():
+                for info in faces_info:
+                    bbox = info["bbox"]
+                    face = Face(
+                        image_id=img.id,
+                        bbox_x=bbox[0],
+                        bbox_y=bbox[1],
+                        bbox_w=bbox[2] - bbox[0],
+                        bbox_h=bbox[3] - bbox[1],
+                        detection_confidence=info["det_score"],
+                        state=FaceState.UNIDENTIFIED,
+                        model_version="buffalo_l",
+                    )
+                    session.add(face)
+                    session.flush()
+                    self.vector_store.add(face.id, info["embedding"])
+                    added_face_ids.append(face.id)
+                    new_faces.append((face, bbox))
+        except Exception:
+            # Savepoint rolled back all DB face rows; remove any partially-added
+            # FAISS vectors to keep DB and index in sync.
+            for face_id in added_face_ids:
+                self.vector_store.remove(face_id)
+            raise
 
         self._extract_exif_metadata(path, img.id, session)
 
