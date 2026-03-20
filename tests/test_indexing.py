@@ -646,7 +646,7 @@ def test_faiss_add_failure_leaves_no_orphaned_faces(
 
     from photoaident.db.database import Face as FaceModel
 
-    # Image should be marked ERROR (exception propagated through run())
+    # Image should be marked ERROR (exception handled inside run())
     with Session(db_engine) as session:
         img = session.get(Image, img_id)
         assert img is not None
