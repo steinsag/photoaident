@@ -35,15 +35,15 @@ def _compute_cluster_mean(
     return deserialize_embedding(blob)
 
 
-def _accumulate_faiss_scores(
+def _accumulate_face_scores(
     cluster_ids: list[int],
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     limit: int,
     threshold: float,
 ) -> dict[int, float]:
-    """Per cluster: compute mean embedding → FAISS search → keep best score."""
-    faiss_scores: dict[int, float] = {}
+    """Query FAISS for each cluster mean; return the best score per face ID."""
+    face_scores: dict[int, float] = {}
     for cluster_id in cluster_ids:
         mean_emb = _compute_cluster_mean(cluster_id, session_factory)
         if mean_emb is None:
@@ -51,12 +51,12 @@ def _accumulate_faiss_scores(
         for fid, score in vector_store.search(
             mean_emb, k=limit * 3, threshold=threshold
         ):
-            if fid not in faiss_scores or score > faiss_scores[fid]:
-                faiss_scores[fid] = score
-    return faiss_scores
+            if fid not in face_scores or score > face_scores[fid]:
+                face_scores[fid] = score
+    return face_scores
 
 
-def _faiss_to_image_scores(
+def _face_ids_to_image_scores(
     face_scores: dict[int, float],
     session_factory: "sessionmaker",
 ) -> dict[int, float]:
@@ -119,14 +119,14 @@ def _find_images_by_person(
     if not cluster_ids:
         return []
 
-    faiss_scores = _accumulate_faiss_scores(
+    face_scores = _accumulate_face_scores(
         cluster_ids, session_factory, vector_store, limit, threshold
     )
 
-    if not faiss_scores:
+    if not face_scores:
         return []
 
-    image_scores = _faiss_to_image_scores(faiss_scores, session_factory)
+    image_scores = _face_ids_to_image_scores(face_scores, session_factory)
 
     sorted_pairs = sorted(image_scores.items(), key=lambda x: x[1], reverse=True)
     return sorted_pairs[:limit]
