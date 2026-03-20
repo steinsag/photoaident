@@ -255,11 +255,22 @@ class IndexingTask(QtCore.QObject):
                 self.vector_store.remove(face_id)
             raise
 
-        self._extract_exif_metadata(path, img.id, session)
+        try:
+            self._extract_exif_metadata(path, img.id, session)
 
-        # Persist FAISS first to minimise DB→FAISS mismatch risk
-        self.vector_store.save(self.paths.faiss_path)
-        session.commit()
+            # Persist FAISS first to minimise DB→FAISS mismatch risk
+            self.vector_store.save(self.paths.faiss_path)
+            session.commit()
+        except Exception:
+            # Downstream failure after the savepoint succeeded: the Face rows
+            # are still pending in the session.  Roll back the entire
+            # transaction so they are not accidentally committed by the
+            # caller's error handler, and remove the vectors from the
+            # in-memory FAISS index to stay consistent.
+            session.rollback()
+            for face_id in added_face_ids:
+                self.vector_store.remove(face_id)
+            raise
 
         self._save_face_crops(new_faces, embedder, path)
 
