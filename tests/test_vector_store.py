@@ -280,6 +280,33 @@ def test_needs_migration_true_for_loaded_old_format(tmp_path):
 
 
 # ===========================================================================
+# add/remove guards for unmigrated index
+# ===========================================================================
+
+
+def _make_unmigrated_store() -> VectorStore:
+    """Return a VectorStore whose index is a bare IndexFlatIP (old format)."""
+    store = VectorStore()
+    store.index = faiss.IndexFlatIP(VectorStore.DEFAULT_DIMENSION)
+    return store
+
+
+def test_add_raises_on_unmigrated_index():
+    """add() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    v = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.add(1, v)
+
+
+def test_remove_raises_on_unmigrated_index():
+    """remove() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.remove(1)
+
+
+# ===========================================================================
 # concurrent access
 # ===========================================================================
 

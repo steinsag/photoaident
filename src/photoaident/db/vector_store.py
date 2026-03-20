@@ -74,6 +74,14 @@ class VectorStore:
             raise ValueError(f"Embedding must be {self.dimension}-dimensional.")
         return embedding.astype(VectorStore.EMBEDDING_DTYPE)
 
+    def _require_id_map(self) -> None:
+        """Raise RuntimeError if the index has not been migrated to IndexIDMap2."""
+        if not isinstance(self.index, IndexIDMap2):
+            raise RuntimeError(
+                "Index is not an IndexIDMap2 and must be migrated before use. "
+                "Call the migration helper to rebuild the index."
+            )
+
     @_locked
     def add(self, face_id: int, embedding: np.ndarray) -> None:
         """Add an embedding to the index with the given face ID.
@@ -83,6 +91,7 @@ class VectorStore:
             embedding: A 1D or 2D numpy array of shape ``(D,)`` or ``(1, D)``,
                 where ``D`` is the store's configured ``dimension``.
         """
+        self._require_id_map()
         embedding = self._prepare_embedding(embedding)
         ids = np.array([face_id], dtype=np.int64)
         self.index.add_with_ids(embedding, ids)
@@ -94,6 +103,7 @@ class VectorStore:
         Args:
             face_id: The ID of the embedding to remove.
         """
+        self._require_id_map()
         self.index.remove_ids(np.array([face_id], dtype=np.int64))
 
     @_locked
