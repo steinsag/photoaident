@@ -82,12 +82,15 @@ class MainWindow(QtWidgets.QMainWindow):
         if self._paths.faiss_path.exists():
             self._vector_store.load(self._paths.faiss_path)
             if self._vector_store.needs_migration():
-                logger.info("Migrating FAISS index to database-driven IDs...")
+                logger.warning("Migrating FAISS index to database-driven IDs...")
                 self._vector_store = rebuild_faiss_with_face_ids(
                     self._vector_store,
                     self._session_factory,
                 )
                 self._vector_store.save(self._paths.faiss_path)
+                logger.warning("FAISS index migration finished.")
+            else:
+                logger.warning("FAISS index already migrated, no migration needed.")
             backfill_cluster_means(self._session_factory, self._vector_store)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))
