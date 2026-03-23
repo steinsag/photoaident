@@ -7,8 +7,18 @@ from PIL import Image as PILImage
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from photoaident.core.indexing import IndexingTask, _dms_to_decimal
-from photoaident.db.database import Image, ImageMetadata, TakenAtSource
+from photoaident.core.indexing import IndexingTask, _bbox_iou, _dms_to_decimal
+from photoaident.db.database import (
+    EmbeddingCluster,
+    Face,
+    FaceState,
+    Image,
+    ImageMetadata,
+    ImageTag,
+    Person,
+    TagSource,
+    TakenAtSource,
+)
 from photoaident.db.vector_store import VectorStore
 
 
@@ -711,3 +721,554 @@ def test_faiss_save_failure_rolls_back_faces_and_vectors(
     assert (
         vector_store.index.ntotal == 0
     ), "FAISS vectors must be removed on save failure"
+
+
+# ===========================================================================
+# _bbox_iou
+# ===========================================================================
+
+
+def test_bbox_iou_perfect_overlap():
+    """Identical boxes produce IoU of 1.0."""
+    assert _bbox_iou((10, 20, 50, 60), (10, 20, 50, 60)) == pytest.approx(1.0)
+
+
+def test_bbox_iou_no_overlap():
+    """Disjoint boxes produce IoU of 0.0."""
+    assert _bbox_iou((0, 0, 10, 10), (100, 100, 10, 10)) == 0.0
+
+
+def test_bbox_iou_partial_overlap():
+    """Partially overlapping boxes produce correct IoU."""
+    # Box A: (0,0) to (10,10), area 100
+    # Box B: (5,5) to (15,15), area 100
+    # Intersection: (5,5) to (10,10) = 25
+    # Union: 100 + 100 - 25 = 175
+    assert _bbox_iou((0, 0, 10, 10), (5, 5, 10, 10)) == pytest.approx(25 / 175)
+
+
+def test_bbox_iou_zero_area_box():
+    """A zero-area box produces IoU of 0.0."""
+    assert _bbox_iou((0, 0, 0, 10), (0, 0, 10, 10)) == 0.0
+
+
+def test_bbox_iou_one_inside_other():
+    """A box fully contained in another produces correct IoU."""
+    # Box A: (0,0) to (20,20), area 400
+    # Box B: (5,5) to (15,15), area 100
+    # Intersection: 100
+    # Union: 400 + 100 - 100 = 400
+    assert _bbox_iou((0, 0, 20, 20), (5, 5, 10, 10)) == pytest.approx(100 / 400)
+
+
+def test_bbox_iou_adjacent_boxes():
+    """Touching but non-overlapping boxes produce IoU of 0.0."""
+    assert _bbox_iou((0, 0, 10, 10), (10, 0, 10, 10)) == 0.0
+
+
+# ===========================================================================
+# _find_matching_reference
+# ===========================================================================
+
+
+def _make_face(
+    face_id: int,
+    bbox: tuple[int, int, int, int],
+    state: FaceState = FaceState.IDENTIFIED,
+    cluster_id: int | None = 1,
+    person_id: int | None = 1,
+) -> Face:
+    """Build a detached Face object for unit tests (no DB session needed)."""
+    f = Face(
+        bbox_x=bbox[0],
+        bbox_y=bbox[1],
+        bbox_w=bbox[2],
+        bbox_h=bbox[3],
+        detection_confidence=0.9,
+        model_version="test-v1",
+        state=state,
+        cluster_id=cluster_id,
+        person_id=person_id,
+        image_id=1,
+    )
+    # Set the id directly (normally assigned by DB)
+    f.id = face_id
+    return f
+
+
+def test_find_matching_reference_found():
+    """Matching reference face with sufficient IoU is returned."""
+    ref = _make_face(10, (0, 0, 100, 100))
+    result = IndexingTask._find_matching_reference((5, 5, 100, 100), [ref], set())
+    assert result is ref
+
+
+def test_find_matching_reference_low_iou():
+    """No match when IoU is below threshold."""
+    ref = _make_face(10, (0, 0, 10, 10))
+    result = IndexingTask._find_matching_reference((500, 500, 10, 10), [ref], set())
+    assert result is None
+
+
+def test_find_matching_reference_already_matched_skipped():
+    """Already-matched face is skipped even if IoU is high."""
+    ref = _make_face(10, (0, 0, 100, 100))
+    result = IndexingTask._find_matching_reference((0, 0, 100, 100), [ref], {10})
+    assert result is None
+
+
+def test_find_matching_reference_returns_first_match():
+    """First matching reference is returned when multiple could match."""
+    ref1 = _make_face(10, (0, 0, 100, 100))
+    ref2 = _make_face(20, (5, 5, 100, 100))
+    result = IndexingTask._find_matching_reference(
+        (0, 0, 100, 100), [ref1, ref2], set()
+    )
+    assert result is ref1
+
+
+def test_find_matching_reference_skips_first_returns_second():
+    """When first match is already used, second matching reference is returned."""
+    ref1 = _make_face(10, (0, 0, 100, 100))
+    ref2 = _make_face(20, (0, 0, 100, 100))
+    result = IndexingTask._find_matching_reference((0, 0, 100, 100), [ref1, ref2], {10})
+    assert result is ref2
+
+
+def test_find_matching_reference_empty_list():
+    """Empty reference list returns None."""
+    result = IndexingTask._find_matching_reference((0, 0, 100, 100), [], set())
+    assert result is None
+
+
+# ===========================================================================
+# _cleanup_stale_faces
+# ===========================================================================
+
+
+def _make_cleanup_task(session_factory, vector_store, tmp_app_paths):
+    """Build an IndexingTask for cleanup tests."""
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    task._embedder = MagicMock()
+    return task
+
+
+def _insert_person_with_cluster(session) -> tuple[int, int]:
+    """Insert a Person with one EmbeddingCluster, return (person_id, cluster_id)."""
+    person = Person(name="Test Person")
+    session.add(person)
+    session.flush()
+    cluster = EmbeddingCluster(person_id=person.id, label="adult", age_group="adult")
+    session.add(cluster)
+    session.flush()
+    return person.id, cluster.id
+
+
+def test_cleanup_no_existing_faces(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """No existing faces returns empty list without errors."""
+    task = _make_cleanup_task(session_factory, vector_store, tmp_app_paths)
+    img_file = tmp_path / "clean.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file)
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=100)
+        session.add(img)
+        session.flush()
+
+        result = task._cleanup_stale_faces(img, session)
+        assert result == []
+        session.commit()
+
+
+def test_cleanup_only_unidentified_faces_deleted(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """All unidentified faces are deleted from DB and FAISS."""
+    task = _make_cleanup_task(session_factory, vector_store, tmp_app_paths)
+    img_file = tmp_path / "unid.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file)
+
+    emb = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=100, file_hash="oldhash")
+        session.add(img)
+        session.flush()
+
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.UNIDENTIFIED,
+        )
+        session.add(face)
+        session.flush()
+        face_id = face.id
+
+        # Add to FAISS
+        vector_store.add(face_id, emb)
+        assert vector_store.index.ntotal == 1
+
+        result = task._cleanup_stale_faces(img, session)
+        session.commit()
+
+    assert result == []
+    assert vector_store.index.ntotal == 0
+
+    # Verify face is gone from DB
+    with Session(db_engine) as session:
+        count = session.execute(
+            select(func.count(Face.id)).where(Face.id == face_id)
+        ).scalar_one()
+    assert count == 0
+
+
+def test_cleanup_preserves_identified_faces_with_cluster(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """IDENTIFIED faces with cluster_id are preserved."""
+    task = _make_cleanup_task(session_factory, vector_store, tmp_app_paths)
+    img_file = tmp_path / "ident.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file)
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=100, file_hash="oldhash")
+        session.add(img)
+        session.flush()
+
+        person_id, cluster_id = _insert_person_with_cluster(session)
+
+        identified_face = Face(
+            image_id=img.id,
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.95,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person_id,
+            cluster_id=cluster_id,
+        )
+        unidentified_face = Face(
+            image_id=img.id,
+            bbox_x=200,
+            bbox_y=200,
+            bbox_w=30,
+            bbox_h=30,
+            detection_confidence=0.8,
+            model_version="v1",
+            state=FaceState.UNIDENTIFIED,
+        )
+        session.add_all([identified_face, unidentified_face])
+        session.flush()
+        ident_id = identified_face.id
+        unident_id = unidentified_face.id
+
+        result = task._cleanup_stale_faces(img, session)
+        result_ids = [f.id for f in result]
+        session.commit()
+
+    assert len(result_ids) == 1
+    assert result_ids[0] == ident_id
+
+    with Session(db_engine) as session:
+        # Identified face still exists
+        assert session.get(Face, ident_id) is not None
+        # Unidentified face was deleted
+        assert session.get(Face, unident_id) is None
+
+
+def test_cleanup_identified_without_cluster_is_deleted(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """IDENTIFIED face without cluster_id is treated as disposable."""
+    task = _make_cleanup_task(session_factory, vector_store, tmp_app_paths)
+    img_file = tmp_path / "no_cluster.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file)
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=100, file_hash="oldhash")
+        session.add(img)
+        session.flush()
+
+        person = Person(name="Orphan Person")
+        session.add(person)
+        session.flush()
+
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person.id,
+            cluster_id=None,  # no cluster!
+        )
+        session.add(face)
+        session.flush()
+        face_id = face.id
+
+        result = task._cleanup_stale_faces(img, session)
+        session.commit()
+
+    assert result == []
+
+    with Session(db_engine) as session:
+        assert session.get(Face, face_id) is None
+
+
+def test_cleanup_deletes_face_crop_files(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """Face crop JPEG files are deleted for disposable faces."""
+    task = _make_cleanup_task(session_factory, vector_store, tmp_app_paths)
+    img_file = tmp_path / "crop.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file)
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=100, file_hash="oldhash")
+        session.add(img)
+        session.flush()
+
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.UNIDENTIFIED,
+        )
+        session.add(face)
+        session.flush()
+
+        # Create a fake crop file
+        crop_path = tmp_app_paths.face_crops_dir / f"{face.id}.jpg"
+        crop_path.parent.mkdir(parents=True, exist_ok=True)
+        crop_path.write_bytes(b"fake crop data")
+        assert crop_path.exists()
+
+        task._cleanup_stale_faces(img, session)
+        session.commit()
+
+    assert not crop_path.exists()
+
+
+def test_cleanup_deletes_metadata_and_tags(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """ImageMetadata and ImageTag rows are deleted during cleanup."""
+    task = _make_cleanup_task(session_factory, vector_store, tmp_app_paths)
+    img_file = tmp_path / "meta.jpg"
+    PILImage.new("RGB", (10, 10)).save(img_file)
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=100, file_hash="oldhash")
+        session.add(img)
+        session.flush()
+
+        # A face must exist for cleanup to proceed past the early return
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.UNIDENTIFIED,
+        )
+        meta = ImageMetadata(image_id=img.id, width=10, height=10, orientation=1)
+        tag = ImageTag(
+            image_id=img.id,
+            tag_key="scene",
+            tag_value="outdoor",
+            tag_source=TagSource.MODEL,
+        )
+        session.add_all([face, meta, tag])
+        session.flush()
+
+        task._cleanup_stale_faces(img, session)
+        img_id = img.id
+        session.commit()
+
+    with Session(db_engine) as session:
+        meta_count = session.execute(
+            select(func.count(ImageMetadata.id)).where(ImageMetadata.image_id == img_id)
+        ).scalar_one()
+        tag_count = session.execute(
+            select(func.count(ImageTag.id)).where(ImageTag.image_id == img_id)
+        ).scalar_one()
+
+    assert meta_count == 0
+    assert tag_count == 0
+
+
+# ===========================================================================
+# _index_single_image — IoU-based reference face matching
+# ===========================================================================
+
+
+def test_reindex_updates_matching_reference_face(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """Reindexing updates a reference face matched by IoU."""
+    img_file = tmp_path / "reindex.jpg"
+    PILImage.new("RGB", (100, 100), "red").save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.flush()
+
+        person_id, cluster_id = _insert_person_with_cluster(session)
+
+        old_emb = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+            VectorStore.EMBEDDING_DTYPE
+        )
+        ref_face = Face(
+            image_id=img.id,
+            bbox_x=10,
+            bbox_y=10,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.8,
+            model_version="old-v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person_id,
+            cluster_id=cluster_id,
+        )
+        session.add(ref_face)
+        session.flush()
+        ref_face_id = ref_face.id
+        vector_store.add(ref_face_id, old_emb)
+        session.commit()
+
+    new_emb = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    # Detection bbox overlaps the reference face (IoU > 0.5)
+    mock_embedder.process_image.return_value = [
+        {
+            "bbox": [
+                12,
+                12,
+                58,
+                58,
+            ],  # (12,12,46,46) in xywh — high IoU with (10,10,50,50)
+            "embedding": new_emb,
+            "det_score": 0.95,
+        }
+    ]
+    mock_embedder.extract_face_crop.return_value = PILImage.new(
+        "RGB", (112, 112), "blue"
+    )
+    task._embedder = mock_embedder
+
+    task.run()
+
+    with Session(db_engine) as session:
+        face = session.get(Face, ref_face_id)
+        assert face is not None
+        # State and assignment preserved
+        assert face.state == FaceState.IDENTIFIED
+        assert face.person_id == person_id
+        assert face.cluster_id == cluster_id
+        # Bbox and confidence updated
+        assert face.bbox_x == 12
+        assert face.bbox_y == 12
+        assert face.detection_confidence == 0.95
+        assert face.model_version == "buffalo_l"
+
+        # No new face was created
+        all_faces = (
+            session.execute(select(Face).where(Face.image_id == face.image_id))
+            .scalars()
+            .all()
+        )
+        assert len(all_faces) == 1
+
+
+def test_reindex_creates_new_face_when_no_iou_match(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """Detection far from reference face creates a new UNIDENTIFIED face."""
+    img_file = tmp_path / "reindex_new.jpg"
+    PILImage.new("RGB", (500, 500), "red").save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.flush()
+
+        person_id, cluster_id = _insert_person_with_cluster(session)
+
+        ref_face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=50,
+            bbox_h=50,
+            detection_confidence=0.8,
+            model_version="old-v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person_id,
+            cluster_id=cluster_id,
+        )
+        session.add(ref_face)
+        session.flush()
+        ref_face_id = ref_face.id
+        img_id = img.id
+
+        old_emb = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+            VectorStore.EMBEDDING_DTYPE
+        )
+        vector_store.add(ref_face_id, old_emb)
+        session.commit()
+
+    new_emb = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    # Detection bbox far from reference face — no IoU match
+    mock_embedder.process_image.return_value = [
+        {
+            "bbox": [400, 400, 450, 450],  # far from (0,0,50,50)
+            "embedding": new_emb,
+            "det_score": 0.9,
+        }
+    ]
+    mock_embedder.extract_face_crop.return_value = PILImage.new(
+        "RGB", (112, 112), "green"
+    )
+    task._embedder = mock_embedder
+
+    task.run()
+
+    with Session(db_engine) as session:
+        all_faces = (
+            session.execute(select(Face).where(Face.image_id == img_id)).scalars().all()
+        )
+        # Reference face preserved + one new face created
+        assert len(all_faces) == 2
+
+        new_face = [f for f in all_faces if f.id != ref_face_id]
+        assert len(new_face) == 1
+        assert new_face[0].state == FaceState.UNIDENTIFIED
+        assert new_face[0].person_id is None

@@ -7,12 +7,19 @@ from typing import Optional
 
 import exifread
 from PySide6 import QtCore
-from sqlalchemy import select, func
+from sqlalchemy import delete, select, func
 from sqlalchemy.orm import sessionmaker
 
 from photoaident.core.embeddings import FaceEmbedder
 from photoaident.core.filepath_date import compile_pattern, extract_date_from_path
-from photoaident.db.database import Image, Face, FaceState, ImageMetadata, TakenAtSource
+from photoaident.db.database import (
+    Face,
+    FaceState,
+    Image,
+    ImageMetadata,
+    ImageTag,
+    TakenAtSource,
+)
 from photoaident.db.vector_store import VectorStore
 from photoaident.paths import AppPaths
 from photoaident.utils.image_utils import open_image
@@ -32,6 +39,28 @@ def _dms_to_decimal(values, ref: str) -> float | None:
         return result
     except Exception:
         return None
+
+
+_INTERSECTION_OVER_UNION_THRESHOLD = 0.5
+
+
+def _bbox_iou(
+    box_a: tuple[int, int, int, int], box_b: tuple[int, int, int, int]
+) -> float:
+    """Compute Intersection over Union between two ``(x, y, w, h)`` bounding boxes."""
+    ax1, ay1, aw, ah = box_a
+    bx1, by1, bw, bh = box_b
+    ax2, ay2 = ax1 + aw, ay1 + ah
+    bx2, by2 = bx1 + bw, by1 + bh
+
+    ix1 = max(ax1, bx1)
+    iy1 = max(ay1, by1)
+    ix2 = min(ax2, bx2)
+    iy2 = min(ay2, by2)
+
+    inter = max(0, ix2 - ix1) * max(0, iy2 - iy1)
+    union = aw * ah + bw * bh - inter
+    return inter / union if union > 0 else 0.0
 
 
 class IndexingTask(QtCore.QObject):
@@ -211,6 +240,59 @@ class IndexingTask(QtCore.QObject):
             crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
             crop.save(crop_path, "JPEG", quality=90)
 
+    def _cleanup_stale_faces(self, img: Image, session) -> list[Face]:
+        """Remove non-reference faces from a previously indexed image.
+
+        Reference faces (``IDENTIFIED`` with a cluster assignment) are preserved
+        so that user labeling work survives reindexing.  Everything else —
+        unidentified, anonymous, and cluster-less faces — is hard-deleted from
+        the DB (cascading to suggestions) and the FAISS index.
+
+        Existing ``ImageMetadata`` and ``ImageTag`` rows are also deleted so
+        they can be recreated from a fresh EXIF read.
+
+        Returns:
+            The list of preserved reference faces (may be empty).
+        """
+        existing_faces: list[Face] = list(
+            session.execute(select(Face).where(Face.image_id == img.id)).scalars().all()
+        )
+
+        if not existing_faces:
+            return []
+
+        reference_faces: list[Face] = []
+        for face in existing_faces:
+            if face.state == FaceState.IDENTIFIED and face.cluster_id is not None:
+                logger.info(
+                    "Preserving reference face %d (person %d, cluster %d)",
+                    face.id,
+                    face.person_id,
+                    face.cluster_id,
+                )
+                reference_faces.append(face)
+                continue
+
+            # Remove embedding from FAISS (best-effort; may not exist)
+            try:
+                self.vector_store.remove(face.id)
+            except Exception:
+                pass
+
+            # Delete face crop file
+            crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
+            crop_path.unlink(missing_ok=True)
+
+            # ORM delete cascades to suggestions
+            session.delete(face)
+
+        # Delete stale metadata and tags — they will be recreated
+        session.execute(delete(ImageMetadata).where(ImageMetadata.image_id == img.id))
+        session.execute(delete(ImageTag).where(ImageTag.image_id == img.id))
+        session.flush()
+
+        return reference_faces
+
     def _index_single_image(
         self,
         img: Image,
@@ -224,30 +306,64 @@ class IndexingTask(QtCore.QObject):
             session.commit()
             return 0
 
+        # Clean up stale faces from a previous (possibly failed) indexing run
+        reference_faces = self._cleanup_stale_faces(img, session)
+
         img.file_hash = self._calculate_hash(path)
 
         faces_info = embedder.process_image(path)
-        new_faces = []
+        new_faces: list[tuple[Face, list]] = []
         added_face_ids: list[int] = []
+        matched_ref_ids: set[int] = set()
+
         try:
             with session.begin_nested():
                 for info in faces_info:
                     bbox = info["bbox"]
-                    face = Face(
-                        image_id=img.id,
-                        bbox_x=bbox[0],
-                        bbox_y=bbox[1],
-                        bbox_w=bbox[2] - bbox[0],
-                        bbox_h=bbox[3] - bbox[1],
-                        detection_confidence=info["det_score"],
-                        state=FaceState.UNIDENTIFIED,
-                        model_version="buffalo_l",
+                    det_bbox = (
+                        bbox[0],
+                        bbox[1],
+                        bbox[2] - bbox[0],
+                        bbox[3] - bbox[1],
                     )
-                    session.add(face)
-                    session.flush()
-                    self.vector_store.add(face.id, info["embedding"])
-                    added_face_ids.append(face.id)
-                    new_faces.append((face, bbox))
+
+                    # Try to match against a preserved reference face
+                    matched_ref = self._find_matching_reference(
+                        det_bbox, reference_faces, matched_ref_ids
+                    )
+
+                    if matched_ref is not None:
+                        # Update the reference face with the new embedding
+                        matched_ref_ids.add(matched_ref.id)
+                        try:
+                            self.vector_store.remove(matched_ref.id)
+                        except Exception:
+                            pass
+                        self.vector_store.add(matched_ref.id, info["embedding"])
+                        added_face_ids.append(matched_ref.id)
+                        matched_ref.bbox_x = det_bbox[0]
+                        matched_ref.bbox_y = det_bbox[1]
+                        matched_ref.bbox_w = det_bbox[2]
+                        matched_ref.bbox_h = det_bbox[3]
+                        matched_ref.detection_confidence = info["det_score"]
+                        matched_ref.model_version = "buffalo_l"
+                        new_faces.append((matched_ref, bbox))
+                    else:
+                        face = Face(
+                            image_id=img.id,
+                            bbox_x=det_bbox[0],
+                            bbox_y=det_bbox[1],
+                            bbox_w=det_bbox[2],
+                            bbox_h=det_bbox[3],
+                            detection_confidence=info["det_score"],
+                            state=FaceState.UNIDENTIFIED,
+                            model_version="buffalo_l",
+                        )
+                        session.add(face)
+                        session.flush()
+                        self.vector_store.add(face.id, info["embedding"])
+                        added_face_ids.append(face.id)
+                        new_faces.append((face, bbox))
         except Exception:
             # Savepoint rolled back all DB face rows; remove any partially-added
             # FAISS vectors to keep DB and index in sync.
@@ -275,6 +391,21 @@ class IndexingTask(QtCore.QObject):
         self._save_face_crops(new_faces, embedder, path)
 
         return len(faces_info)
+
+    @staticmethod
+    def _find_matching_reference(
+        det_bbox: tuple[int, int, int, int],
+        reference_faces: list[Face],
+        already_matched: set[int],
+    ) -> Face | None:
+        """Return first reference face overlapping *det_bbox* by IoU >= threshold."""
+        for ref in reference_faces:
+            if ref.id in already_matched:
+                continue
+            ref_bbox = (ref.bbox_x, ref.bbox_y, ref.bbox_w, ref.bbox_h)
+            if _bbox_iou(det_bbox, ref_bbox) >= _INTERSECTION_OVER_UNION_THRESHOLD:
+                return ref
+        return None
 
     def run(self):
         """Index images that haven't been indexed yet."""
