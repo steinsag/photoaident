@@ -22,4 +22,6 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     # Data-only migration; cannot recover the original ERROR markers.
-    pass
+    raise RuntimeError(
+        "Irreversible migration: cannot restore prior 'ERROR' file_hash markers."
+    )
