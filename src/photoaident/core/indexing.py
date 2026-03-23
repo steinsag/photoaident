@@ -279,7 +279,7 @@ class IndexingTask(QtCore.QObject):
         for face in existing_faces:
             if face.state == FaceState.IDENTIFIED and face.cluster_id is not None:
                 logger.info(
-                    "Preserving reference face %d (person %d, cluster %d)",
+                    "Preserving reference face %d (person %s, cluster %s)",
                     face.id,
                     face.person_id,
                     face.cluster_id,
