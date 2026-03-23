@@ -228,28 +228,49 @@ class IndexingTask(QtCore.QObject):
 
         faces_info = embedder.process_image(path)
         new_faces = []
-        for info in faces_info:
-            faiss_id = self.vector_store.add(info["embedding"])
-            bbox = info["bbox"]
-            face = Face(
-                image_id=img.id,
-                faiss_id=faiss_id,
-                bbox_x=bbox[0],
-                bbox_y=bbox[1],
-                bbox_w=bbox[2] - bbox[0],
-                bbox_h=bbox[3] - bbox[1],
-                detection_confidence=info["det_score"],
-                state=FaceState.UNIDENTIFIED,
-                model_version="buffalo_l",
-            )
-            session.add(face)
-            new_faces.append((face, bbox))
+        added_face_ids: list[int] = []
+        try:
+            with session.begin_nested():
+                for info in faces_info:
+                    bbox = info["bbox"]
+                    face = Face(
+                        image_id=img.id,
+                        bbox_x=bbox[0],
+                        bbox_y=bbox[1],
+                        bbox_w=bbox[2] - bbox[0],
+                        bbox_h=bbox[3] - bbox[1],
+                        detection_confidence=info["det_score"],
+                        state=FaceState.UNIDENTIFIED,
+                        model_version="buffalo_l",
+                    )
+                    session.add(face)
+                    session.flush()
+                    self.vector_store.add(face.id, info["embedding"])
+                    added_face_ids.append(face.id)
+                    new_faces.append((face, bbox))
+        except Exception:
+            # Savepoint rolled back all DB face rows; remove any partially-added
+            # FAISS vectors to keep DB and index in sync.
+            for face_id in added_face_ids:
+                self.vector_store.remove(face_id)
+            raise
 
-        self._extract_exif_metadata(path, img.id, session)
+        try:
+            self._extract_exif_metadata(path, img.id, session)
 
-        # Persist FAISS first to minimise DB→FAISS mismatch risk
-        self.vector_store.save(self.paths.faiss_path)
-        session.commit()
+            # Persist FAISS first to minimise DB→FAISS mismatch risk
+            self.vector_store.save(self.paths.faiss_path)
+            session.commit()
+        except Exception:
+            # Downstream failure after the savepoint succeeded: the Face rows
+            # are still pending in the session.  Roll back the entire
+            # transaction so they are not accidentally committed by the
+            # caller's error handler, and remove the vectors from the
+            # in-memory FAISS index to stay consistent.
+            session.rollback()
+            for face_id in added_face_ids:
+                self.vector_store.remove(face_id)
+            raise
 
         self._save_face_crops(new_faces, embedder, path)
 

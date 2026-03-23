@@ -53,7 +53,6 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
         cluster_id = c.id
 
     emb = _unit_emb(0)
-    faiss_id = vector_store.add(emb)
 
     with session_factory() as session:
         img = Image(file_path=file_path, file_size=100, file_hash=file_path.strip("/"))
@@ -61,7 +60,6 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=50,
@@ -73,6 +71,8 @@ def _add_person_with_face(session_factory, vector_store, name, file_path):
             model_version="test",
         )
         session.add(face)
+        session.flush()
+        vector_store.add(face.id, emb)
         session.commit()
         image_id = img.id
     recompute_cluster_mean(cluster_id, session_factory, vector_store)

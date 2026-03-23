@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from PIL import Image as PILImage
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from photoaident.core.indexing import IndexingTask, _dms_to_decimal
@@ -135,8 +135,6 @@ def test_indexing_task_success(
         assert face.bbox_y == 10
         assert face.bbox_w == 50
         assert face.bbox_h == 50
-        assert face.faiss_id == 0
-
     # Verify FAISS
     assert vector_store.index.ntotal == 1
 
@@ -610,3 +608,106 @@ def test_indexing_task_invalid_filepath_date_pattern_does_not_raise(
         filepath_date_pattern="no-placeholders-here",
     )
     assert task._compiled_pattern is None
+
+
+def test_faiss_add_failure_leaves_no_orphaned_faces(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """If vector_store.add() raises, no Face rows are committed and FAISS stays empty.
+
+    Regression test for the DB↔FAISS divergence bug where session.flush() before
+    vector_store.add() could leave flushed Face rows committed without a corresponding
+    FAISS vector when the exception was caught in run() and session.commit() executed.
+    """
+    img_file = tmp_path / "faiss_fail.jpg"
+    PILImage.new("RGB", (50, 50)).save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = [
+        {
+            "bbox": [0, 0, 10, 10],
+            "embedding": _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+                VectorStore.EMBEDDING_DTYPE
+            ),
+            "det_score": 0.9,
+        }
+    ]
+    task._embedder = mock_embedder
+
+    with patch.object(vector_store, "add", side_effect=RuntimeError("faiss boom")):
+        task.run()
+
+    from photoaident.db.database import Face as FaceModel
+
+    # Image should be marked ERROR (exception handled inside run())
+    with Session(db_engine) as session:
+        img = session.get(Image, img_id)
+        assert img is not None
+        assert img.file_hash == "ERROR"
+        face_count = session.execute(
+            select(func.count(FaceModel.id)).where(FaceModel.image_id == img_id)
+        ).scalar_one()
+
+    assert face_count == 0, "No Face rows should be committed when FAISS add fails"
+    assert vector_store.index.ntotal == 0, "FAISS index must remain empty"
+
+
+def test_faiss_save_failure_rolls_back_faces_and_vectors(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """If vector_store.save() fails after faces were added, both DB rows and
+    in-memory FAISS vectors are cleaned up so no divergence remains.
+
+    Regression test: previously the exception propagated to run() which did
+    session.commit() with file_hash=ERROR, accidentally committing the Face
+    rows while FAISS on disk stayed stale.
+    """
+    img_file = tmp_path / "save_fail.jpg"
+    PILImage.new("RGB", (50, 50)).save(img_file, "JPEG")
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        img_id = img.id
+
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    embedding = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+    mock_embedder.process_image.return_value = [
+        {
+            "bbox": [0, 0, 10, 10],
+            "embedding": embedding,
+            "det_score": 0.9,
+        }
+    ]
+    task._embedder = mock_embedder
+
+    # First save() call (inside _index_single_image) fails; second call (end of
+    # run()) succeeds — use side_effect list to model this.
+    with patch.object(vector_store, "save", side_effect=[OSError("disk full"), None]):
+        task.run()
+
+    from photoaident.db.database import Face as FaceModel
+
+    with Session(db_engine) as session:
+        img = session.get(Image, img_id)
+        assert img is not None
+        assert img.file_hash == "ERROR"
+        face_count = session.execute(
+            select(func.count(FaceModel.id)).where(FaceModel.image_id == img_id)
+        ).scalar_one()
+
+    assert face_count == 0, "Face rows must be rolled back when FAISS save fails"
+    assert (
+        vector_store.index.ntotal == 0
+    ), "FAISS vectors must be removed on save failure"

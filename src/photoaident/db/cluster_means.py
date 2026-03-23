@@ -65,9 +65,9 @@ def recompute_cluster_mean(
     no valid faces.
     """
     with session_factory() as session:
-        faiss_ids = list(
+        face_ids = list(
             session.scalars(
-                select(Face.faiss_id).where(
+                select(Face.id).where(
                     Face.cluster_id == cluster_id,
                     Face.state == FaceState.IDENTIFIED,
                     Face.deleted_at.is_(None),
@@ -76,11 +76,11 @@ def recompute_cluster_mean(
         )
 
     mean_blob: bytes | None = None
-    if faiss_ids:
+    if face_ids:
         embeddings: list[np.ndarray] = []
-        for faiss_id in faiss_ids:
+        for face_id in face_ids:
             try:
-                embeddings.append(vector_store.get_embedding(faiss_id))
+                embeddings.append(vector_store.get_embedding(face_id))
             except IndexError:
                 continue
 

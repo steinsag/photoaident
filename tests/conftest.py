@@ -109,7 +109,6 @@ def sample_image_with_metadata(tmp_path):
             bbox_h=50,
             detection_confidence=0.9,
             model_version="v1",
-            faiss_id=0,
             state=FaceState.UNIDENTIFIED,
         )
     ]

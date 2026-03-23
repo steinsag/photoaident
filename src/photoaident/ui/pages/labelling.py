@@ -42,7 +42,6 @@ class FaceData:
     crop_path: Optional[Path]
     image_path: Path
     bbox: tuple[int, int, int, int]
-    faiss_id: int
     taken_at: Optional[datetime]
 
 
@@ -212,12 +211,11 @@ class LabellingPage(QtWidgets.QWidget):
         # Fetch embedding for similarity scoring
         self._query_embedding = None
         try:
-            self._query_embedding = self.vector_store.get_embedding(face_data.faiss_id)
+            self._query_embedding = self.vector_store.get_embedding(face_data.face_id)
         except Exception:
             logger.warning(
-                "Failed to retrieve embedding for face %s (faiss_id=%s)",
+                "Failed to retrieve embedding for face %s",
                 face_data.face_id,
-                face_data.faiss_id,
                 exc_info=True,
             )
 
@@ -301,7 +299,6 @@ class LabellingPage(QtWidgets.QWidget):
             crop_path=self.paths.face_crops_dir / f"{face_id}.jpg",
             image_path=Path(face.image.file_path),
             bbox=(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h),
-            faiss_id=face.faiss_id,
             taken_at=metadata.taken_at if metadata is not None else None,
         )
 

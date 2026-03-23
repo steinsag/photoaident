@@ -35,15 +35,15 @@ def _compute_cluster_mean(
     return deserialize_embedding(blob)
 
 
-def _accumulate_faiss_scores(
+def _accumulate_face_scores(
     cluster_ids: list[int],
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     limit: int,
     threshold: float,
 ) -> dict[int, float]:
-    """Per cluster: compute mean embedding → FAISS search → keep best score."""
-    faiss_scores: dict[int, float] = {}
+    """Query FAISS for each cluster mean; return the best score per face ID."""
+    face_scores: dict[int, float] = {}
     for cluster_id in cluster_ids:
         mean_emb = _compute_cluster_mean(cluster_id, session_factory)
         if mean_emb is None:
@@ -51,33 +51,33 @@ def _accumulate_faiss_scores(
         for fid, score in vector_store.search(
             mean_emb, k=limit * 3, threshold=threshold
         ):
-            if fid not in faiss_scores or score > faiss_scores[fid]:
-                faiss_scores[fid] = score
-    return faiss_scores
+            if fid not in face_scores or score > face_scores[fid]:
+                face_scores[fid] = score
+    return face_scores
 
 
-def _faiss_to_image_scores(
-    faiss_scores: dict[int, float],
+def _face_ids_to_image_scores(
+    face_scores: dict[int, float],
     session_factory: "sessionmaker",
 ) -> dict[int, float]:
-    """Resolve faiss_id → image_id and deduplicate keeping the highest score."""
-    all_faiss_ids = list(faiss_scores.keys())
+    """Resolve face_id → image_id and deduplicate keeping the highest score."""
+    all_face_ids = list(face_scores.keys())
     rows: list = []
     with session_factory() as session:
-        for chunk_start in range(0, len(all_faiss_ids), _SQLITE_IN_LIMIT):
-            chunk = all_faiss_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
+        for chunk_start in range(0, len(all_face_ids), _SQLITE_IN_LIMIT):
+            chunk = all_face_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
             rows.extend(
                 session.execute(
-                    select(Face.faiss_id, Face.image_id).where(
-                        Face.faiss_id.in_(chunk),
+                    select(Face.id, Face.image_id).where(
+                        Face.id.in_(chunk),
                         Face.deleted_at.is_(None),
                     )
                 ).all()
             )
 
     image_scores: dict[int, float] = {}
-    for row_faiss_id, row_image_id in rows:
-        score = faiss_scores[row_faiss_id]
+    for row_face_id, row_image_id in rows:
+        score = face_scores[row_face_id]
         if row_image_id not in image_scores or score > image_scores[row_image_id]:
             image_scores[row_image_id] = score
     return image_scores
@@ -119,14 +119,14 @@ def _find_images_by_person(
     if not cluster_ids:
         return []
 
-    faiss_scores = _accumulate_faiss_scores(
+    face_scores = _accumulate_face_scores(
         cluster_ids, session_factory, vector_store, limit, threshold
     )
 
-    if not faiss_scores:
+    if not face_scores:
         return []
 
-    image_scores = _faiss_to_image_scores(faiss_scores, session_factory)
+    image_scores = _face_ids_to_image_scores(face_scores, session_factory)
 
     sorted_pairs = sorted(image_scores.items(), key=lambda x: x[1], reverse=True)
     return sorted_pairs[:limit]
@@ -205,7 +205,7 @@ def _load_person_cluster_means(
 
 
 def resolve_faces_to_persons(
-    faiss_ids: list[int],
+    face_ids: list[int],
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     threshold: float = FACE_MATCH_THRESHOLD,
@@ -221,22 +221,22 @@ def resolve_faces_to_persons(
     calls instead of O(N × M) Python iterations.
 
     Args:
-        faiss_ids: FAISS index IDs of the faces to resolve.
+        face_ids: Database Face.id values of the faces to resolve.
         session_factory: SQLAlchemy session factory.
         vector_store: FAISS vector store.
         threshold: Minimum similarity score to consider a match
             (default: ``FACE_MATCH_THRESHOLD``).
 
     Returns:
-        A dict mapping each *faiss_id* to ``(person_name, score)`` or ``None``.
+        A dict mapping each *face_id* to ``(person_name, score)`` or ``None``.
     """
-    if not faiss_ids:
+    if not face_ids:
         return {}
 
     person_names, person_means = _load_person_cluster_means(session_factory)
 
     if not person_names or not person_means:
-        return dict.fromkeys(faiss_ids)
+        return dict.fromkeys(face_ids)
 
     # Validate that the vector store's embedding dimension matches the
     # persisted cluster means' dimension so that emb_matrix @ means_matrix.T
@@ -257,7 +257,7 @@ def resolve_faces_to_persons(
     valid_fids: list[int] = []
     embeddings: list[np.ndarray] = []
 
-    for fid in faiss_ids:
+    for fid in face_ids:
         try:
             embeddings.append(vector_store.get_embedding(fid))
             valid_fids.append(fid)

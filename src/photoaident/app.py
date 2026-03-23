@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.db.cluster_means import backfill_cluster_means
+from photoaident.db.faiss_migration import rebuild_faiss_with_face_ids
 from photoaident.core.gpu_checker import GpuChecker
 from photoaident.core.indexing_controller import IndexingController
 from photoaident.db.database import (
@@ -80,6 +81,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._vector_store = VectorStore()
         if self._paths.faiss_path.exists():
             self._vector_store.load(self._paths.faiss_path)
+            if self._vector_store.needs_migration():
+                logger.warning("Migrating FAISS index to database-driven IDs...")
+                self._vector_store = rebuild_faiss_with_face_ids(
+                    self._vector_store,
+                    self._session_factory,
+                )
+                self._vector_store.save(self._paths.faiss_path)
+                logger.warning("FAISS index migration finished.")
+            else:
+                logger.warning("FAISS index already migrated, no migration needed.")
             backfill_cluster_means(self._session_factory, self._vector_store)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))

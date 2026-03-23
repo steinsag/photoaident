@@ -21,16 +21,13 @@ def test_vector_store_add_search(vector_store):
     v2 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
     v2 /= np.linalg.norm(v2)
 
-    id1 = vector_store.add(v1)
-    id2 = vector_store.add(v2)
-
-    assert id1 == 0
-    assert id2 == 1
+    vector_store.add(1, v1)
+    vector_store.add(2, v2)
 
     # Search for v1
     results = vector_store.search(v1, k=5)
     assert len(results) == 2
-    assert results[0][0] == id1
+    assert results[0][0] == 1
     assert results[0][1] == pytest.approx(1.0, abs=1e-5)
 
 
@@ -41,21 +38,21 @@ def test_vector_store_threshold(vector_store):
     v2 = np.zeros(VectorStore.DEFAULT_DIMENSION, dtype=VectorStore.EMBEDDING_DTYPE)
     v2[1] = 1.0
 
-    vector_store.add(v1)
-    vector_store.add(v2)
+    vector_store.add(1, v1)
+    vector_store.add(2, v2)
 
     # Search with v1, threshold 0.5
     results = vector_store.search(v1, k=5, threshold=0.5)
     assert len(results) == 1
-    assert results[0][0] == 0
+    assert results[0][0] == 1
 
 
 def test_vector_store_get_embedding(vector_store):
     v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
     v1 /= np.linalg.norm(v1)
 
-    faiss_id = vector_store.add(v1)
-    retrieved = vector_store.get_embedding(faiss_id)
+    vector_store.add(10, v1)
+    retrieved = vector_store.get_embedding(10)
 
     assert np.allclose(v1, retrieved, atol=1e-5)
 
@@ -63,7 +60,7 @@ def test_vector_store_get_embedding(vector_store):
 def test_vector_store_save_load(vector_store, tmp_path):
     v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
     v1 /= np.linalg.norm(v1)
-    vector_store.add(v1)
+    vector_store.add(1, v1)
 
     index_path = tmp_path / "test.index"
     vector_store.save(index_path)
@@ -72,7 +69,7 @@ def test_vector_store_save_load(vector_store, tmp_path):
     new_store.load(index_path)
 
     assert new_store.index.ntotal == 1
-    retrieved = new_store.get_embedding(0)
+    retrieved = new_store.get_embedding(1)
     assert np.allclose(v1, retrieved, atol=1e-5)
 
 
@@ -87,10 +84,10 @@ def test_vector_store_invalid_id(vector_store):
         vector_store.get_embedding(0)
 
     v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
-    vector_store.add(v1)
+    vector_store.add(1, v1)
 
     with pytest.raises(IndexError):
-        vector_store.get_embedding(1)
+        vector_store.get_embedding(999)
 
 
 def test_vector_store_invalid_dimension(vector_store):
@@ -98,7 +95,7 @@ def test_vector_store_invalid_dimension(vector_store):
     with pytest.raises(
         ValueError, match=f"must be {VectorStore.DEFAULT_DIMENSION}-dimensional"
     ):
-        vector_store.add(v_invalid)
+        vector_store.add(1, v_invalid)
 
 
 def test_vector_store_search_invalid_dimension(vector_store):
@@ -111,7 +108,7 @@ def test_vector_store_search_invalid_dimension(vector_store):
 
 def test_vector_store_search_k0(vector_store):
     v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
-    vector_store.add(v1)
+    vector_store.add(1, v1)
     results = vector_store.search(v1, k=0)
     assert results == []
 
@@ -188,6 +185,147 @@ class _InstrumentedLock:
         self._real.release()
 
 
+# ===========================================================================
+# remove
+# ===========================================================================
+
+
+def test_remove_deletes_embedding(vector_store):
+    """Remove an added embedding so search no longer finds it."""
+    v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    v1 /= np.linalg.norm(v1)
+
+    vector_store.add(10, v1)
+    assert vector_store.index.ntotal == 1
+
+    vector_store.remove(10)
+    assert vector_store.index.ntotal == 0
+
+    results = vector_store.search(v1, k=5)
+    assert results == []
+
+
+def test_remove_only_target_embedding(vector_store):
+    """Remove one embedding while leaving others intact."""
+    v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    v1 /= np.linalg.norm(v1)
+    v2 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    v2 /= np.linalg.norm(v2)
+
+    vector_store.add(1, v1)
+    vector_store.add(2, v2)
+
+    vector_store.remove(1)
+
+    assert vector_store.index.ntotal == 1
+    # v2 still retrievable
+    retrieved = vector_store.get_embedding(2)
+    assert np.allclose(v2, retrieved, atol=1e-5)
+    # v1 gone
+    with pytest.raises(IndexError):
+        vector_store.get_embedding(1)
+
+
+def test_remove_nonexistent_id_is_noop(vector_store):
+    """Removing an ID not in the index does not raise."""
+    v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    v1 /= np.linalg.norm(v1)
+    vector_store.add(1, v1)
+
+    # Should not raise
+    vector_store.remove(999)
+    assert vector_store.index.ntotal == 1
+
+
+# ===========================================================================
+# needs_migration
+# ===========================================================================
+
+
+def test_needs_migration_false_for_fresh_store(vector_store):
+    """A freshly created VectorStore does not need migration."""
+    assert vector_store.needs_migration() is False
+
+
+def test_needs_migration_true_for_bare_index():
+    """A store with a bare IndexFlatIP (old format) needs migration."""
+    store = VectorStore()
+    store.index = faiss.IndexFlatIP(VectorStore.DEFAULT_DIMENSION)
+    assert store.needs_migration() is True
+
+
+def test_needs_migration_false_after_save_load(vector_store, tmp_path):
+    """An IndexIDMap2 store round-tripped through save/load still reports False."""
+    v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    v1 /= np.linalg.norm(v1)
+    vector_store.add(1, v1)
+
+    path = tmp_path / "test.index"
+    vector_store.save(path)
+
+    loaded = VectorStore()
+    loaded.load(path)
+    assert loaded.needs_migration() is False
+
+
+def test_needs_migration_true_for_loaded_old_format(tmp_path):
+    """A bare IndexFlatIP saved to disk and loaded back reports True."""
+    raw = faiss.IndexFlatIP(VectorStore.DEFAULT_DIMENSION)
+    path = tmp_path / "old.index"
+    faiss.write_index(raw, str(path))
+
+    store = VectorStore()
+    store.load(path)
+    assert store.needs_migration() is True
+
+
+# ===========================================================================
+# add/remove guards for unmigrated index
+# ===========================================================================
+
+
+def _make_unmigrated_store() -> VectorStore:
+    """Return a VectorStore whose index is a bare IndexFlatIP (old format)."""
+    store = VectorStore()
+    store.index = faiss.IndexFlatIP(VectorStore.DEFAULT_DIMENSION)
+    return store
+
+
+def test_add_raises_on_unmigrated_index():
+    """add() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    v = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.add(1, v)
+
+
+def test_remove_raises_on_unmigrated_index():
+    """remove() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.remove(1)
+
+
+def test_search_raises_on_unmigrated_index():
+    """search() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    v = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.search(v, k=5)
+
+
+def test_get_embedding_raises_on_unmigrated_index():
+    """get_embedding() raises RuntimeError when the index is not an IndexIDMap2."""
+    store = _make_unmigrated_store()
+    with pytest.raises(RuntimeError, match="must be migrated"):
+        store.get_embedding(1)
+
+
+# ===========================================================================
+# concurrent access
+# ===========================================================================
+
+
 def test_concurrent_access_is_serialized(tmp_path):
     """Multiple threads calling VectorStore methods are serialized by the lock."""
     store = VectorStore()
@@ -200,7 +338,7 @@ def test_concurrent_access_is_serialized(tmp_path):
     embedding /= np.linalg.norm(embedding)
 
     # Seed one vector so search/get_embedding have something to hit
-    store.add(embedding)
+    store.add(1, embedding)
 
     index_path = tmp_path / "concurrent.index"
     store.save(index_path)
@@ -222,9 +360,9 @@ def test_concurrent_access_is_serialized(tmp_path):
                 errors.append(f"{label}: {exc}")
 
     pairs = [
-        (lambda: store.add(embedding), "add"),
+        (lambda: store.add(2, embedding), "add"),
         (lambda: store.search(embedding, k=1), "search"),
-        (lambda: store.get_embedding(0), "get_embedding"),
+        (lambda: store.get_embedding(1), "get_embedding"),
         (lambda: store.save(index_path), "save"),
         (lambda: store.load(index_path), "load"),
     ]

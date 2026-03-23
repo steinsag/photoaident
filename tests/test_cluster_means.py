@@ -102,7 +102,6 @@ def test_recompute_with_no_faces(cluster_db, vs):
 def test_recompute_with_one_face(cluster_db, vs):
     """Single face → mean equals that face's normalized embedding."""
     emb = _unit_emb(0)
-    faiss_id = vs.add(emb)
 
     with cluster_db() as session:
         person = Person(name="Solo")
@@ -119,7 +118,6 @@ def test_recompute_with_one_face(cluster_db, vs):
         session.flush()
         face = Face(
             image_id=img.id,
-            faiss_id=faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=10,
@@ -131,6 +129,8 @@ def test_recompute_with_one_face(cluster_db, vs):
             cluster_id=cluster_id,
         )
         session.add(face)
+        session.flush()
+        vs.add(face.id, emb)
         session.commit()
 
     recompute_cluster_mean(cluster_id, cluster_db, vs)
@@ -149,8 +149,6 @@ def test_recompute_with_multiple_faces(cluster_db, vs):
     """Two faces → mean is the normalized average."""
     emb1 = _unit_emb(0)
     emb2 = _unit_emb(1)
-    fid1 = vs.add(emb1)
-    fid2 = vs.add(emb2)
 
     with cluster_db() as session:
         person = Person(name="Multi")
@@ -162,25 +160,25 @@ def test_recompute_with_multiple_faces(cluster_db, vs):
         session.add(cluster)
         session.flush()
         cluster_id = cluster.id
-        for fid in [fid1, fid2]:
-            img = Image(file_path=f"/multi_{fid}.jpg", file_size=100)
+        for emb in [emb1, emb2]:
+            img = Image(file_path=f"/multi_{id(emb)}.jpg", file_size=100)
             session.add(img)
             session.flush()
-            session.add(
-                Face(
-                    image_id=img.id,
-                    faiss_id=fid,
-                    bbox_x=0,
-                    bbox_y=0,
-                    bbox_w=10,
-                    bbox_h=10,
-                    detection_confidence=0.9,
-                    model_version="v1",
-                    state=FaceState.IDENTIFIED,
-                    person_id=person.id,
-                    cluster_id=cluster_id,
-                )
+            face = Face(
+                image_id=img.id,
+                bbox_x=0,
+                bbox_y=0,
+                bbox_w=10,
+                bbox_h=10,
+                detection_confidence=0.9,
+                model_version="v1",
+                state=FaceState.IDENTIFIED,
+                person_id=person.id,
+                cluster_id=cluster_id,
             )
+            session.add(face)
+            session.flush()
+            vs.add(face.id, emb)
         session.commit()
 
     recompute_cluster_mean(cluster_id, cluster_db, vs)
@@ -198,8 +196,8 @@ def test_recompute_with_multiple_faces(cluster_db, vs):
         np.testing.assert_allclose(mean, expected, atol=1e-6)
 
 
-def test_recompute_stale_faiss_id_skipped(cluster_db, vs):
-    """Face with faiss_id not in VectorStore is skipped gracefully."""
+def test_recompute_stale_face_id_skipped(cluster_db, vs):
+    """Face whose id is not in VectorStore is skipped gracefully."""
     with cluster_db() as session:
         person = Person(name="Stale")
         session.add(person)
@@ -213,10 +211,10 @@ def test_recompute_stale_faiss_id_skipped(cluster_db, vs):
         img = Image(file_path="/stale.jpg", file_size=100)
         session.add(img)
         session.flush()
+        # Face is added to DB but NOT to vector store
         session.add(
             Face(
                 image_id=img.id,
-                faiss_id=999,  # not in vector store
                 bbox_x=0,
                 bbox_y=0,
                 bbox_w=10,
@@ -248,7 +246,6 @@ def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
     # A zero vector has norm 0; adding it to FAISS and computing the mean
     # yields a zero vector whose norm is below the 1e-9 threshold.
     emb = _zero_emb()
-    faiss_id = vs.add(emb)
 
     with cluster_db() as session:
         person = Person(name="ZeroNorm")
@@ -263,21 +260,21 @@ def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
         img = Image(file_path="/zero.jpg", file_size=100)
         session.add(img)
         session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=10,
-                bbox_h=10,
-                detection_confidence=0.9,
-                model_version="v1",
-                state=FaceState.IDENTIFIED,
-                person_id=person.id,
-                cluster_id=cluster_id,
-            )
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person.id,
+            cluster_id=cluster_id,
         )
+        session.add(face)
+        session.flush()
+        vs.add(face.id, emb)
         session.commit()
 
     recompute_cluster_mean(cluster_id, cluster_db, vs)
@@ -294,7 +291,6 @@ def test_recompute_near_zero_norm_persists_null(cluster_db, vs):
 def test_backfill_populates_null_means(cluster_db, vs):
     """backfill fills clusters that have NULL mean_embedding."""
     emb = _unit_emb(0)
-    faiss_id = vs.add(emb)
 
     with cluster_db() as session:
         person = Person(name="Backfill")
@@ -309,21 +305,21 @@ def test_backfill_populates_null_means(cluster_db, vs):
         img = Image(file_path="/backfill.jpg", file_size=100)
         session.add(img)
         session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=10,
-                bbox_h=10,
-                detection_confidence=0.9,
-                model_version="v1",
-                state=FaceState.IDENTIFIED,
-                person_id=person.id,
-                cluster_id=cluster_id,
-            )
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person.id,
+            cluster_id=cluster_id,
         )
+        session.add(face)
+        session.flush()
+        vs.add(face.id, emb)
         session.commit()
 
     count = backfill_cluster_means(cluster_db, vs)
@@ -338,7 +334,6 @@ def test_backfill_populates_null_means(cluster_db, vs):
 def test_backfill_skips_already_computed(cluster_db, vs):
     """backfill clusters that already have a mean."""
     emb = _unit_emb(0)
-    faiss_id = vs.add(emb)
 
     with cluster_db() as session:
         person = Person(name="Already")
@@ -355,21 +350,21 @@ def test_backfill_skips_already_computed(cluster_db, vs):
         img = Image(file_path="/already.jpg", file_size=100)
         session.add(img)
         session.flush()
-        session.add(
-            Face(
-                image_id=img.id,
-                faiss_id=faiss_id,
-                bbox_x=0,
-                bbox_y=0,
-                bbox_w=10,
-                bbox_h=10,
-                detection_confidence=0.9,
-                model_version="v1",
-                state=FaceState.IDENTIFIED,
-                person_id=person.id,
-                cluster_id=cluster.id,
-            )
+        face = Face(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            model_version="v1",
+            state=FaceState.IDENTIFIED,
+            person_id=person.id,
+            cluster_id=cluster.id,
         )
+        session.add(face)
+        session.flush()
+        vs.add(face.id, emb)
         session.commit()
 
     count = backfill_cluster_means(cluster_db, vs)

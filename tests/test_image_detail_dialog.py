@@ -244,7 +244,6 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
             bbox_h=50,
             detection_confidence=0.9,
             model_version="v1",
-            faiss_id=1,
             state=FaceState.IDENTIFIED,
         )
     ]
@@ -278,7 +277,6 @@ def test_label_faces_button_emits_signal(
             bbox_h=50,
             detection_confidence=0.9,
             model_version="v1",
-            faiss_id=2,
             state=FaceState.UNIDENTIFIED,
         )
     ]
@@ -375,7 +373,6 @@ def test_show_in_file_manager_button_always_enabled(
             bbox_h=50,
             detection_confidence=0.95,
             model_version="v1",
-            faiss_id=3,
             state=FaceState.IDENTIFIED,
         )
     ]
@@ -415,7 +412,6 @@ def test_face_tooltip_identified_shows_person_name(
         bbox_h=50,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=0,
         state=FaceState.IDENTIFIED,
     )
     face.person = person
@@ -450,7 +446,6 @@ def test_face_tooltip_anonymous_shows_anonymous(
         bbox_h=50,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=0,
         state=FaceState.ANONYMOUS,
     )
 
@@ -486,7 +481,6 @@ def test_face_tooltip_unidentified_no_vector_match(
         bbox_h=50,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=0,
         state=FaceState.UNIDENTIFIED,
     )
 
@@ -520,7 +514,6 @@ def test_face_tooltip_deleted_face_excluded(
         bbox_h=50,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=0,
         state=FaceState.UNIDENTIFIED,
     )
     deleted_face = Face(
@@ -530,7 +523,6 @@ def test_face_tooltip_deleted_face_excluded(
         bbox_h=50,
         detection_confidence=0.8,
         model_version="v1",
-        faiss_id=1,
         state=FaceState.UNIDENTIFIED,
         deleted_at=datetime(2024, 1, 1),
     )
@@ -727,13 +719,13 @@ def test_face_tooltip_unidentified_with_vector_store_match(
     PILImage.new("RGB", (200, 200), "white").save(img_path)
 
     face = Face(
+        id=5,
         bbox_x=10,
         bbox_y=10,
         bbox_w=50,
         bbox_h=50,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=5,
         state=FaceState.UNIDENTIFIED,
     )
     db_image = Image(id=10, file_path=str(img_path), file_size=500)
@@ -767,13 +759,13 @@ def test_face_tooltip_unidentified_with_vector_store_no_match(
     PILImage.new("RGB", (200, 200), "white").save(img_path)
 
     face = Face(
+        id=6,
         bbox_x=10,
         bbox_y=10,
         bbox_w=50,
         bbox_h=50,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=6,
         state=FaceState.UNIDENTIFIED,
     )
     db_image = Image(id=11, file_path=str(img_path), file_size=500)
@@ -814,7 +806,6 @@ def test_bounding_box_colors_by_state(
         bbox_h=40,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=0,
         state=FaceState.IDENTIFIED,
     )
     identified_face.person = person
@@ -826,7 +817,6 @@ def test_bounding_box_colors_by_state(
         bbox_h=40,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=1,
         state=FaceState.ANONYMOUS,
     )
 
@@ -837,7 +827,6 @@ def test_bounding_box_colors_by_state(
         bbox_h=40,
         detection_confidence=0.9,
         model_version="v1",
-        faiss_id=2,
         state=FaceState.UNIDENTIFIED,
     )
 
@@ -897,7 +886,6 @@ def test_image_detail_dialog_with_exif_rotation(
             bbox_h=20,
             detection_confidence=0.9,
             model_version="v1",
-            faiss_id=10,
             state=FaceState.IDENTIFIED,
         )
     ]

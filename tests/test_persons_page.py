@@ -86,12 +86,10 @@ def _add_identified_face(
     person_id: int,
     cluster_id: int,
     image_id: int,
-    faiss_id: int = 0,
 ) -> int:
     with session_factory() as session:
         face = Face(
             image_id=image_id,
-            faiss_id=faiss_id,
             bbox_x=0,
             bbox_y=0,
             bbox_w=10,
@@ -154,12 +152,8 @@ def test_reference_faces_shown(tmp_app_paths, qtbot):
     person_id = _add_person_with_clusters(page.session_factory, "Bob")
     cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
     img_id = _add_image(page.session_factory)
-    _add_identified_face(
-        page.session_factory, person_id, cluster_id, img_id, faiss_id=0
-    )
-    _add_identified_face(
-        page.session_factory, person_id, cluster_id, img_id, faiss_id=1
-    )
+    _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
     page.refresh()
 
     page._person_list.setCurrentRow(0)

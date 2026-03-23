@@ -135,7 +135,6 @@ def test_counts_label_reflects_db_contents(qtbot, tmp_app_paths):
         session.add(
             Face(
                 image_id=img.id,
-                faiss_id=0,
                 bbox_x=0,
                 bbox_y=0,
                 bbox_w=10,
@@ -147,7 +146,6 @@ def test_counts_label_reflects_db_contents(qtbot, tmp_app_paths):
         session.add(
             Face(
                 image_id=img.id,
-                faiss_id=1,
                 bbox_x=20,
                 bbox_y=0,
                 bbox_w=10,

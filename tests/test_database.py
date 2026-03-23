@@ -55,7 +55,6 @@ def test_create_person_and_face(db_session):
 
     face = Face(
         image_id=img.id,
-        faiss_id=0,
         bbox_x=10,
         bbox_y=10,
         bbox_w=50,
@@ -108,7 +107,6 @@ def test_embedding_clusters_and_suggestions(db_session):
 
     face = Face(
         image_id=img.id,
-        faiss_id=1,
         bbox_x=0,
         bbox_y=0,
         bbox_w=10,
@@ -163,7 +161,6 @@ def test_get_counts_and_clear_database(db_session, db_engine):
 
     face = Face(
         image_id=img.id,
-        faiss_id=0,
         bbox_x=0,
         bbox_y=0,
         bbox_w=10,
@@ -202,7 +199,6 @@ def test_delete_cache_files(db_session, tmp_path):
 
     face = Face(
         image_id=img.id,
-        faiss_id=0,
         bbox_x=0,
         bbox_y=0,
         bbox_w=10,
@@ -249,7 +245,6 @@ def test_delete_cache_files_missing_ok(db_session, tmp_path):
 
     face = Face(
         image_id=img.id,
-        faiss_id=0,
         bbox_x=0,
         bbox_y=0,
         bbox_w=10,
