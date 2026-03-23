@@ -735,7 +735,7 @@ def test_bbox_iou_perfect_overlap():
 
 def test_bbox_iou_no_overlap():
     """Disjoint boxes produce IoU of 0.0."""
-    assert _bbox_iou((0, 0, 10, 10), (100, 100, 10, 10)) == 0.0
+    assert _bbox_iou((0, 0, 10, 10), (100, 100, 10, 10)) == pytest.approx(0.0)
 
 
 def test_bbox_iou_partial_overlap():
@@ -749,7 +749,7 @@ def test_bbox_iou_partial_overlap():
 
 def test_bbox_iou_zero_area_box():
     """A zero-area box produces IoU of 0.0."""
-    assert _bbox_iou((0, 0, 0, 10), (0, 0, 10, 10)) == 0.0
+    assert _bbox_iou((0, 0, 0, 10), (0, 0, 10, 10)) == pytest.approx(0.0)
 
 
 def test_bbox_iou_one_inside_other():
@@ -763,7 +763,7 @@ def test_bbox_iou_one_inside_other():
 
 def test_bbox_iou_adjacent_boxes():
     """Touching but non-overlapping boxes produce IoU of 0.0."""
-    assert _bbox_iou((0, 0, 10, 10), (10, 0, 10, 10)) == 0.0
+    assert _bbox_iou((0, 0, 10, 10), (10, 0, 10, 10)) == pytest.approx(0.0)
 
 
 # ===========================================================================
@@ -1191,7 +1191,7 @@ def test_reindex_updates_matching_reference_face(
         # Bbox and confidence updated
         assert face.bbox_x == 12
         assert face.bbox_y == 12
-        assert face.detection_confidence == 0.95
+        assert face.detection_confidence == pytest.approx(0.95)
         assert face.model_version == "buffalo_l"
 
         # No new face was created
