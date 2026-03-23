@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import exifread
+import numpy as np
 from PySide6 import QtCore
 from sqlalchemy import delete, select, func
 from sqlalchemy.orm import sessionmaker
@@ -240,28 +241,41 @@ class IndexingTask(QtCore.QObject):
             crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
             crop.save(crop_path, "JPEG", quality=90)
 
-    def _cleanup_stale_faces(self, img: Image, session) -> list[Face]:
+    def _cleanup_stale_faces(
+        self, img: Image, session
+    ) -> tuple[list[Face], list[Face]]:
         """Remove non-reference faces from a previously indexed image.
 
         Reference faces (``IDENTIFIED`` with a cluster assignment) are preserved
         so that user labeling work survives reindexing.  Everything else —
-        unidentified, anonymous, and cluster-less faces — is hard-deleted from
-        the DB (cascading to suggestions) and the FAISS index.
+        unidentified, anonymous, and cluster-less faces — is DB-deleted here
+        (cascading to suggestions), but their FAISS vectors and crop files are
+        **not** removed yet; the caller must call
+        :meth:`_cleanup_stale_after_commit` after the DB transaction is durable.
 
-        Existing ``ImageMetadata`` and ``ImageTag`` rows are also deleted so
+        Existing ``ImageMetadata`` and ``ImageTag`` rows are always deleted so
         they can be recreated from a fresh EXIF read.
 
         Returns:
-            The list of preserved reference faces (may be empty).
+            ``(reference_faces, stale_faces)`` where *stale_faces* have been
+            removed from the DB but still need FAISS / filesystem cleanup.
         """
         existing_faces: list[Face] = list(
             session.execute(select(Face).where(Face.image_id == img.id)).scalars().all()
         )
 
+        # Always wipe metadata/tags so they can be recreated; this must happen
+        # even when there are no existing faces to avoid IntegrityError on
+        # image_metadata.image_id (UNIQUE) during re-indexing.
+        session.execute(delete(ImageMetadata).where(ImageMetadata.image_id == img.id))
+        session.execute(delete(ImageTag).where(ImageTag.image_id == img.id))
+
         if not existing_faces:
-            return []
+            session.flush()
+            return [], []
 
         reference_faces: list[Face] = []
+        stale_faces: list[Face] = []
         for face in existing_faces:
             if face.state == FaceState.IDENTIFIED and face.cluster_id is not None:
                 logger.info(
@@ -273,25 +287,50 @@ class IndexingTask(QtCore.QObject):
                 reference_faces.append(face)
                 continue
 
-            # Remove embedding from FAISS (best-effort; may not exist)
+            stale_faces.append(face)
+            # ORM delete cascades to suggestions
+            session.delete(face)
+
+        session.flush()
+        return reference_faces, stale_faces
+
+    def _cleanup_stale_after_commit(self, stale_faces: list[Face]) -> None:
+        """Remove FAISS vectors and crop files for faces already deleted from the DB.
+
+        Must be called only **after** the DB transaction has been committed so
+        that a rollback cannot resurrect rows whose embeddings / crops are gone.
+        """
+        for face in stale_faces:
             try:
                 self.vector_store.remove(face.id)
             except Exception:
                 pass
-
-            # Delete face crop file
             crop_path = self.paths.face_crops_dir / f"{face.id}.jpg"
             crop_path.unlink(missing_ok=True)
 
-            # ORM delete cascades to suggestions
-            session.delete(face)
+    def _rollback_faiss_changes(
+        self,
+        added_face_ids: list[int],
+        ref_embedding_snapshots: list[tuple[int, np.ndarray]],
+    ) -> None:
+        """Undo FAISS changes when the DB transaction is rolled back.
 
-        # Delete stale metadata and tags — they will be recreated
-        session.execute(delete(ImageMetadata).where(ImageMetadata.image_id == img.id))
-        session.execute(delete(ImageTag).where(ImageTag.image_id == img.id))
-        session.flush()
-
-        return reference_faces
+        Removes newly-added vectors and restores snapshotted reference embeddings.
+        Called by both exception handlers in :meth:`_index_single_image` to keep
+        in-memory FAISS index consistent with a rolled-back DB transaction.
+        """
+        for face_id in added_face_ids:
+            try:
+                self.vector_store.remove(face_id)
+            except Exception:
+                pass
+        for face_id, old_embedding in ref_embedding_snapshots:
+            try:
+                self.vector_store.add(face_id, old_embedding)
+            except Exception:
+                logger.warning(
+                    "Failed to restore FAISS embedding snapshot for face %d", face_id
+                )
 
     def _index_single_image(
         self,
@@ -306,8 +345,9 @@ class IndexingTask(QtCore.QObject):
             session.commit()
             return 0
 
-        # Clean up stale faces from a previous (possibly failed) indexing run
-        reference_faces = self._cleanup_stale_faces(img, session)
+        # Clean up stale faces from a previous (possibly failed) indexing run.
+        # FAISS / filesystem cleanup is deferred until after the DB commit.
+        reference_faces, stale_faces = self._cleanup_stale_faces(img, session)
 
         img.file_hash = self._calculate_hash(path)
 
@@ -315,6 +355,9 @@ class IndexingTask(QtCore.QObject):
         new_faces: list[tuple[Face, list]] = []
         added_face_ids: list[int] = []
         matched_ref_ids: set[int] = set()
+        # Snapshots of reference embeddings replaced in this run; used to
+        # restore the FAISS index if the transaction is later rolled back.
+        ref_embedding_snapshots: list[tuple[int, np.ndarray]] = []
 
         try:
             with session.begin_nested():
@@ -333,8 +376,18 @@ class IndexingTask(QtCore.QObject):
                     )
 
                     if matched_ref is not None:
-                        # Update the reference face with the new embedding
+                        # Snapshot the existing embedding so it can be restored
+                        # if the transaction rolls back.
                         matched_ref_ids.add(matched_ref.id)
+                        try:
+                            old_embedding = self.vector_store.get_embedding(
+                                matched_ref.id
+                            )
+                            ref_embedding_snapshots.append(
+                                (matched_ref.id, old_embedding)
+                            )
+                        except Exception:
+                            pass
                         try:
                             self.vector_store.remove(matched_ref.id)
                         except Exception:
@@ -365,10 +418,9 @@ class IndexingTask(QtCore.QObject):
                         added_face_ids.append(face.id)
                         new_faces.append((face, bbox))
         except Exception:
-            # Savepoint rolled back all DB face rows; remove any partially-added
-            # FAISS vectors to keep DB and index in sync.
-            for face_id in added_face_ids:
-                self.vector_store.remove(face_id)
+            # Savepoint rolled back all DB face rows; undo the corresponding
+            # FAISS changes and restore any snapshotted reference embeddings.
+            self._rollback_faiss_changes(added_face_ids, ref_embedding_snapshots)
             raise
 
         try:
@@ -381,14 +433,14 @@ class IndexingTask(QtCore.QObject):
             # Downstream failure after the savepoint succeeded: the Face rows
             # are still pending in the session.  Roll back the entire
             # transaction so they are not accidentally committed by the
-            # caller's error handler, and remove the vectors from the
-            # in-memory FAISS index to stay consistent.
+            # caller's error handler, and undo the FAISS changes.
             session.rollback()
-            for face_id in added_face_ids:
-                self.vector_store.remove(face_id)
+            self._rollback_faiss_changes(added_face_ids, ref_embedding_snapshots)
             raise
 
+        # DB is now durable — safe to perform irreversible side effects.
         self._save_face_crops(new_faces, embedder, path)
+        self._cleanup_stale_after_commit(stale_faces)
 
         return len(faces_info)
 

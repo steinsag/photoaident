@@ -877,8 +877,9 @@ def test_cleanup_no_existing_faces(
         session.add(img)
         session.flush()
 
-        result = task._cleanup_stale_faces(img, session)
-        assert result == []
+        reference_faces, stale_faces = task._cleanup_stale_faces(img, session)
+        assert reference_faces == []
+        assert stale_faces == []
         session.commit()
 
 
@@ -915,10 +916,11 @@ def test_cleanup_only_unidentified_faces_deleted(
         vector_store.add(face_id, emb)
         assert vector_store.index.ntotal == 1
 
-        result = task._cleanup_stale_faces(img, session)
+        reference_faces, stale_faces = task._cleanup_stale_faces(img, session)
         session.commit()
+        task._cleanup_stale_after_commit(stale_faces)
 
-    assert result == []
+    assert reference_faces == []
     assert vector_store.index.ntotal == 0
 
     # Verify face is gone from DB
@@ -971,9 +973,10 @@ def test_cleanup_preserves_identified_faces_with_cluster(
         ident_id = identified_face.id
         unident_id = unidentified_face.id
 
-        result = task._cleanup_stale_faces(img, session)
-        result_ids = [f.id for f in result]
+        reference_faces, stale_faces = task._cleanup_stale_faces(img, session)
+        result_ids = [f.id for f in reference_faces]
         session.commit()
+        task._cleanup_stale_after_commit(stale_faces)
 
     assert len(result_ids) == 1
     assert result_ids[0] == ident_id
@@ -1018,10 +1021,11 @@ def test_cleanup_identified_without_cluster_is_deleted(
         session.flush()
         face_id = face.id
 
-        result = task._cleanup_stale_faces(img, session)
+        reference_faces, stale_faces = task._cleanup_stale_faces(img, session)
         session.commit()
+        task._cleanup_stale_after_commit(stale_faces)
 
-    assert result == []
+    assert reference_faces == []
 
     with Session(db_engine) as session:
         assert session.get(Face, face_id) is None
@@ -1059,8 +1063,9 @@ def test_cleanup_deletes_face_crop_files(
         crop_path.write_bytes(b"fake crop data")
         assert crop_path.exists()
 
-        task._cleanup_stale_faces(img, session)
+        _, stale_faces = task._cleanup_stale_faces(img, session)
         session.commit()
+        task._cleanup_stale_after_commit(stale_faces)
 
     assert not crop_path.exists()
 
@@ -1078,7 +1083,6 @@ def test_cleanup_deletes_metadata_and_tags(
         session.add(img)
         session.flush()
 
-        # A face must exist for cleanup to proceed past the early return
         face = Face(
             image_id=img.id,
             bbox_x=0,
