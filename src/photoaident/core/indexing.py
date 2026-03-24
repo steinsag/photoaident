@@ -7,7 +7,7 @@ from pathlib import Path
 import exifread
 import numpy as np
 from PySide6 import QtCore
-from sqlalchemy import select, func, update
+from sqlalchemy import select, func, update, delete
 from sqlalchemy.orm import sessionmaker
 
 from photoaident.core.embeddings import FaceEmbedder
@@ -172,6 +172,9 @@ class IndexingTask(QtCore.QObject):
             gps_lat, gps_lon, gps_altitude = _extract_gps_info(tags)
             camera_make, camera_model, orientation = _extract_camera_info(tags)
 
+            session.execute(
+                delete(ImageMetadata).where(ImageMetadata.image_id == image_id)
+            )
             session.add(
                 ImageMetadata(
                     image_id=image_id,
