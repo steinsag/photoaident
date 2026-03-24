@@ -1,13 +1,14 @@
 import hashlib
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 import exifread
+import numpy as np
 from PySide6 import QtCore
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.orm import sessionmaker
 
 from photoaident.core.embeddings import FaceEmbedder
@@ -226,9 +227,33 @@ class IndexingTask(QtCore.QObject):
 
         img.file_hash = self._calculate_hash(path)
 
+        # Capture pre-existing non-deleted face IDs so stale ones can be cleaned
+        # up after this indexing pass (handles re-indexing scenarios).
+        existing_face_ids: list[int] = list(
+            session.execute(
+                select(Face.id).where(
+                    Face.image_id == img.id,
+                    Face.deleted_at.is_(None),
+                )
+            ).scalars()
+        )
+
+        # Pre-fetch embeddings for existing faces so they can be restored in FAISS
+        # if a downstream failure forces a rollback.
+        stale_embeddings: dict[int, np.ndarray] = {}
+        for fid in existing_face_ids:
+            try:
+                stale_embeddings[fid] = self.vector_store.get_embedding(fid)
+            except IndexError:
+                logger.debug(
+                    "Face %d absent from FAISS; skipping restore on rollback",
+                    fid,
+                )
+
         faces_info = embedder.process_image(path)
         new_faces = []
         added_face_ids: list[int] = []
+        stale_face_ids: list[int] = []  # populated after savepoint succeeds
         try:
             with session.begin_nested():
                 for info in faces_info:
@@ -255,6 +280,26 @@ class IndexingTask(QtCore.QObject):
                 self.vector_store.remove(face_id)
             raise
 
+        # Soft-delete faces that existed before this pass but were not re-detected.
+        added_face_ids_set = set(added_face_ids)
+        stale_face_ids = [
+            fid for fid in existing_face_ids if fid not in added_face_ids_set
+        ]
+        if stale_face_ids:
+            logger.debug(
+                "Soft-deleting %d stale face(s) for image %d",
+                len(stale_face_ids),
+                img.id,
+            )
+            for fid in stale_face_ids:
+                if fid in stale_embeddings:
+                    self.vector_store.remove(fid)
+            session.execute(
+                update(Face)
+                .where(Face.id.in_(stale_face_ids))
+                .values(deleted_at=datetime.now(timezone.utc))
+            )
+
         try:
             self._extract_exif_metadata(path, img.id, session)
 
@@ -262,14 +307,16 @@ class IndexingTask(QtCore.QObject):
             self.vector_store.save(self.paths.faiss_path)
             session.commit()
         except Exception:
-            # Downstream failure after the savepoint succeeded: the Face rows
-            # are still pending in the session.  Roll back the entire
-            # transaction so they are not accidentally committed by the
-            # caller's error handler, and remove the vectors from the
-            # in-memory FAISS index to stay consistent.
+            # Downstream failure after the savepoint succeeded: roll back the
+            # session (discards new Face rows AND the deleted_at updates), remove
+            # new FAISS vectors, and restore stale embeddings so FAISS stays
+            # consistent with the rolled-back DB state.
             session.rollback()
             for face_id in added_face_ids:
                 self.vector_store.remove(face_id)
+            for fid in stale_face_ids:
+                if fid in stale_embeddings:
+                    self.vector_store.add(fid, stale_embeddings[fid])
             raise
 
         self._save_face_crops(new_faces, embedder, path)

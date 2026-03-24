@@ -8,7 +8,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from photoaident.core.indexing import IndexingTask, _dms_to_decimal
-from photoaident.db.database import Image, ImageMetadata, TakenAtSource
+from photoaident.db.database import (
+    Face as FaceModel,
+    FaceState,
+    Image,
+    ImageMetadata,
+    TakenAtSource,
+)
 from photoaident.db.vector_store import VectorStore
 
 
@@ -644,8 +650,6 @@ def test_faiss_add_failure_leaves_no_orphaned_faces(
     with patch.object(vector_store, "add", side_effect=RuntimeError("faiss boom")):
         task.run()
 
-    from photoaident.db.database import Face as FaceModel
-
     # Image should be marked ERROR (exception handled inside run())
     with Session(db_engine) as session:
         img = session.get(Image, img_id)
@@ -697,8 +701,6 @@ def test_faiss_save_failure_rolls_back_faces_and_vectors(
     with patch.object(vector_store, "save", side_effect=[OSError("disk full"), None]):
         task.run()
 
-    from photoaident.db.database import Face as FaceModel
-
     with Session(db_engine) as session:
         img = session.get(Image, img_id)
         assert img is not None
@@ -711,3 +713,123 @@ def test_faiss_save_failure_rolls_back_faces_and_vectors(
     assert (
         vector_store.index.ntotal == 0
     ), "FAISS vectors must be removed on save failure"
+
+
+# ---------------------------------------------------------------------------
+# Stale face cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_stale_faces_soft_deleted_and_removed_from_faiss(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """Faces from a previous index pass that are not re-detected are soft-deleted and
+    their FAISS vectors are removed."""
+    img_file = tmp_path / "reindex.jpg"
+    PILImage.new("RGB", (100, 100)).save(img_file, "JPEG")
+
+    old_embedding = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+
+    # Set up a committed face from a previous (hypothetical) indexing pass.
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        old_face = FaceModel(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="buffalo_l",
+        )
+        session.add(old_face)
+        session.flush()
+        old_face_id = old_face.id
+        vector_store.add(old_face_id, old_embedding)
+        session.commit()
+        img_id = img.id
+
+    # Reset hash so the image is picked up for re-indexing.
+    with session_factory() as session:
+        img = session.get(Image, img_id)
+        img.file_hash = None
+        session.commit()
+
+    # Re-index: embedder returns no detections → old face is stale.
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+    task.run()
+
+    with Session(db_engine) as session:
+        old_face = session.get(FaceModel, old_face_id)
+    assert old_face is not None
+    assert old_face.deleted_at is not None, "Stale face must be soft-deleted"
+    assert vector_store.index.ntotal == 0, "Stale FAISS vector must be removed"
+
+
+def test_stale_face_rollback_restores_faiss_on_downstream_failure(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """If FAISS save fails after stale-face removal, the stale embedding is restored
+    in FAISS and the soft-delete is rolled back in the DB."""
+    img_file = tmp_path / "rollback_stale.jpg"
+    PILImage.new("RGB", (100, 100)).save(img_file, "JPEG")
+
+    old_embedding = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
+        session.commit()
+        old_face = FaceModel(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="buffalo_l",
+        )
+        session.add(old_face)
+        session.flush()
+        old_face_id = old_face.id
+        vector_store.add(old_face_id, old_embedding)
+        session.commit()
+        img_id = img.id
+
+    # Reset hash for re-indexing.
+    with session_factory() as session:
+        img = session.get(Image, img_id)
+        img.file_hash = None
+        session.commit()
+
+    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []  # no new detections → stale face
+    task._embedder = mock_embedder
+
+    # First save() raises to trigger the downstream failure path; second call (end of
+    # run()) must succeed so run() can finish cleanly.
+    with patch.object(vector_store, "save", side_effect=[OSError("disk full"), None]):
+        task.run()
+
+    # DB: soft-delete must be rolled back.
+    with Session(db_engine) as session:
+        old_face = session.get(FaceModel, old_face_id)
+    assert old_face is not None
+    assert old_face.deleted_at is None, "Rolled-back face must not be soft-deleted"
+
+    # FAISS: stale embedding must be restored.
+    assert (
+        vector_store.index.ntotal == 1
+    ), "Stale FAISS vector must be restored on rollback"
