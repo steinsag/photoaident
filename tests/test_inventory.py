@@ -22,33 +22,6 @@ def require_symlinks(tmp_path: pathlib.Path) -> None:
         pytest.skip(f"Directory symlinks not supported on this platform: {exc}")
 
 
-@pytest.fixture
-def session_factory(db_engine):
-    """Factory for transactional sessions."""
-
-    def factory():
-        # InventoryTask uses this to create its own sessions
-        from sqlalchemy.orm import Session
-
-        return Session(bind=db_engine)
-
-    return factory
-
-
-@pytest.fixture(autouse=True)
-def clean_db(db_engine):
-    """Ensure database is empty before each test."""
-    from sqlalchemy import delete
-    from sqlalchemy.orm import Session
-    from photoaident.db.database import Image, ImageMetadata
-
-    with Session(db_engine) as session:
-        # Delete child tables first (FK constraints, even without enforcement)
-        session.execute(delete(ImageMetadata))
-        session.execute(delete(Image))
-        session.commit()
-
-
 def test_inventory_task_success(tmp_path, session_factory, db_engine):
     # Setup: Create some dummy image files
     (tmp_path / "img1.jpg").write_bytes(b"data1")

@@ -76,6 +76,21 @@
     </message>
 </context>
 <context>
+    <name>CorruptIndexError</name>
+    <message>
+        <source>The FAISS index file is corrupt and cannot be loaded.
+
+File: {path}
+
+The face index cannot be recovered. Restore the data directory from a backup if you have one. Without a backup, all person assignments and labels are lost — you would need to delete both this file and the database to start over.</source>
+        <translation>Die FAISS-Indexdatei ist beschädigt und kann nicht geladen werden.
+
+Datei: {path}
+
+Der Gesichtsindex kann nicht wiederhergestellt werden. Stellen Sie das Datenverzeichnis aus einer Sicherungskopie wieder her, falls vorhanden. Ohne Sicherungskopie sind alle Personenzuordnungen und Beschriftungen verloren — Sie müssten sowohl diese Datei als auch die Datenbank löschen, um neu zu beginnen.</translation>
+    </message>
+</context>
+<context>
     <name>DateFilterDialog</name>
     <message>
         <source>Select Time Range</source>

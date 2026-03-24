@@ -9,7 +9,7 @@ import pytest
 from PySide6 import QtGui, QtWidgets
 
 import photoaident.app as app_module
-from photoaident.app import MainWindow, load_translations
+from photoaident.app import CorruptIndexError, MainWindow, load_translations
 from photoaident.core.gpu_checker import GpuChecker
 from photoaident.db.database import Face, Image
 from photoaident.db.migrate import apply_migrations
@@ -301,6 +301,18 @@ def test_vector_store_loaded_when_faiss_file_exists(tmp_app_paths, qtbot):
     qtbot.addWidget(window)
 
     assert window._vector_store is not None
+
+
+def test_corrupt_faiss_index_raises(tmp_app_paths, qtbot):
+    """A corrupt FAISS file at startup raises CorruptIndexError instead of starting."""
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+
+    # Write a corrupt (truncated) index file — simulates a crash during write_index.
+    tmp_app_paths.faiss_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_app_paths.faiss_path.write_bytes(b"not a valid faiss index")
+
+    with pytest.raises(CorruptIndexError, match="corrupt"):
+        MainWindow(tmp_app_paths, check_gpu=False, enable_onboarding=False)
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6 import QtWidgets  # pragma: no cover
 
-from photoaident.app import MainWindow  # pragma: no cover
+from photoaident.app import CorruptIndexError, MainWindow  # pragma: no cover
 from photoaident.db.migrate import apply_migrations  # pragma: no cover
 from photoaident.paths import AppPaths  # pragma: no cover
 from photoaident.utils.instance_lock import InstanceLock  # pragma: no cover
@@ -163,7 +163,20 @@ def main():  # pragma: no cover
 
     load_translations(app)
 
-    window = MainWindow(paths)
+    try:
+        window = MainWindow(paths)
+    except CorruptIndexError as exc:
+        msg = QtWidgets.QApplication.translate(
+            "CorruptIndexError",
+            "The FAISS index file is corrupt and cannot be loaded.\n\n"
+            "File: {path}\n\n"
+            "The face index cannot be recovered. "
+            "Restore the data directory from a backup if you have one. "
+            "Without a backup, all person assignments and labels are lost — "
+            "you would need to delete both this file and the database to start over.",
+        ).format(path=exc.faiss_path)
+        QtWidgets.QMessageBox.critical(None, APP_NAME, msg)
+        sys.exit(1)
     window.show()
 
     try:

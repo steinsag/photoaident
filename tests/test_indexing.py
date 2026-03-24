@@ -8,7 +8,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from photoaident.core.indexing import IndexingTask, _dms_to_decimal
-from photoaident.db.database import Image, ImageMetadata, TakenAtSource
+from photoaident.db.database import (
+    Face as FaceModel,
+    FaceState,
+    Image,
+    ImageMetadata,
+    TakenAtSource,
+)
 from photoaident.db.vector_store import VectorStore
 
 
@@ -32,76 +38,118 @@ class _MockTag:
         return str(self.values)
 
 
-def _make_indexed_image(tmp_path, session_factory, filename="img.jpg"):
-    """Create a real JPEG on disk and a matching unindexed Image row."""
+_rng = np.random.default_rng(seed=42)
+
+
+# ---------------------------------------------------------------------------
+# Test helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_image_file(tmp_path, filename="img.jpg", size=(100, 100), color="red"):
+    """Create a JPEG on disk and return its path."""
     img_file = tmp_path / filename
-    PILImage.new("RGB", (100, 100)).save(img_file, "JPEG")
+    PILImage.new("RGB", size, color).save(img_file, "JPEG")
+    return img_file
+
+
+def _insert_image(session_factory, img_file, *, file_size=None):
+    """Insert an Image row and return its id."""
     with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        img = Image(
+            file_path=str(img_file),
+            file_size=file_size if file_size is not None else img_file.stat().st_size,
+        )
         session.add(img)
         session.commit()
-        img_id = img.id
-    return img_file, img_id
+        return img.id
+
+
+def _make_indexed_image(tmp_path, session_factory, filename="img.jpg"):
+    """Create a real JPEG on disk and a matching unindexed Image row."""
+    img_file = _make_image_file(tmp_path, filename)
+    return img_file, _insert_image(session_factory, img_file)
+
+
+def _make_task(session_factory, vector_store, tmp_app_paths, **kwargs):
+    """Create an IndexingTask with a no-op mock embedder (no detections)."""
+    task = IndexingTask(
+        session_factory, vector_store, tmp_app_paths, ctx_id=-1, **kwargs
+    )
+    mock_embedder = MagicMock()
+    mock_embedder.process_image.return_value = []
+    task._embedder = mock_embedder
+    return task
+
+
+def _fetch_metadata(db_engine, img_id):
+    """Return the ImageMetadata row for img_id, or None."""
+    with Session(db_engine) as session:
+        return session.execute(
+            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
+        ).scalar_one_or_none()
 
 
 def _run_task_with_tags(session_factory, vector_store, tmp_paths, fake_tags):
     """Run IndexingTask with mocked exifread returning fake_tags."""
-    task = IndexingTask(session_factory, vector_store, tmp_paths, ctx_id=-1)
-    mock_embedder = MagicMock()
-    mock_embedder.process_image.return_value = []
-    task._embedder = mock_embedder
+    task = _make_task(session_factory, vector_store, tmp_paths)
     with patch(
         "photoaident.core.indexing.exifread.process_file", return_value=fake_tags
     ):
         task.run()
 
 
-_rng = np.random.default_rng(seed=42)
+def _setup_image_with_stale_face(tmp_path, session_factory, vector_store, filename):
+    """Create an image with a pre-existing face in DB and FAISS, then reset its hash
+    so it will be picked up for re-indexing.
 
-
-@pytest.fixture
-def session_factory(db_engine):
-    """Factory for transactional sessions."""
-
-    def factory():
-        # InventoryTask uses this to create its own sessions
-        from sqlalchemy.orm import Session
-
-        return Session(bind=db_engine)
-
-    return factory
-
-
-@pytest.fixture(autouse=True)
-def clean_db(db_engine):
-    """Ensure database is empty before each test."""
-    from sqlalchemy import delete
-    from sqlalchemy.orm import Session
-    from photoaident.db.database import Image, ImageMetadata
-
-    with Session(db_engine) as session:
-        # Delete child tables first (FK constraints, even without enforcement)
-        session.execute(delete(ImageMetadata))
-        session.execute(delete(Image))
+    Returns (img_id, old_face_id, old_embedding).
+    """
+    img_file = _make_image_file(tmp_path, filename)
+    old_embedding = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+        VectorStore.EMBEDDING_DTYPE
+    )
+    with session_factory() as session:
+        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
+        session.add(img)
         session.commit()
+        old_face = FaceModel(
+            image_id=img.id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=10,
+            bbox_h=10,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="buffalo_l",
+        )
+        session.add(old_face)
+        session.flush()
+        old_face_id = old_face.id
+        vector_store.add(old_face_id, old_embedding)
+        session.commit()
+        img_id = img.id
+
+    with session_factory() as session:
+        img = session.get(Image, img_id)
+        img.file_hash = None
+        session.commit()
+
+    return img_id, old_face_id, old_embedding
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
 
 
 def test_indexing_task_success(
     tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
-    # Setup: Create an image that needs indexing
-    img_file = tmp_path / "img1.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img_file, "JPEG")
-
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=len(b"dummy image data"))
-        session.add(img)
-        session.commit()
-        img_id = img.id
+    img_file = _make_image_file(tmp_path, "img1.jpg")
+    img_id = _insert_image(session_factory, img_file)
 
     task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
-
-    # Mock FaceEmbedder to avoid running the real model
     mock_embedder = MagicMock()
     mock_embedder.process_image.return_value = [
         {
@@ -117,14 +165,10 @@ def test_indexing_task_success(
     mock_embedder.extract_face_crop.return_value = PILImage.new(
         "RGB", (224, 224), "blue"
     )
-
     task._embedder = mock_embedder
-
     task.run()
 
     # Verify DB
-    from sqlalchemy.orm import Session
-
     with Session(db_engine) as session:
         img = session.get(Image, img_id)
         assert img is not None
@@ -135,6 +179,7 @@ def test_indexing_task_success(
         assert face.bbox_y == 10
         assert face.bbox_w == 50
         assert face.bbox_h == 50
+
     # Verify FAISS
     assert vector_store.index.ntotal == 1
 
@@ -146,16 +191,13 @@ def test_indexing_task_success(
     assert not any(tmp_app_paths.thumbs_dir.iterdir())
 
     # Verify image_metadata was populated
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
-        assert meta is not None
-        assert meta.width == 100
-        assert meta.height == 100
-        # PIL-created fixture images have no EXIF and no filepath pattern → no date
-        assert meta.taken_at is None
-        assert meta.taken_at_source is None
+    meta = _fetch_metadata(db_engine, img_id)
+    assert meta is not None
+    assert meta.width == 100
+    assert meta.height == 100
+    # PIL-created fixture images have no EXIF and no filepath pattern → no date
+    assert meta.taken_at is None
+    assert meta.taken_at_source is None
 
 
 def test_indexing_task_cancel_method(session_factory, vector_store, tmp_app_paths):
@@ -197,29 +239,22 @@ def test_indexing_task_cancel_during_inner_loop(
     tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """Cancel triggered mid-batch stops processing after the current image."""
-    img1 = tmp_path / "img1_inner.jpg"
-    img2 = tmp_path / "img2_inner.jpg"
-    PILImage.new("RGB", (10, 10), "red").save(img1)
-    PILImage.new("RGB", (10, 10), "blue").save(img2)
-
-    with session_factory() as session:
-        session.add(Image(file_path=str(img1), file_size=img1.stat().st_size))
-        session.add(Image(file_path=str(img2), file_size=img2.stat().st_size))
-        session.commit()
+    img1 = _make_image_file(tmp_path, "img1_inner.jpg", size=(10, 10), color="red")
+    img2 = _make_image_file(tmp_path, "img2_inner.jpg", size=(10, 10), color="blue")
+    _insert_image(session_factory, img1)
+    _insert_image(session_factory, img2)
 
     task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
-
     mock_embedder = MagicMock()
 
-    def process_and_cancel(_path):
+    def process_and_cancel(_):
         # Cancel after processing the first image so the second iteration
-        # hits the `if self._is_cancelled: break` guard (line 182).
+        # hits the `if self._is_cancelled: break` guard.
         task.cancel()
         return []
 
     mock_embedder.process_image.side_effect = process_and_cancel
     task._embedder = mock_embedder
-
     task.run()
 
     with Session(db_engine) as session:
@@ -237,12 +272,7 @@ def test_indexing_task_marks_missing_file(
     """An image whose file no longer exists on disk is marked MISSING."""
     nonexistent = tmp_path / "gone.jpg"
     # Deliberately do NOT create the file.
-
-    with session_factory() as session:
-        img = Image(file_path=str(nonexistent), file_size=100)
-        session.add(img)
-        session.commit()
-        img_id = img.id
+    img_id = _insert_image(session_factory, nonexistent, file_size=100)
 
     task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     task._embedder = MagicMock()  # file is missing; don't load the real model
@@ -258,14 +288,8 @@ def test_indexing_task_marks_error_on_exception(
     tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """An exception during indexing marks the image as ERROR."""
-    img_file = tmp_path / "err.jpg"
-    PILImage.new("RGB", (10, 10)).save(img_file)
-
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-        img_id = img.id
+    img_file = _make_image_file(tmp_path, "err.jpg", size=(10, 10))
+    img_id = _insert_image(session_factory, img_file)
 
     task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     task._embedder = MagicMock()  # error is in _calculate_hash; don't load real model
@@ -283,26 +307,14 @@ def test_indexing_task_metadata_populated(
     tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """ImageMetadata is created for each successfully indexed image."""
-    img_file = tmp_path / "meta_test.jpg"
-    PILImage.new("RGB", (320, 240), "green").save(img_file, "JPEG")
+    img_file = _make_image_file(
+        tmp_path, "meta_test.jpg", size=(320, 240), color="green"
+    )
+    img_id = _insert_image(session_factory, img_file)
 
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-        img_id = img.id
+    _make_task(session_factory, vector_store, tmp_app_paths).run()
 
-    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
-    mock_embedder = MagicMock()
-    mock_embedder.process_image.return_value = []
-    task._embedder = mock_embedder
-
-    task.run()
-
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.width == 320
     assert meta.height == 240
@@ -312,23 +324,13 @@ def test_indexing_task_metadata_populated(
 
 
 def test_indexing_task_no_thumbnail_during_indexing(
-    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+    tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No thumbnail files are written to thumbs_dir during indexing."""
-    img_file = tmp_path / "no_thumb.jpg"
-    PILImage.new("RGB", (50, 50), "blue").save(img_file, "JPEG")
+    img_file = _make_image_file(tmp_path, "no_thumb.jpg", size=(50, 50), color="blue")
+    _insert_image(session_factory, img_file)
 
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-
-    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
-    mock_embedder = MagicMock()
-    mock_embedder.process_image.return_value = []
-    task._embedder = mock_embedder
-
-    task.run()
+    _make_task(session_factory, vector_store, tmp_app_paths).run()
 
     assert not any(tmp_app_paths.thumbs_dir.iterdir())
 
@@ -337,20 +339,10 @@ def test_indexing_task_exif_failure_does_not_abort(
     tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
 ):
     """EXIF extraction failure must not abort indexing — image is still marked done."""
-    img_file = tmp_path / "exif_fail.jpg"
-    PILImage.new("RGB", (10, 10)).save(img_file, "JPEG")
+    img_file = _make_image_file(tmp_path, "exif_fail.jpg", size=(10, 10))
+    img_id = _insert_image(session_factory, img_file)
 
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-        img_id = img.id
-
-    task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
-    mock_embedder = MagicMock()
-    mock_embedder.process_image.return_value = []
-    task._embedder = mock_embedder
-
+    task = _make_task(session_factory, vector_store, tmp_app_paths)
     with patch(
         "photoaident.core.indexing.exifread.process_file",
         side_effect=OSError("corrupt"),
@@ -401,10 +393,7 @@ def test_exif_datetime_from_exif_tag(
     fake_tags = {"EXIF DateTimeOriginal": _MockTag("2022:08:20 10:15:30")}
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.taken_at_source == TakenAtSource.EXIF
     assert meta.taken_at == datetime(2022, 8, 20, 10, 15, 30)
@@ -421,10 +410,7 @@ def test_exif_invalid_datetime_falls_through_to_next_tag(
     }
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.taken_at_source == TakenAtSource.EXIF
     assert meta.taken_at is not None
@@ -444,10 +430,7 @@ def test_exif_gps_coordinates(
     }
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.gps_lat is not None
     assert meta.gps_lon is not None
@@ -466,10 +449,7 @@ def test_exif_gps_altitude_above_sea_level(
     }
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.gps_altitude == pytest.approx(1000.0)
 
@@ -485,10 +465,7 @@ def test_exif_gps_altitude_below_sea_level(
     }
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.gps_altitude == pytest.approx(-50.0)
 
@@ -510,10 +487,7 @@ def test_exif_gps_altitude_exception_silenced(
     fake_tags = {"GPS GPSAltitude": _BadAltTag()}
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.gps_altitude is None
 
@@ -526,10 +500,7 @@ def test_exif_orientation_stored(
     fake_tags = {"Image Orientation": _MockTag([6])}
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.orientation == 6
 
@@ -549,10 +520,7 @@ def test_exif_orientation_invalid_falls_back_to_1(
     fake_tags = {"Image Orientation": _BadOrientTag()}
     _run_task_with_tags(session_factory, vector_store, tmp_app_paths, fake_tags)
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.orientation == 1
 
@@ -566,31 +534,19 @@ def test_filepath_date_extracted_when_no_exif(
     dated_dir.mkdir()
     img_file = dated_dir / "photo.jpg"
     PILImage.new("RGB", (50, 50)).save(img_file, "JPEG")
+    img_id = _insert_image(session_factory, img_file)
 
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-        img_id = img.id
-
-    task = IndexingTask(
+    task = _make_task(
         session_factory,
         vector_store,
         tmp_app_paths,
-        ctx_id=-1,
         filepath_date_pattern="{YYYY}-{MM}-{DD}",
     )
-    mock_embedder = MagicMock()
-    mock_embedder.process_image.return_value = []
-    task._embedder = mock_embedder
     # No EXIF tags → filepath pattern should be used
     with patch("photoaident.core.indexing.exifread.process_file", return_value={}):
         task.run()
 
-    with Session(db_engine) as session:
-        meta = session.execute(
-            select(ImageMetadata).where(ImageMetadata.image_id == img_id)
-        ).scalar_one_or_none()
+    meta = _fetch_metadata(db_engine, img_id)
     assert meta is not None
     assert meta.taken_at_source == TakenAtSource.FILEPATH
     assert meta.taken_at == datetime(2023, 7, 14)
@@ -619,14 +575,8 @@ def test_faiss_add_failure_leaves_no_orphaned_faces(
     vector_store.add() could leave flushed Face rows committed without a corresponding
     FAISS vector when the exception was caught in run() and session.commit() executed.
     """
-    img_file = tmp_path / "faiss_fail.jpg"
-    PILImage.new("RGB", (50, 50)).save(img_file, "JPEG")
-
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-        img_id = img.id
+    img_file = _make_image_file(tmp_path, "faiss_fail.jpg", size=(50, 50))
+    img_id = _insert_image(session_factory, img_file)
 
     task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     mock_embedder = MagicMock()
@@ -643,8 +593,6 @@ def test_faiss_add_failure_leaves_no_orphaned_faces(
 
     with patch.object(vector_store, "add", side_effect=RuntimeError("faiss boom")):
         task.run()
-
-    from photoaident.db.database import Face as FaceModel
 
     # Image should be marked ERROR (exception handled inside run())
     with Session(db_engine) as session:
@@ -669,24 +617,17 @@ def test_faiss_save_failure_rolls_back_faces_and_vectors(
     session.commit() with file_hash=ERROR, accidentally committing the Face
     rows while FAISS on disk stayed stale.
     """
-    img_file = tmp_path / "save_fail.jpg"
-    PILImage.new("RGB", (50, 50)).save(img_file, "JPEG")
-
-    with session_factory() as session:
-        img = Image(file_path=str(img_file), file_size=img_file.stat().st_size)
-        session.add(img)
-        session.commit()
-        img_id = img.id
+    img_file = _make_image_file(tmp_path, "save_fail.jpg", size=(50, 50))
+    img_id = _insert_image(session_factory, img_file)
 
     task = IndexingTask(session_factory, vector_store, tmp_app_paths, ctx_id=-1)
     mock_embedder = MagicMock()
-    embedding = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
-        VectorStore.EMBEDDING_DTYPE
-    )
     mock_embedder.process_image.return_value = [
         {
             "bbox": [0, 0, 10, 10],
-            "embedding": embedding,
+            "embedding": _rng.random(VectorStore.DEFAULT_DIMENSION).astype(
+                VectorStore.EMBEDDING_DTYPE
+            ),
             "det_score": 0.9,
         }
     ]
@@ -696,8 +637,6 @@ def test_faiss_save_failure_rolls_back_faces_and_vectors(
     # run()) succeeds — use side_effect list to model this.
     with patch.object(vector_store, "save", side_effect=[OSError("disk full"), None]):
         task.run()
-
-    from photoaident.db.database import Face as FaceModel
 
     with Session(db_engine) as session:
         img = session.get(Image, img_id)
@@ -711,3 +650,54 @@ def test_faiss_save_failure_rolls_back_faces_and_vectors(
     assert (
         vector_store.index.ntotal == 0
     ), "FAISS vectors must be removed on save failure"
+
+
+# ---------------------------------------------------------------------------
+# Stale face cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_stale_faces_soft_deleted_and_removed_from_faiss(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """Faces from a previous index pass that are not re-detected are soft-deleted and
+    their FAISS vectors are removed."""
+    _img_id, old_face_id, _embedding = _setup_image_with_stale_face(
+        tmp_path, session_factory, vector_store, "reindex.jpg"
+    )
+
+    _make_task(session_factory, vector_store, tmp_app_paths).run()
+
+    with Session(db_engine) as session:
+        old_face = session.get(FaceModel, old_face_id)
+    assert old_face is not None
+    assert old_face.deleted_at is not None, "Stale face must be soft-deleted"
+    assert vector_store.index.ntotal == 0, "Stale FAISS vector must be removed"
+
+
+def test_stale_face_rollback_restores_faiss_on_downstream_failure(
+    tmp_path, session_factory, db_engine, vector_store, tmp_app_paths
+):
+    """If FAISS save fails after stale-face removal, the stale embedding is restored
+    in FAISS and the soft-delete is rolled back in the DB."""
+    _img_id, old_face_id, _embedding = _setup_image_with_stale_face(
+        tmp_path, session_factory, vector_store, "rollback_stale.jpg"
+    )
+
+    task = _make_task(session_factory, vector_store, tmp_app_paths)
+
+    # First save() raises to trigger the downstream failure path; second call (end of
+    # run()) must succeed so run() can finish cleanly.
+    with patch.object(vector_store, "save", side_effect=[OSError("disk full"), None]):
+        task.run()
+
+    # DB: soft-delete must be rolled back.
+    with Session(db_engine) as session:
+        old_face = session.get(FaceModel, old_face_id)
+    assert old_face is not None
+    assert old_face.deleted_at is None, "Rolled-back face must not be soft-deleted"
+
+    # FAISS: stale embedding must be restored.
+    assert (
+        vector_store.index.ntotal == 1
+    ), "Stale FAISS vector must be restored on rollback"

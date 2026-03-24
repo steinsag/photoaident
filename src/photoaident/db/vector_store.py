@@ -163,13 +163,24 @@ class VectorStore:
 
     @_locked
     def save(self, path: Path) -> None:
-        """Save the FAISS index to a file.
+        """Save the FAISS index to a file atomically.
+
+        Writes to a sibling ``.tmp`` file first, then renames it over the
+        target.  Because POSIX ``rename()`` is atomic at the directory-entry
+        level, a crash during the write leaves the previous index intact
+        rather than producing a partially-written (corrupt) file.
 
         Args:
             path: Path to the .index file.
         """
         path.parent.mkdir(parents=True, exist_ok=True)
-        write_index(self.index, str(path))
+        tmp_path = path.with_suffix(".tmp")
+        try:
+            write_index(self.index, str(tmp_path))
+            tmp_path.replace(path)  # atomic on POSIX (rename syscall)
+        except Exception:
+            tmp_path.unlink(missing_ok=True)
+            raise
 
     @_locked
     def load(self, path: Path) -> None:
