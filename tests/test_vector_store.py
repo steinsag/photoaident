@@ -73,6 +73,50 @@ def test_vector_store_save_load(vector_store, tmp_path):
     assert np.allclose(v1, retrieved, atol=1e-5)
 
 
+def test_save_leaves_no_temp_file(vector_store, tmp_path):
+    """After a successful save the sibling .tmp file must not exist."""
+    index_path = tmp_path / "test.index"
+    vector_store.save(index_path)
+
+    assert index_path.exists()
+    assert not index_path.with_suffix(".tmp").exists()
+
+
+def test_save_atomic_preserves_old_index_on_failure(tmp_path, monkeypatch):
+    """If write_index raises, the pre-existing index file is left intact."""
+    import photoaident.db.vector_store as vs_module
+
+    # Build a valid store with one vector and save it as the "current" index.
+    store = VectorStore()
+    v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
+    v1 /= np.linalg.norm(v1)
+    store.add(1, v1)
+
+    index_path = tmp_path / "test.index"
+    store.save(index_path)
+    original_mtime = index_path.stat().st_mtime
+
+    # Patch write_index to simulate a mid-write crash.
+    def _failing_write_index(_index, path):
+        # Write a few corrupt bytes so the .tmp exists but is truncated.
+        Path(path).write_bytes(b"corrupt")
+        raise RuntimeError("simulated write failure")
+
+    monkeypatch.setattr(vs_module, "write_index", _failing_write_index)
+
+    with pytest.raises(RuntimeError, match="simulated write failure"):
+        store.save(index_path)
+
+    # Original file is unchanged; temp file is cleaned up.
+    assert index_path.stat().st_mtime == original_mtime
+    assert not index_path.with_suffix(".tmp").exists()
+
+    # The original file is still loadable.
+    recovered = VectorStore()
+    recovered.load(index_path)
+    assert recovered.index.ntotal == 1
+
+
 def test_vector_store_empty_search(vector_store):
     v1 = _rng.random(VectorStore.DEFAULT_DIMENSION).astype(VectorStore.EMBEDDING_DTYPE)
     results = vector_store.search(v1, k=5)

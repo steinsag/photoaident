@@ -34,6 +34,10 @@ if TYPE_CHECKING:
     from photoaident.paths import AppPaths
 
 
+class CorruptIndexError(Exception):
+    """Raised at startup when the on-disk FAISS index cannot be read."""
+
+
 def load_translations(app: QtWidgets.QApplication):
     """Load translations for the current system locale."""
     locale = QtCore.QLocale.system().name()  # e.g. "en_US", "de_DE"
@@ -79,8 +83,19 @@ class MainWindow(QtWidgets.QMainWindow):
         self._db_engine = get_engine(str(self._paths.db_path))
         self._session_factory = get_session_factory(self._db_engine)
         self._vector_store = VectorStore()
+        faiss_loaded = False
         if self._paths.faiss_path.exists():
-            self._vector_store.load(self._paths.faiss_path)
+            try:
+                self._vector_store.load(self._paths.faiss_path)
+                faiss_loaded = True
+            except (RuntimeError, ValueError, FileNotFoundError) as exc:
+                raise CorruptIndexError(
+                    f"The FAISS index file is corrupt and cannot be loaded.\n\n"
+                    f"File: {self._paths.faiss_path}\n\n"
+                    f"This can happen when the application was interrupted during "
+                    f"indexing. Delete the file and restart to rebuild the index."
+                ) from exc
+        if faiss_loaded:
             if self._vector_store.needs_migration():
                 logger.warning("Migrating FAISS index to database-driven IDs...")
                 self._vector_store = rebuild_faiss_with_face_ids(

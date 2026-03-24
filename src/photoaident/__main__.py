@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6 import QtWidgets  # pragma: no cover
 
-from photoaident.app import MainWindow  # pragma: no cover
+from photoaident.app import CorruptIndexError, MainWindow  # pragma: no cover
 from photoaident.db.migrate import apply_migrations  # pragma: no cover
 from photoaident.paths import AppPaths  # pragma: no cover
 from photoaident.utils.instance_lock import InstanceLock  # pragma: no cover
@@ -163,7 +163,11 @@ def main():  # pragma: no cover
 
     load_translations(app)
 
-    window = MainWindow(paths)
+    try:
+        window = MainWindow(paths)
+    except CorruptIndexError as exc:
+        QtWidgets.QMessageBox.critical(None, APP_NAME, str(exc))
+        sys.exit(1)
     window.show()
 
     try:
