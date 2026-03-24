@@ -127,26 +127,6 @@ for column alterations.
 
 ---
 
-## Reindexing Strategy
-
-Reindexing re-runs detection/embedding without losing labelling work.
-
-**Always preserved:** `Person`, `EmbeddingCluster`, face assignments, `image_metadata`,
-`image_tags`, `Suggestion` records.
-
-**Algorithm per image:**
-
-1. Run detection + embedding (read-only file access)
-2. Match new detections to existing faces by bounding box IoU ≥ 0.5
-3. Matched: update `faiss_id`/`model_version`, preserve state and person assignment
-4. New detections (no match): insert as `unidentified`
-5. Old faces with no match: soft-delete (`deleted_at`)
-6. Update `images.index_version` and `images.updated_at`
-
-**Triggers:** explicit user request · `model_version` mismatch · file hash change
-
----
-
 ## Search Strategy
 
 1. FAISS query → candidate `faiss_id` list for selected person/cluster

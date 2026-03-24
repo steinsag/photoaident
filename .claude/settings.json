@@ -24,11 +24,13 @@
           {
             "type": "command",
             "command": "uv run scripts/verify.py",
+            "blockOnError": true,
             "statusMessage": "Running verification before finishing..."
           },
           {
             "type": "command",
             "command": "uv run scripts/translate.py",
+            "blockOnError": true,
             "statusMessage": "Running translate before finishing..."
           }
         ]
