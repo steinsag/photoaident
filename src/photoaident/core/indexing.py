@@ -312,9 +312,11 @@ class IndexingTask(QtCore.QObject):
         new_faces, added_face_ids = self._detect_faces_in_savepoint(
             session, img.id, path, embedder
         )
-        self._soft_delete_faces(session, existing_face_ids, existing_embeddings)
 
         try:
+            # Keep stale-face removal inside this try so any failure here also
+            # triggers the rollback/FAISS-restore path below.
+            self._soft_delete_faces(session, existing_face_ids, existing_embeddings)
             self._extract_exif_metadata(path, img.id, session)
             # Persist FAISS first to minimise DB→FAISS mismatch risk.
             self.vector_store.save(self.paths.faiss_path)
@@ -363,6 +365,7 @@ class IndexingTask(QtCore.QObject):
             self.progress.emit(indexed_count, total_images, total_faces, status_msg)
         except Exception:
             logger.warning("Error indexing %s", img.file_path, exc_info=True)
+            session.rollback()
             img.file_hash = "ERROR"
             session.commit()
         return indexed_count, total_faces
