@@ -331,7 +331,14 @@ class IndexingTask(QtCore.QObject):
                 self.vector_store.add(fid, embedding)
             raise
 
-        self._save_face_crops(new_faces, embedder, path)
+        try:
+            self._save_face_crops(new_faces, embedder, path)
+        except Exception:
+            logger.warning(
+                "Face crop saving failed for %s; crops may be missing",
+                path,
+                exc_info=True,
+            )
         return len(new_faces)
 
     def _index_image_safely(
