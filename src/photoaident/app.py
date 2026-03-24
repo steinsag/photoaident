@@ -37,6 +37,10 @@ if TYPE_CHECKING:
 class CorruptIndexError(Exception):
     """Raised at startup when the on-disk FAISS index cannot be read."""
 
+    def __init__(self, faiss_path: object) -> None:
+        self.faiss_path = faiss_path
+        super().__init__(f"corrupt FAISS index: {faiss_path}")
+
 
 def load_translations(app: QtWidgets.QApplication):
     """Load translations for the current system locale."""
@@ -89,12 +93,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 self._vector_store.load(self._paths.faiss_path)
                 faiss_loaded = True
             except (RuntimeError, ValueError, FileNotFoundError) as exc:
-                raise CorruptIndexError(
-                    f"The FAISS index file is corrupt and cannot be loaded.\n\n"
-                    f"File: {self._paths.faiss_path}\n\n"
-                    f"This can happen when the application was interrupted during "
-                    f"indexing. Delete the file and restart to rebuild the index."
-                ) from exc
+                raise CorruptIndexError(self._paths.faiss_path) from exc
         if faiss_loaded:
             if self._vector_store.needs_migration():
                 logger.warning("Migrating FAISS index to database-driven IDs...")

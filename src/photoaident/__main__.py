@@ -166,7 +166,16 @@ def main():  # pragma: no cover
     try:
         window = MainWindow(paths)
     except CorruptIndexError as exc:
-        QtWidgets.QMessageBox.critical(None, APP_NAME, str(exc))
+        msg = QtWidgets.QApplication.translate(
+            "CorruptIndexError",
+            "The FAISS index file is corrupt and cannot be loaded.\n\n"
+            "File: {path}\n\n"
+            "The face index cannot be recovered. "
+            "Restore the data directory from a backup if you have one. "
+            "Without a backup, all person assignments and labels are lost — "
+            "you would need to delete both this file and the database to start over.",
+        ).format(path=exc.faiss_path)
+        QtWidgets.QMessageBox.critical(None, APP_NAME, msg)
         sys.exit(1)
     window.show()
 

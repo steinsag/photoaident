@@ -76,6 +76,21 @@
     </message>
 </context>
 <context>
+    <name>CorruptIndexError</name>
+    <message>
+        <source>The FAISS index file is corrupt and cannot be loaded.
+
+File: {path}
+
+The face index cannot be recovered. Restore the data directory from a backup if you have one. Without a backup, all person assignments and labels are lost — you would need to delete both this file and the database to start over.</source>
+        <translation>The FAISS index file is corrupt and cannot be loaded.
+
+File: {path}
+
+The face index cannot be recovered. Restore the data directory from a backup if you have one. Without a backup, all person assignments and labels are lost — you would need to delete both this file and the database to start over.</translation>
+    </message>
+</context>
+<context>
     <name>DateFilterDialog</name>
     <message>
         <source>Select Time Range</source>
