@@ -53,6 +53,38 @@ def db_engine(tmp_app_paths):
 
 
 @pytest.fixture
+def clean_db(db_engine):
+    """Delete all Image/ImageMetadata rows before a test.
+
+    Not autouse — depend on it explicitly or via session_factory.
+    """
+    from sqlalchemy import delete
+    from sqlalchemy.orm import Session
+
+    with Session(db_engine) as session:
+        # Delete child tables first (FK constraints, even without enforcement)
+        session.execute(delete(ImageMetadata))
+        session.execute(delete(Image))
+        session.commit()
+
+
+@pytest.fixture
+def session_factory(db_engine, clean_db):
+    """Factory for transactional sessions backed by db_engine.
+
+    Requesting this fixture also guarantees a clean DB state (via clean_db).
+    """
+    del clean_db  # injected for DB cleanup side-effect only
+
+    def factory():
+        from sqlalchemy.orm import Session
+
+        return Session(bind=db_engine)
+
+    return factory
+
+
+@pytest.fixture
 def db_session(db_engine):
     """Per-test transactional session — rolls back after each test."""
     from sqlalchemy.orm import Session

@@ -139,37 +139,6 @@ def _setup_image_with_stale_face(tmp_path, session_factory, vector_store, filena
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture
-def session_factory(db_engine):
-    """Factory for transactional sessions."""
-
-    def factory():
-        from sqlalchemy.orm import Session
-
-        return Session(bind=db_engine)
-
-    return factory
-
-
-@pytest.fixture(autouse=True)
-def clean_db(db_engine):
-    """Ensure database is empty before each test."""
-    from sqlalchemy import delete
-    from sqlalchemy.orm import Session
-    from photoaident.db.database import Image, ImageMetadata
-
-    with Session(db_engine) as session:
-        # Delete child tables first (FK constraints, even without enforcement)
-        session.execute(delete(ImageMetadata))
-        session.execute(delete(Image))
-        session.commit()
-
-
-# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
