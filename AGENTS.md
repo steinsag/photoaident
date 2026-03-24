@@ -63,12 +63,11 @@ Canonical key list: `AGE_CLUSTERS` in `db/database.py`. A face matches a person 
 
 ## Agent Checklist (before marking any task done)
 
-1. Run `uv run scripts/verify.py` — runs black, ruff --fix, ty check, lupdate staleness check, and pytest in sequence
-2. Fix all reported issues; never skip verification, even for trivial changes
-3. **If you added a new module or widget without tests:** use the `test-writer` agent to generate them (target: 90%+ coverage)
-4. **If you added, removed, or changed any user-facing string (`self.tr("...")`):**
+1. **Verification runs automatically** — `verify.py` (black, ruff --fix, ty check, lupdate staleness check, pytest) runs when I finish
+2. **If you added a new module or widget without tests:** use the `test-writer` agent to generate them (target: 90%+ coverage)
+3. **If you added, removed, or changed any user-facing string (`self.tr("...")`):**
    - Invoke the `/i18n` skill — it runs lupdate, fills in German translations, and recompiles `.qm` files
-   - `verify.py` will fail if `.ts` files are stale
+   - Verification will catch stale `.ts` files
 
 ---
 

@@ -17,6 +17,22 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run scripts/verify.py",
+            "statusMessage": "Running verification before finishing..."
+          },
+          {
+            "type": "command",
+            "command": "uv run scripts/translate.py",
+            "statusMessage": "Running translate before finishing..."
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {
