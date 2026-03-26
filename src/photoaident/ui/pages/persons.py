@@ -508,40 +508,61 @@ class PersonsPage(QtWidgets.QWidget):
         elif change.kind == _PendingKind.MOVE:
             face.cluster_id = change.new_cluster_id
 
-    def _confirm(self) -> None:
-        if not self._pending and self._pending_name is None:
-            return
-        affected_cluster_ids: set[int] = set()
+    @staticmethod
+    def _affected_cluster_ids_for_change(
+        face: Face, change: _PendingChange
+    ) -> set[int]:
+        """Return the cluster IDs that need their mean recomputed after this change."""
+        ids: set[int] = set()
+        if face.cluster_id is not None:
+            ids.add(face.cluster_id)
+        if change.kind == _PendingKind.MOVE and change.new_cluster_id is not None:
+            ids.add(change.new_cluster_id)
+        return ids
+
+    def _persist_pending_changes(self) -> tuple[bool, set[int]]:
+        """Write all staged changes to the DB in a single transaction.
+
+        Returns ``(name_changed, affected_cluster_ids)`` so the caller can
+        refresh the persons list and recompute cluster means as needed.
+        """
         name_changed = False
+        affected_cluster_ids: set[int] = set()
+
         with self.session_factory() as session:
             if self._pending_name is not None and self._selected_person_id is not None:
                 person = session.get(Person, self._selected_person_id)
                 if person is not None:
                     person.name = self._pending_name
                     name_changed = True
+
             for face_id, change in self._pending.items():
-                face = session.get(Face, face_id)
+                face: Face | None = session.get(Face, face_id)
                 if face is None:
                     continue
-                # Track old cluster before applying change
-                if face.cluster_id is not None:
-                    affected_cluster_ids.add(face.cluster_id)
-                if (
-                    change.kind == _PendingKind.MOVE
-                    and change.new_cluster_id is not None
-                ):
-                    affected_cluster_ids.add(change.new_cluster_id)
+                affected_cluster_ids |= self._affected_cluster_ids_for_change(
+                    face, change
+                )
                 self._apply_face_change(face, change)
+
             session.commit()
+
+        return name_changed, affected_cluster_ids
+
+    def _confirm(self) -> None:
+        if not self._pending and self._pending_name is None:
+            return
+
+        name_changed, affected_cluster_ids = self._persist_pending_changes()
 
         for cluster_id in affected_cluster_ids:
             recompute_cluster_mean(cluster_id, self.session_factory, self.vector_store)
 
         self._pending.clear()
         self._pending_name = None
+
         if name_changed:
             self._load_persons()
-        # Reload the right panel to reflect DB state
         if self._selected_person_id is not None:
             self._load_person(self._selected_person_id)
         else:
