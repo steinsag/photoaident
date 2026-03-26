@@ -206,6 +206,41 @@ Beispiele: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</transla
     </message>
 </context>
 <context>
+    <name>FilterPanel</name>
+    <message>
+        <source>Location</source>
+        <translation>Standort</translation>
+    </message>
+    <message>
+        <source>Click to set location</source>
+        <translation>Klicken, um Standort festzulegen</translation>
+    </message>
+    <message>
+        <source>Clear Location</source>
+        <translation>Standort löschen</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Zeitraum</translation>
+    </message>
+    <message>
+        <source>Click to set time range</source>
+        <translation>Klicken, um Zeitraum festzulegen</translation>
+    </message>
+    <message>
+        <source>Clear Time</source>
+        <translation>Zeitraum löschen</translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation>Person</translation>
+    </message>
+    <message>
+        <source>Type to filter</source>
+        <translation>Zum Filtern tippen</translation>
+    </message>
+</context>
+<context>
     <name>GpuChecker</name>
     <message>
         <source>CPU only</source>
@@ -364,38 +399,6 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <message>
         <source>Select a person, location, or time range to start searching.</source>
         <translation>Person, Standort oder Zeitraum auswählen, um die Suche zu starten.</translation>
-    </message>
-    <message>
-        <source>Location</source>
-        <translation>Standort</translation>
-    </message>
-    <message>
-        <source>Click to set location</source>
-        <translation>Klicken, um Standort festzulegen</translation>
-    </message>
-    <message>
-        <source>Clear Location</source>
-        <translation>Standort löschen</translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation>Zeitraum</translation>
-    </message>
-    <message>
-        <source>Click to set time range</source>
-        <translation>Klicken, um Zeitraum festzulegen</translation>
-    </message>
-    <message>
-        <source>Clear Time</source>
-        <translation>Zeitraum löschen</translation>
-    </message>
-    <message>
-        <source>Person</source>
-        <translation>Person</translation>
-    </message>
-    <message>
-        <source>Type to filter</source>
-        <translation>Zum Filtern tippen</translation>
     </message>
 </context>
 <context>

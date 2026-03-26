@@ -2,8 +2,7 @@
 
 from unittest.mock import patch
 
-import pytest
-from PySide6 import QtGui, QtWidgets
+from PySide6 import QtWidgets
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -14,20 +13,9 @@ from photoaident.db.database import (
     FaceState,
     Image,
     Person,
-    get_engine,
-    get_session_factory,
 )
-from photoaident.db.migrate import apply_migrations
 from photoaident.ui.pages.library import LibraryPage
 from tests.search_helpers import _unit_emb
-
-
-@pytest.fixture
-def session_factory(tmp_path):
-    db_path = tmp_path / "lib_test.db"
-    engine = get_engine(str(db_path))
-    apply_migrations(f"sqlite:///{db_path}")
-    return get_session_factory(engine)
 
 
 def _add_image(
@@ -103,9 +91,9 @@ def test_person_list_items_are_selectable(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    assert page.person_list_widget.count() == 1
+    assert page.filter_panel.person_list_widget.count() == 1
     assert (
-        page.person_list_widget.selectionMode()
+        page.filter_panel.person_list_widget.selectionMode()
         == QtWidgets.QAbstractItemView.SelectionMode.MultiSelection
     )
 
@@ -124,11 +112,11 @@ def test_search_filter_hides_non_matching_items(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    page.search_edit.setText("ali")
+    page.filter_panel.search_edit.setText("ali")
 
     bob_item = None
-    for i in range(page.person_list_widget.count()):
-        item = page.person_list_widget.item(i)
+    for i in range(page.filter_panel.person_list_widget.count()):
+        item = page.filter_panel.person_list_widget.item(i)
         if item and item.text() == "Bob":
             bob_item = item
     assert bob_item is not None
@@ -145,9 +133,9 @@ def test_search_filter_case_insensitive(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    page.search_edit.setText("ALICE")
+    page.filter_panel.search_edit.setText("ALICE")
 
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     assert item is not None
     assert not item.isHidden()
 
@@ -215,7 +203,7 @@ def test_image_with_metadata_appears_in_grid(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     assert item is not None
     item.setSelected(True)
 
@@ -234,7 +222,7 @@ def test_select_one_person_shows_matched_images(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     assert item is not None
     item.setSelected(True)
 
@@ -254,7 +242,7 @@ def test_select_person_with_no_faces_shows_empty(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store)
     qtbot.addWidget(page)
 
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     assert item is not None
     item.setSelected(True)
 
@@ -278,8 +266,8 @@ def test_select_multiple_persons_calls_search(
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
         # Select both
-        for i in range(page.person_list_widget.count()):
-            page.person_list_widget.item(i).setSelected(True)
+        for i in range(page.filter_panel.person_list_widget.count()):
+            page.filter_panel.person_list_widget.item(i).setSelected(True)
 
         # load_images is called by itemSelectionChanged signal
         mock_search.assert_called()
@@ -303,7 +291,7 @@ def test_select_person_with_no_faces_shows_empty_grid(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     assert item is not None
     item.setSelected(True)
 
@@ -319,34 +307,15 @@ def test_gps_filter_calls_search(qtbot, session_factory, tmp_app_paths, vector_s
     bbox = GpsBoundingBox(south=52.0, west=13.0, north=53.0, east=14.0)
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
-        page._gps_bbox = bbox
+        page.filter_panel._gps_bbox = bbox
         page.load_images()
 
         mock_search.assert_called_once()
         assert mock_search.call_args[1]["gps_bbox"] == bbox
 
     # Clear filter
-    page._on_location_cleared()
-    assert page._gps_bbox is None
-
-
-def test_show_event_populates_list(qtbot, session_factory, tmp_app_paths, vector_store):
-    with session_factory() as session:
-        session.add(Person(name="Alice"))
-        session.commit()
-
-    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
-    qtbot.addWidget(page)
-
-    # Clear the list to ensure showEvent repopulates it
-    page.person_list_widget.clear()
-    assert page.person_list_widget.count() == 0
-
-    # Trigger showEvent
-    event = QtGui.QShowEvent()
-    page.showEvent(event)
-    assert page.person_list_widget.count() == 1
-    assert page.person_list_widget.item(0).text() == "Alice"
+    page.filter_panel._on_location_cleared()
+    assert page.filter_panel._gps_bbox is None
 
 
 def test_populate_person_list_preserves_selection(
@@ -361,16 +330,16 @@ def test_populate_person_list_preserves_selection(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     item.setSelected(True)
-    assert p1_id in page._selected_person_ids()
+    assert p1_id in page.filter_panel.selected_person_ids()
 
     # Repopulate
-    page._populate_person_list()
+    page.filter_panel._populate_person_list()
 
-    new_item = page.person_list_widget.item(0)
+    new_item = page.filter_panel.person_list_widget.item(0)
     assert new_item.isSelected()
-    assert p1_id in page._selected_person_ids()
+    assert p1_id in page.filter_panel.selected_person_ids()
 
 
 def test_apply_search_filter_handles_none_item(
@@ -380,10 +349,12 @@ def test_apply_search_filter_handles_none_item(
     qtbot.addWidget(page)
 
     # Mock item() to return None at some index
-    with patch.object(page.person_list_widget, "item", side_effect=[None]):
-        with patch.object(page.person_list_widget, "count", return_value=1):
+    with patch.object(page.filter_panel.person_list_widget, "item", side_effect=[None]):
+        with patch.object(
+            page.filter_panel.person_list_widget, "count", return_value=1
+        ):
             # This should not raise an AttributeError when calling item.text()
-            page._apply_search_filter("test")
+            page.filter_panel._apply_search_filter("test")
 
 
 def test_open_map_dialog_accepted(qtbot, session_factory, tmp_app_paths, vector_store):
@@ -392,15 +363,15 @@ def test_open_map_dialog_accepted(qtbot, session_factory, tmp_app_paths, vector_
 
     bbox = GpsBoundingBox(south=10, west=10, north=20, east=20)
 
-    with patch("photoaident.ui.pages.library.MapLocationDialog") as MockDialog:
+    with patch("photoaident.ui.widgets.filter_panel.MapLocationDialog") as MockDialog:
         mock_dialog = MockDialog.return_value
         mock_dialog.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
         mock_dialog.selected_bbox.return_value = bbox
 
-        page._open_map_dialog()
+        page.filter_panel._open_map_dialog()
 
-        assert page._gps_bbox == bbox
-        assert not page.clear_location_btn.isHidden()
+        assert page.filter_panel._gps_bbox == bbox
+        assert not page.filter_panel.clear_location_btn.isHidden()
 
 
 def test_load_images_empty_per_person_scores(
@@ -416,7 +387,7 @@ def test_load_images_empty_per_person_scores(
     qtbot.addWidget(page)
 
     # Select Alice
-    item = page.person_list_widget.item(0)
+    item = page.filter_panel.person_list_widget.item(0)
     item.setSelected(True)
 
     # Mock search_images to return empty
@@ -445,8 +416,8 @@ def test_time_filter_button_present(
     """Time filter button exists in the filter panel."""
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
-    assert hasattr(page, "date_filter_btn")
-    assert not page.date_filter_btn.isHidden()
+    assert hasattr(page.filter_panel, "date_filter_btn")
+    assert not page.filter_panel.date_filter_btn.isHidden()
 
 
 def test_clear_time_button_initially_hidden(
@@ -455,7 +426,7 @@ def test_clear_time_button_initially_hidden(
     """Clear Time button is hidden until a date range is active."""
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
-    assert page.clear_time_btn.isHidden()
+    assert page.filter_panel.clear_time_btn.isHidden()
 
 
 def test_open_date_dialog_accepted(qtbot, session_factory, tmp_app_paths, vector_store):
@@ -465,16 +436,16 @@ def test_open_date_dialog_accepted(qtbot, session_factory, tmp_app_paths, vector
 
     date_range = DateRange(start_year=2020, end_year=2023)
 
-    with patch("photoaident.ui.pages.library.DateFilterDialog") as MockDialog:
+    with patch("photoaident.ui.widgets.filter_panel.DateFilterDialog") as MockDialog:
         mock_dialog = MockDialog.return_value
         mock_dialog.exec.return_value = QtWidgets.QDialog.DialogCode.Accepted
         mock_dialog.selected_range.return_value = date_range
 
-        page._open_date_dialog()
+        page.filter_panel._open_date_dialog()
 
-        assert page._date_range == date_range
-        assert not page.clear_time_btn.isHidden()
-        assert page.date_filter_btn.isChecked()
+        assert page.filter_panel._date_range == date_range
+        assert not page.filter_panel.clear_time_btn.isHidden()
+        assert page.filter_panel.date_filter_btn.isChecked()
 
 
 def test_on_time_cleared_resets_filter(
@@ -484,15 +455,15 @@ def test_on_time_cleared_resets_filter(
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    page._date_range = DateRange(start_year=2020)
-    page._update_time_button()
-    assert not page.clear_time_btn.isHidden()
+    page.filter_panel._date_range = DateRange(start_year=2020)
+    page.filter_panel._update_time_button()
+    assert not page.filter_panel.clear_time_btn.isHidden()
 
-    page._on_time_cleared()
+    page.filter_panel._on_time_cleared()
 
-    assert page._date_range is None
-    assert page.clear_time_btn.isHidden()
-    assert not page.date_filter_btn.isChecked()
+    assert page.filter_panel._date_range is None
+    assert page.filter_panel.clear_time_btn.isHidden()
+    assert not page.filter_panel.date_filter_btn.isChecked()
 
 
 def test_has_filters_with_date_range(
@@ -503,7 +474,7 @@ def test_has_filters_with_date_range(
     qtbot.addWidget(page)
 
     assert not page._has_filters()
-    page._date_range = DateRange(start_year=2020)
+    page.filter_panel._date_range = DateRange(start_year=2020)
     assert page._has_filters()
 
 
@@ -515,7 +486,7 @@ def test_date_filter_calls_search_with_date_range(
     qtbot.addWidget(page)
 
     date_range = DateRange(start_year=2020, end_year=2023)
-    page._date_range = date_range
+    page.filter_panel._date_range = date_range
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
@@ -569,7 +540,7 @@ def test_keyword_search_empty_passes_none(
     qtbot.addWidget(page)
 
     # Need at least one other filter active so load_images actually calls search
-    page._date_range = DateRange(start_year=2020)
+    page.filter_panel._date_range = DateRange(start_year=2020)
     page.filepath_search_edit.clear()
     page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 

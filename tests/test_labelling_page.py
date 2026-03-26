@@ -17,26 +17,10 @@ from photoaident.db.database import (
     ImageMetadata,
     Person,
     TakenAtSource,
-    get_engine,
-    get_session_factory,
 )
-from photoaident.db.migrate import apply_migrations
 from photoaident.db.vector_store import VectorStore
 from photoaident.ui.pages.labelling import LabellingPage
 from tests.search_helpers import _ones_norm_emb, _unit_emb, _zero_emb
-
-
-@pytest.fixture
-def session_factory(tmp_path):
-    db_path = tmp_path / "test.db"
-    engine = get_engine(str(db_path))
-    apply_migrations(f"sqlite:///{db_path}")
-    return get_session_factory(engine)
-
-
-@pytest.fixture
-def vector_store():
-    return VectorStore()
 
 
 def _make_jpeg(path: Path) -> None:
