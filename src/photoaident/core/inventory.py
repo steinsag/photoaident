@@ -26,7 +26,7 @@ class InventoryTask(QtCore.QObject):
         self.session_factory = session_factory
         self._is_cancelled = False
 
-    def cancel(self):
+    def cancel(self) -> None:
         self._is_cancelled = True
 
     def _scan_image_files(self, extensions: set) -> list[Path] | None:
@@ -67,7 +67,7 @@ class InventoryTask(QtCore.QObject):
         session.add(img)
         return True
 
-    def run(self):
+    def run(self) -> None:
         """Perform the scan and inventory."""
         if not self.root_path.exists() or not self.root_path.is_dir():
             self.finished.emit(0)

@@ -4,10 +4,9 @@ from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
-from photoaident.db.cluster_means import backfill_cluster_means
-from photoaident.db.faiss_migration import rebuild_faiss_with_face_ids
 from photoaident.core.gpu_checker import GpuChecker
 from photoaident.core.indexing_controller import IndexingController
+from photoaident.db.cluster_means import backfill_cluster_means
 from photoaident.db.database import (
     get_counts,
     clear_database,
@@ -15,11 +14,10 @@ from photoaident.db.database import (
     get_engine,
     get_session_factory,
 )
+from photoaident.db.faiss_migration import rebuild_faiss_with_face_ids
 from photoaident.db.vector_store import VectorStore
 from photoaident.settings import Settings
-from photoaident.utils.resource_path import get_resource_path
 from photoaident.ui.about_dialog import AboutDialog
-from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.ui.onboarding_dialog import OnboardingDialog
 from photoaident.ui.pages.browse import BrowsePage
 from photoaident.ui.pages.labelling import LabellingPage
@@ -27,6 +25,8 @@ from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.pages.persons import PersonsPage
 from photoaident.ui.preferences_dialog import PreferencesDialog
 from photoaident.ui.widgets.progress_dialog import ProgressDialog
+from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
+from photoaident.utils.resource_path import get_resource_path
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ class CorruptIndexError(Exception):
         super().__init__(f"corrupt FAISS index: {faiss_path}")
 
 
-def load_translations(app: QtWidgets.QApplication):
+def load_translations(app: QtWidgets.QApplication) -> None:
     """Load translations for the current system locale."""
     locale = QtCore.QLocale.system().name()  # e.g. "en_US", "de_DE"
 
@@ -384,7 +384,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._stacked_pages.setCurrentIndex(3)
         self._labelling_page.refresh(priority_image_id=priority_image_id)
 
-    def _create_menus(self):
+    def _create_menus(self) -> None:
         menubar = self.menuBar()
 
         # File menu
@@ -409,12 +409,12 @@ class MainWindow(QtWidgets.QMainWindow):
         about_action.triggered.connect(self._show_about)
         help_menu.addAction(about_action)
 
-    def _show_about(self):
+    def _show_about(self) -> None:
         """Show the About dialog."""
         dialog = AboutDialog(self)
         dialog.exec()
 
-    def _show_preferences(self):
+    def _show_preferences(self) -> None:
         """Show the preferences dialog and save changes if accepted."""
         image_count, face_count = get_counts(self._session_factory)
         old_path = self._settings.collection_path
@@ -503,7 +503,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._indexing_controller.shutdown(self._paths.faiss_path)
         event.accept()
 
-    def _set_app_icon(self):
+    def _set_app_icon(self) -> None:
         icon = QtGui.QIcon()
         resolutions = ["512", "256", "128", "64", "48"]
         for res in resolutions:
