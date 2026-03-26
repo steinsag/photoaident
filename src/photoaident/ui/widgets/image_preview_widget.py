@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -7,9 +6,9 @@ from PySide6 import QtCore, QtGui, QtWidgets
 class ImagePreviewWidget(QtWidgets.QWidget):
     """Displays a full photo with a highlighted face bounding box."""
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
-        self._original_pixmap: Optional[QtGui.QPixmap] = None
+        self._original_pixmap: QtGui.QPixmap | None = None
         self._resize_timer = QtCore.QTimer(self)
         self._resize_timer.setSingleShot(True)
         self._resize_timer.setInterval(10)

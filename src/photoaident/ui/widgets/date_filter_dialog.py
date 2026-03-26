@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from PySide6 import QtWidgets
 from PySide6.QtCore import QCoreApplication, QLocale
@@ -33,13 +33,13 @@ class DateFilterDialog(QtWidgets.QDialog):
     def __init__(
         self,
         session_factory: "sessionmaker",
-        initial_range: Optional[DateRange] = None,
-        parent: Optional[QtWidgets.QWidget] = None,
+        initial_range: DateRange | None = None,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Select Time Range"))
         self.setMinimumWidth(_DIALOG_MIN_WIDTH)
-        self._selected_range: Optional[DateRange] = initial_range
+        self._selected_range: DateRange | None = initial_range
 
         min_year, max_year = self._query_year_range(session_factory)
         self._setup_ui(initial_range, min_year, max_year)
@@ -62,7 +62,7 @@ class DateFilterDialog(QtWidgets.QDialog):
 
     def _setup_ui(
         self,
-        initial_range: Optional[DateRange],
+        initial_range: DateRange | None,
         min_year: int,
         max_year: int,
     ) -> None:
@@ -165,7 +165,7 @@ class DateFilterDialog(QtWidgets.QDialog):
         self._update_month_enabled_state(self._end_year_combo, self._end_month_combo)
 
     @staticmethod
-    def _set_year_combo(combo: QtWidgets.QComboBox, year: Optional[int]) -> None:
+    def _set_year_combo(combo: QtWidgets.QComboBox, year: int | None) -> None:
         """Select a year in the combo, or select '(not set)' if year is None."""
         if year is None:
             combo.setCurrentIndex(0)
@@ -174,7 +174,7 @@ class DateFilterDialog(QtWidgets.QDialog):
         combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     @staticmethod
-    def _get_year_from_combo(combo: QtWidgets.QComboBox) -> Optional[int]:
+    def _get_year_from_combo(combo: QtWidgets.QComboBox) -> int | None:
         """Return the selected year, or None if '(not set)' is selected."""
         if combo.currentIndex() == 0:
             return None
@@ -230,7 +230,7 @@ class DateFilterDialog(QtWidgets.QDialog):
             self._selected_range = None
         self.accept()
 
-    def selected_range(self) -> Optional[DateRange]:
+    def selected_range(self) -> DateRange | None:
         """Return the selected DateRange, or None if no range was set."""
         return self._selected_range
 

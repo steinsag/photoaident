@@ -1,7 +1,6 @@
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
 
 from PySide6 import QtCore
 from sqlalchemy import select
@@ -30,13 +29,13 @@ class InventoryTask(QtCore.QObject):
     def cancel(self):
         self._is_cancelled = True
 
-    def _scan_image_files(self, extensions: set) -> Optional[List[Path]]:
+    def _scan_image_files(self, extensions: set) -> list[Path] | None:
         """Walk root_path for matching files. Returns None if cancelled.
 
         Follows symlinks but skips directories already visited (by real path)
         to prevent infinite loops from circular symlinks.
         """
-        image_paths: List[Path] = []
+        image_paths: list[Path] = []
         visited: set[str] = set()
         for root, dirs, files in os.walk(self.root_path, followlinks=True):
             if self._is_cancelled:

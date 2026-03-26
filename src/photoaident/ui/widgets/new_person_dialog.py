@@ -1,4 +1,4 @@
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from PySide6 import QtWidgets
 
@@ -20,11 +20,11 @@ class NewPersonDialog(QtWidgets.QDialog):
     def __init__(
         self,
         session_factory: "sessionmaker",
-        parent: Optional[QtWidgets.QWidget] = None,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.session_factory = session_factory
-        self._created_person_id: Optional[int] = None
+        self._created_person_id: int | None = None
         self.setWindowTitle(self.tr("New Person"))
         self._setup_ui()
 
@@ -80,6 +80,6 @@ class NewPersonDialog(QtWidgets.QDialog):
         self._created_person_id = self._persist_new_person(name)
         self.accept()
 
-    def created_person_id(self) -> Optional[int]:
+    def created_person_id(self) -> int | None:
         """Return the new person's DB id, or None if not accepted."""
         return self._created_person_id

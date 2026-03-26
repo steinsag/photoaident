@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets
 
@@ -7,14 +6,14 @@ from PySide6 import QtCore, QtGui, QtWidgets
 class FaceCropWidget(QtWidgets.QLabel):
     """Displays a face crop thumbnail at a fixed 300×300 size."""
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.setWordWrap(True)
         self.setFixedSize(300, 300)
         self.setStyleSheet("background-color: #aaa; border: 1px solid #888;")
 
-    def load(self, crop_path: Optional[Path]) -> None:
+    def load(self, crop_path: Path | None) -> None:
         """Show a scaled crop pixmap, or placeholder text if unavailable."""
         if crop_path is not None and crop_path.exists():
             pix = QtGui.QPixmap(str(crop_path))

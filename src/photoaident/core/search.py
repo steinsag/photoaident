@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, select
 
@@ -21,7 +21,7 @@ from photoaident.core.search_filters import (
 from photoaident.core.search_person import (
     _SQLITE_IN_LIMIT,
     _collect_per_person_scores,
-    _find_images_by_person,  # noqa: F401 — re-exported for test imports
+    # noqa: F401 — re-exported for test imports
     _intersect_and_rank,
 )
 from photoaident.db.database import Image
@@ -46,8 +46,8 @@ def search_images(
     session_factory: "sessionmaker",
     vector_store: "VectorStore",
     person_ids: list[int],
-    gps_bbox: Optional[GpsBoundingBox],
-    date_range: Optional[DateRange],
+    gps_bbox: GpsBoundingBox | None,
+    date_range: DateRange | None,
     filename_query: str | None = None,
 ) -> list[SearchResult]:
     """Search for images based on person, GPS, date, and/or filename filters.
@@ -106,8 +106,8 @@ def search_images(
 
 def _search_by_metadata_only(
     session_factory: "sessionmaker",
-    gps_bbox: Optional[GpsBoundingBox],
-    date_range: Optional[DateRange],
+    gps_bbox: GpsBoundingBox | None,
+    date_range: DateRange | None,
     filename_query: str | None,
     thumbs_dir: Path,
 ) -> list[SearchResult]:
