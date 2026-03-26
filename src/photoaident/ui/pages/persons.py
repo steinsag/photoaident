@@ -154,6 +154,8 @@ class PersonsPage(QtWidgets.QWidget):
         self.vector_store = vector_store
         self._selected_person_id: Optional[int] = None
         self._pending: dict[int, _PendingChange] = {}
+        self._pending_name: Optional[str] = None
+        self._current_person_name: Optional[str] = None
         self._face_widgets: dict[int, ReferenceFaceWidget] = {}
         self._setup_ui()
 
@@ -186,13 +188,14 @@ class PersonsPage(QtWidgets.QWidget):
         right_layout = QtWidgets.QVBoxLayout(right)
         right_layout.setContentsMargins(8, 8, 8, 8)
 
-        self._person_name_label = QtWidgets.QLabel()
-        font = self._person_name_label.font()
+        self._person_name_edit = QtWidgets.QLineEdit()
+        font = self._person_name_edit.font()
         font.setBold(True)
         font.setPointSize(font.pointSize() + 2)
-        self._person_name_label.setFont(font)
-        self._person_name_label.setVisible(False)
-        right_layout.addWidget(self._person_name_label)
+        self._person_name_edit.setFont(font)
+        self._person_name_edit.setVisible(False)
+        self._person_name_edit.textEdited.connect(self._on_name_edited)
+        right_layout.addWidget(self._person_name_edit)
 
         # Placeholder shown when no person is selected
         self._placeholder_label = QtWidgets.QLabel(
@@ -311,10 +314,12 @@ class PersonsPage(QtWidgets.QWidget):
         self._load_person(person_id)
 
     def _clear_right_panel(self) -> None:
-        self._person_name_label.setVisible(False)
+        self._person_name_edit.setVisible(False)
         self._scroll.setVisible(False)
         self._placeholder_label.setVisible(True)
         self._pending.clear()
+        self._pending_name = None
+        self._current_person_name = None
         self._face_widgets.clear()
         self._update_action_buttons()
 
@@ -382,8 +387,10 @@ class PersonsPage(QtWidgets.QWidget):
                 return
             person_name, cluster_data = result
 
-        self._person_name_label.setText(person_name)
-        self._person_name_label.setVisible(True)
+        self._current_person_name = person_name
+        self._pending_name = None
+        self._person_name_edit.setText(person_name)
+        self._person_name_edit.setVisible(True)
         self._placeholder_label.setVisible(False)
         self._scroll.setVisible(True)
 
@@ -468,13 +475,25 @@ class PersonsPage(QtWidgets.QWidget):
 
         self._update_action_buttons()
 
+    def _on_name_edited(self, text: str) -> None:
+        stripped = text.strip()
+        if stripped and stripped != self._current_person_name:
+            self._pending_name = stripped
+        else:
+            self._pending_name = None
+        self._update_action_buttons()
+
     def _update_action_buttons(self) -> None:
         n = len(self._pending)
-        has_pending = n > 0
+        name_change = 1 if self._pending_name is not None else 0
+        total = n + name_change
+        has_pending = total > 0
         self._confirm_btn.setEnabled(has_pending)
         self._cancel_btn.setEnabled(has_pending)
         if has_pending:
-            self._changes_label.setText(self.tr("{n} pending change(s)").format(n=n))
+            self._changes_label.setText(
+                self.tr("{n} pending change(s)").format(n=total)
+            )
         else:
             self._changes_label.setText("")
 
@@ -490,10 +509,16 @@ class PersonsPage(QtWidgets.QWidget):
             face.cluster_id = change.new_cluster_id
 
     def _confirm(self) -> None:
-        if not self._pending:
+        if not self._pending and self._pending_name is None:
             return
         affected_cluster_ids: set[int] = set()
+        name_changed = False
         with self.session_factory() as session:
+            if self._pending_name is not None and self._selected_person_id is not None:
+                person = session.get(Person, self._selected_person_id)
+                if person is not None:
+                    person.name = self._pending_name
+                    name_changed = True
             for face_id, change in self._pending.items():
                 face = session.get(Face, face_id)
                 if face is None:
@@ -513,6 +538,9 @@ class PersonsPage(QtWidgets.QWidget):
             recompute_cluster_mean(cluster_id, self.session_factory, self.vector_store)
 
         self._pending.clear()
+        self._pending_name = None
+        if name_changed:
+            self._load_persons()
         # Reload the right panel to reflect DB state
         if self._selected_person_id is not None:
             self._load_person(self._selected_person_id)
@@ -523,6 +551,9 @@ class PersonsPage(QtWidgets.QWidget):
         for widget in self._face_widgets.values():
             widget.set_pending(None)
         self._pending.clear()
+        self._pending_name = None
+        if self._current_person_name is not None:
+            self._person_name_edit.setText(self._current_person_name)
         self._update_action_buttons()
 
     def _age_display_labels(self) -> dict[str, str]:
