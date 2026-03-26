@@ -1,6 +1,5 @@
 import logging
 from pathlib import Path
-from typing import Optional
 
 from PySide6 import QtCore, QtGui, QtWidgets, QtQuickWidgets
 
@@ -23,20 +22,20 @@ class MapLocationDialog(QtWidgets.QDialog):
     def __init__(
         self,
         paths: AppPaths,
-        initial_bbox: Optional[GpsBoundingBox] = None,
-        parent: Optional[QtWidgets.QWidget] = None,
+        initial_bbox: GpsBoundingBox | None = None,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setWindowTitle(self.tr("Select Location"))
         self.resize(1024, 768)
         restore_widget_geometry(self, paths.window_state_file)
 
-        self._selected_bbox: Optional[GpsBoundingBox] = None
+        self._selected_bbox: GpsBoundingBox | None = None
         self._paths = paths
 
         self._setup_ui(initial_bbox)
 
-    def _setup_ui(self, initial_bbox: Optional[GpsBoundingBox] = None) -> None:
+    def _setup_ui(self, initial_bbox: GpsBoundingBox | None = None) -> None:
         layout = QtWidgets.QVBoxLayout(self)
         self._setup_instruction_label(layout)
         self._setup_map_widget(layout, initial_bbox)
@@ -53,7 +52,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         layout.addWidget(instruction)
 
     def _setup_map_widget(
-        self, layout: QtWidgets.QVBoxLayout, initial_bbox: Optional[GpsBoundingBox]
+        self, layout: QtWidgets.QVBoxLayout, initial_bbox: GpsBoundingBox | None
     ) -> None:
         # Setup QQuickWidget for the QML map
         self._quick_widget = QtQuickWidgets.QQuickWidget()
@@ -179,7 +178,7 @@ class MapLocationDialog(QtWidgets.QDialog):
     @staticmethod
     def _build_bbox(
         south: float, west: float, north: float, east: float
-    ) -> Optional[GpsBoundingBox]:
+    ) -> GpsBoundingBox | None:
         """Build a GpsBoundingBox from raw coordinate values."""
         try:
             return GpsBoundingBox(
@@ -191,7 +190,7 @@ class MapLocationDialog(QtWidgets.QDialog):
         except (TypeError, ValueError):
             return None
 
-    def _extract_bbox(self) -> Optional[GpsBoundingBox]:
+    def _extract_bbox(self) -> GpsBoundingBox | None:
         """Read current bbox values from the QML root object."""
         root_obj = self._quick_widget.rootObject()
         if not root_obj:
@@ -212,6 +211,6 @@ class MapLocationDialog(QtWidgets.QDialog):
         self._selected_bbox = self._extract_bbox()
         self.accept()
 
-    def selected_bbox(self) -> Optional[GpsBoundingBox]:
+    def selected_bbox(self) -> GpsBoundingBox | None:
         """Return the selected GpsBoundingBox, or None if canceled."""
         return self._selected_bbox

@@ -3,10 +3,11 @@
 from unittest.mock import patch
 
 import photoaident.core.search as search_module
-from photoaident.core.search import _find_images_by_person, search_images
+from photoaident.core.search import search_images
 from photoaident.core.search_person import (
     _intersect_and_rank,
     resolve_faces_to_persons,
+    _find_images_by_person,
 )
 from photoaident.db.database import (
     EmbeddingCluster,

@@ -6,6 +6,7 @@ without ruff flagging the imports as unused.
 
 from __future__ import annotations
 
+import itertools
 from datetime import datetime
 
 import numpy as np
@@ -27,14 +28,12 @@ _rng = np.random.default_rng(seed=42)
 _DIM = VectorStore.DEFAULT_DIMENSION
 _DTYPE = VectorStore.EMBEDDING_DTYPE
 
-_path_counter = 0
+_path_counter = itertools.count(1)
 
 
 def _next_path(prefix: str) -> str:
     """Return a unique file path for test images."""
-    global _path_counter
-    _path_counter += 1
-    return f"/test/{prefix}_{_path_counter}.jpg"
+    return f"/test/{prefix}_{next(_path_counter)}.jpg"
 
 
 def _rand_norm_emb() -> np.ndarray:

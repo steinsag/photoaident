@@ -349,29 +349,18 @@ def test_browse_page_permission_error_returns_empty(qtbot, monkeypatch, tmp_app_
 
 
 # ---------------------------------------------------------------------------
-# 13. _on_navigate_to_labelling forwards call to MainWindow (lines 220–224)
+# 13. navigate_to_labelling signal is emitted when grid requests navigation
 # ---------------------------------------------------------------------------
 
 
-def test_browse_page_navigate_to_labelling(qtbot, monkeypatch, tmp_app_paths):
-    """navigate_to_labelling signal causes go_to_labelling() on the MainWindow."""
-    import photoaident.app as app_module
-
-    calls: list[int] = []
-
-    class FakeMainWindow(QtWidgets.QMainWindow):
-        def go_to_labelling(self, priority_image_id: int) -> None:
-            calls.append(priority_image_id)
-
-    fake_win = FakeMainWindow()
-    qtbot.addWidget(fake_win)
-
+def test_browse_page_navigate_to_labelling_signal(qtbot, tmp_app_paths):
+    """BrowsePage.navigate_to_labelling signal is emitted when the grid emits it."""
     page = _make_browse_page(tmp_app_paths, qtbot)
-    monkeypatch.setattr(page, "window", lambda: fake_win)
-    monkeypatch.setattr(app_module, "MainWindow", FakeMainWindow)
 
-    page._on_navigate_to_labelling(42)
-    assert calls == [42]
+    with qtbot.waitSignal(page.navigate_to_labelling, timeout=1000) as blocker:
+        page.grid.navigate_to_labelling.emit(42)
+
+    assert blocker.args == [42]
 
 
 # ===========================================================================

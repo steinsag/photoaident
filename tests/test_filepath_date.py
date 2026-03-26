@@ -119,83 +119,34 @@ class TestCompilePatternLiteralEscaping:
 # ===========================================================================
 
 
-class TestCompilePatternInvalid:
-    def test_empty_string_raises_pattern_validation_error(self):
-        """compile_pattern('') raises PatternValidationError with EMPTY code."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("")
-        assert exc_info.value.code is PatternErrorCode.EMPTY
+@pytest.mark.parametrize(
+    "pattern_str, expected_code",
+    [
+        ("", PatternErrorCode.EMPTY),
+        ("{MM}-{DD}", PatternErrorCode.YEAR_MISSING),
+        ("{YYYY}{YYYY}{M}{D}", PatternErrorCode.YEAR_DUPLICATE),
+        ("{YYYY}-{MM}-{M}-{DD}", PatternErrorCode.MONTH_CONFLICT),
+        ("{YYYY}-{DD}", PatternErrorCode.MONTH_MISSING),
+        ("{YYYY}{MM}{MM}{D}", PatternErrorCode.MONTH_MM_DUPLICATE),
+        ("{YYYY}{M}{M}{DD}", PatternErrorCode.MONTH_M_DUPLICATE),
+        ("{YYYY}-{MM}-{DD}-{D}", PatternErrorCode.DAY_CONFLICT),
+        ("{YYYY}-{MM}", PatternErrorCode.DAY_MISSING),
+        ("{YYYY}{M}{DD}{DD}", PatternErrorCode.DAY_DD_DUPLICATE),
+        ("{YYYY}{MM}{D}{D}", PatternErrorCode.DAY_D_DUPLICATE),
+        ("{YYYY}", PatternErrorCode.MONTH_MISSING),
+    ],
+)
+def test_compile_pattern_invalid(pattern_str: str, expected_code: PatternErrorCode):
+    """compile_pattern raises PatternValidationError with the expected error code."""
+    with pytest.raises(PatternValidationError) as exc_info:
+        compile_pattern(pattern_str)
+    assert exc_info.value.code is expected_code
 
-    def test_missing_yyyy_raises_year_missing_code(self):
-        """compile_pattern without {YYYY} raises YEAR_MISSING."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{MM}-{DD}")
-        assert exc_info.value.code is PatternErrorCode.YEAR_MISSING
 
-    def test_duplicate_yyyy_raises_year_duplicate_code(self):
-        """compile_pattern with two {YYYY} raises YEAR_DUPLICATE."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}{YYYY}{M}{D}")
-        assert exc_info.value.code is PatternErrorCode.YEAR_DUPLICATE
-
-    def test_both_mm_and_m_raises_month_conflict_code(self):
-        """compile_pattern with both {MM} and {M} raises MONTH_CONFLICT."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}-{MM}-{M}-{DD}")
-        assert exc_info.value.code is PatternErrorCode.MONTH_CONFLICT
-
-    def test_missing_month_placeholder_raises_month_missing_code(self):
-        """compile_pattern without any month placeholder raises MONTH_MISSING."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}-{DD}")
-        assert exc_info.value.code is PatternErrorCode.MONTH_MISSING
-
-    def test_duplicate_mm_raises_month_mm_duplicate_code(self):
-        """compile_pattern with two {MM} raises MONTH_MM_DUPLICATE."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}{MM}{MM}{D}")
-        assert exc_info.value.code is PatternErrorCode.MONTH_MM_DUPLICATE
-
-    def test_duplicate_m_raises_month_m_duplicate_code(self):
-        """compile_pattern with two {M} raises MONTH_M_DUPLICATE."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}{M}{M}{DD}")
-        assert exc_info.value.code is PatternErrorCode.MONTH_M_DUPLICATE
-
-    def test_both_dd_and_d_raises_day_conflict_code(self):
-        """compile_pattern with both {DD} and {D} raises DAY_CONFLICT."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}-{MM}-{DD}-{D}")
-        assert exc_info.value.code is PatternErrorCode.DAY_CONFLICT
-
-    def test_missing_day_placeholder_raises_day_missing_code(self):
-        """compile_pattern without any day placeholder raises DAY_MISSING."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}-{MM}")
-        assert exc_info.value.code is PatternErrorCode.DAY_MISSING
-
-    def test_duplicate_dd_raises_day_dd_duplicate_code(self):
-        """compile_pattern with two {DD} raises DAY_DD_DUPLICATE."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}{M}{DD}{DD}")
-        assert exc_info.value.code is PatternErrorCode.DAY_DD_DUPLICATE
-
-    def test_duplicate_d_raises_day_d_duplicate_code(self):
-        """compile_pattern with two {D} raises DAY_D_DUPLICATE."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}{MM}{D}{D}")
-        assert exc_info.value.code is PatternErrorCode.DAY_D_DUPLICATE
-
-    def test_only_yyyy_raises_month_missing_code(self):
-        """compile_pattern with only {YYYY} raises MONTH_MISSING."""
-        with pytest.raises(PatternValidationError) as exc_info:
-            compile_pattern("{YYYY}")
-        assert exc_info.value.code is PatternErrorCode.MONTH_MISSING
-
-    def test_pattern_validation_error_is_value_error(self):
-        """PatternValidationError is a subclass of ValueError."""
-        with pytest.raises(ValueError):
-            compile_pattern("")
+def test_compile_pattern_invalid_is_value_error():
+    """PatternValidationError is a subclass of ValueError."""
+    with pytest.raises(ValueError):
+        compile_pattern("")
 
 
 # ===========================================================================
@@ -270,42 +221,21 @@ class TestExtractDateFromPathHappyPath:
 # ===========================================================================
 
 
-class TestExtractDateFromPathInvalidDates:
-    def test_february_30_returns_none(self):
-        """Feb 30 does not exist and returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2026-02-30.jpg"), pattern)
-        assert result is None
-
-    def test_november_31_returns_none(self):
-        """Nov 31 does not exist and returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2026-11-31.jpg"), pattern)
-        assert result is None
-
-    def test_month_13_returns_none(self):
-        """Month 13 is invalid and returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2026-13-01.jpg"), pattern)
-        assert result is None
-
-    def test_day_zero_returns_none(self):
-        """Day 0 is invalid and returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2026-01-00.jpg"), pattern)
-        assert result is None
-
-    def test_month_zero_returns_none(self):
-        """Month 0 is invalid and returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2026-00-15.jpg"), pattern)
-        assert result is None
-
-    def test_april_31_returns_none(self):
-        """Apr 31 does not exist and returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2025-04-31.jpg"), pattern)
-        assert result is None
+@pytest.mark.parametrize(
+    "path_str",
+    [
+        "/pics/2026-02-30.jpg",  # Feb 30 does not exist
+        "/pics/2026-11-31.jpg",  # Nov 31 does not exist
+        "/pics/2026-13-01.jpg",  # month 13 is invalid
+        "/pics/2026-01-00.jpg",  # day 0 is invalid
+        "/pics/2026-00-15.jpg",  # month 0 is invalid
+        "/pics/2025-04-31.jpg",  # Apr 31 does not exist
+    ],
+)
+def test_extract_date_from_path_invalid_dates_return_none(path_str: str):
+    """Paths containing impossible calendar dates return None."""
+    pattern = compile_pattern("{YYYY}-{MM}-{DD}")
+    assert extract_date_from_path(Path(path_str), pattern) is None
 
 
 # ===========================================================================
@@ -313,30 +243,19 @@ class TestExtractDateFromPathInvalidDates:
 # ===========================================================================
 
 
-class TestExtractDateFromPathLeapYear:
-    def test_valid_leap_year_feb_29_returns_date(self):
-        """Feb 29 on a valid leap year (2000) is extracted correctly."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2000-02-29.jpg"), pattern)
-        assert result == date(2000, 2, 29)
-
-    def test_invalid_leap_year_feb_29_returns_none(self):
-        """Feb 29 on a non-leap year (2001) returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2001-02-29.jpg"), pattern)
-        assert result is None
-
-    def test_divisible_by_100_not_400_not_leap(self):
-        """Year 1900 (divisible by 100, not by 400) is not a leap year."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/1900-02-29.jpg"), pattern)
-        assert result is None
-
-    def test_divisible_by_400_is_leap(self):
-        """Year 2400 (divisible by 400) is a leap year and Feb 29 is valid."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/2400-02-29.jpg"), pattern)
-        assert result == date(2400, 2, 29)
+@pytest.mark.parametrize(
+    "path_str, expected",
+    [
+        ("/pics/2000-02-29.jpg", date(2000, 2, 29)),  # divisible by 400 → leap
+        ("/pics/2001-02-29.jpg", None),  # not a leap year
+        ("/pics/1900-02-29.jpg", None),  # divisible by 100 but not 400 → not leap
+        ("/pics/2400-02-29.jpg", date(2400, 2, 29)),  # divisible by 400 → leap
+    ],
+)
+def test_extract_date_from_path_leap_year(path_str: str, expected: date | None):
+    """Leap year rules are correctly applied when parsing Feb 29 dates."""
+    pattern = compile_pattern("{YYYY}-{MM}-{DD}")
+    assert extract_date_from_path(Path(path_str), pattern) == expected
 
 
 # ===========================================================================
@@ -344,33 +263,17 @@ class TestExtractDateFromPathLeapYear:
 # ===========================================================================
 
 
-class TestExtractDateFromPathNoMatch:
-    def test_no_date_in_path_returns_none(self):
-        """Path with no date-like substring returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/photos/vacation/beach.jpg"), pattern)
-        assert result is None
-
-    def test_wrong_separator_returns_none(self):
-        """Path with date using wrong separator does not match."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/photos/20260117.jpg"), pattern)
-        assert result is None
-
-    def test_partial_date_in_path_returns_none(self):
-        """Path containing only year and month (no day) returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/photos/2026-01.jpg"), pattern)
-        assert result is None
-
-    def test_empty_filename_returns_none(self):
-        """Path consisting of a bare root returns None."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/"), pattern)
-        assert result is None
-
-    def test_date_with_wrong_year_digit_count_returns_none(self):
-        """3-digit year does not satisfy the 4-digit {YYYY} requirement."""
-        pattern = compile_pattern("{YYYY}-{MM}-{DD}")
-        result = extract_date_from_path(Path("/pics/202-01-17.jpg"), pattern)
-        assert result is None
+@pytest.mark.parametrize(
+    "path_str",
+    [
+        "/photos/vacation/beach.jpg",  # no date-like substring
+        "/photos/20260117.jpg",  # compact date, wrong separator for pattern
+        "/photos/2026-01.jpg",  # partial date (year+month only)
+        "/",  # bare root, no filename
+        "/pics/202-01-17.jpg",  # 3-digit year, not 4-digit {YYYY}
+    ],
+)
+def test_extract_date_from_path_no_match_returns_none(path_str: str):
+    """Paths that do not contain a matching date string return None."""
+    pattern = compile_pattern("{YYYY}-{MM}-{DD}")
+    assert extract_date_from_path(Path(path_str), pattern) is None

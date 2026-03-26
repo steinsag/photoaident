@@ -1,7 +1,7 @@
 import functools
 import threading
 from pathlib import Path
-from typing import Any, Callable, Concatenate, List, ParamSpec, Tuple, TypeVar
+from typing import Any, ParamSpec, TypeVar, Callable, Concatenate
 
 import numpy as np
 from faiss import IndexFlatIP, IndexIDMap2, read_index, write_index
@@ -109,7 +109,7 @@ class VectorStore:
     @_locked
     def search(
         self, query_embedding: np.ndarray, k: int, threshold: float = 0.0
-    ) -> List[Tuple[int, float]]:
+    ) -> list[tuple[int, float]]:
         """Search for the k most similar embeddings.
 
         Args:

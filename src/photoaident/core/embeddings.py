@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Dict, Tuple, Any
+from typing import Any
 
 import cv2
 import numpy as np
@@ -24,7 +24,7 @@ class FaceEmbedder:
         self.app = FaceAnalysis(name=model_name, providers=providers)
         self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
 
-    def process_image(self, image_path: Path) -> List[Dict[str, Any]]:
+    def process_image(self, image_path: Path) -> list[dict[str, Any]]:
         """Detect faces and compute embeddings for an image.
 
         Args:
@@ -67,7 +67,7 @@ class FaceEmbedder:
 
     @staticmethod
     def extract_face_crop(
-        image_path: Path, bbox: List[int], target_size: Tuple[int, int] = (224, 224)
+        image_path: Path, bbox: list[int], target_size: tuple[int, int] = (224, 224)
     ) -> Image.Image:
         """Extract and resize a face crop from an image.
 

@@ -3,7 +3,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PySide6 import QtWidgets
@@ -39,10 +39,10 @@ class FaceData:
     """Data for the currently displayed face."""
 
     face_id: int
-    crop_path: Optional[Path]
+    crop_path: Path | None
     image_path: Path
     bbox: tuple[int, int, int, int]
-    taken_at: Optional[datetime]
+    taken_at: datetime | None
 
 
 class LabellingPage(QtWidgets.QWidget):
@@ -53,19 +53,19 @@ class LabellingPage(QtWidgets.QWidget):
         session_factory: "sessionmaker",
         paths: "AppPaths",
         vector_store: VectorStore,
-        parent: Optional[QtWidgets.QWidget] = None,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.session_factory = session_factory
         self.paths = paths
         self.vector_store = vector_store
-        self._current_face_id: Optional[int] = None
+        self._current_face_id: int | None = None
         self._skipped: set[int] = set()
         self._skipped_images: set[int] = set()
-        self._priority_image_id: Optional[int] = None
-        self._query_embedding: Optional[np.ndarray] = None
-        self._selected_person: Optional[Person] = None
-        self._selected_cluster: Optional[EmbeddingCluster] = None
+        self._priority_image_id: int | None = None
+        self._query_embedding: np.ndarray | None = None
+        self._selected_person: Person | None = None
+        self._selected_cluster: EmbeddingCluster | None = None
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -183,7 +183,7 @@ class LabellingPage(QtWidgets.QWidget):
     # Public interface
     # ------------------------------------------------------------------
 
-    def refresh(self, priority_image_id: Optional[int] = None) -> None:
+    def refresh(self, priority_image_id: int | None = None) -> None:
         """Reload count + first face. Called when page becomes visible."""
         self._skipped.clear()
         self._skipped_images.clear()
@@ -286,7 +286,7 @@ class LabellingPage(QtWidgets.QWidget):
             stmt = stmt.where(Face.id.not_in(list(self._skipped)))
         return stmt
 
-    def _extract_next_face_data(self, session: "Session") -> Optional[FaceData]:
+    def _extract_next_face_data(self, session: "Session") -> FaceData | None:
         face = (
             session.execute(self._build_next_face_stmt()).unique().scalar_one_or_none()
         )
@@ -333,14 +333,14 @@ class LabellingPage(QtWidgets.QWidget):
 
     def _on_person_selected(
         self,
-        person: Optional[Person],
+        person: Person | None,
         _: object = None,
     ) -> None:
         """Handle person selection from PersonListWidget signal or direct call."""
         self._selected_person = person
         self._populate_clusters_for_person(person)
 
-    def _populate_clusters_for_person(self, person: Optional[Person]) -> None:
+    def _populate_clusters_for_person(self, person: Person | None) -> None:
         """Populate the cluster widget for *person*, auto-selecting the best match."""
         self._selected_cluster = None
         if person is None:
@@ -363,7 +363,7 @@ class LabellingPage(QtWidgets.QWidget):
         """Recalculate cluster scores for the current face; no DB round-trip."""
         self._populate_clusters_for_person(self._selected_person)
 
-    def _on_cluster_selected(self, cluster: Optional[EmbeddingCluster]) -> None:
+    def _on_cluster_selected(self, cluster: EmbeddingCluster | None) -> None:
         self._selected_cluster = cluster
         self._update_confirm_button()
 

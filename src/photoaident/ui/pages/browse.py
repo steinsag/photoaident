@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 class BrowsePage(QtWidgets.QWidget):
     """Browse page: explore photo collection by folder using Miller columns."""
 
+    navigate_to_labelling = QtCore.Signal(int)
+
     COLUMN_WIDTH = 200
     COLUMNS_AREA_HEIGHT = 250
 
@@ -69,7 +71,7 @@ class BrowsePage(QtWidgets.QWidget):
 
         # Bottom: thumbnail grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
-        self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
+        self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
         splitter.addWidget(self.grid)
 
         splitter.setStretchFactor(0, 0)
@@ -298,13 +300,6 @@ class BrowsePage(QtWidgets.QWidget):
             # mutation so insertWidget cannot steal it from right_col.
             self._on_column_item_changed(col_index + 1, current)
         right_col.setFocus()
-
-    def _on_navigate_to_labelling(self, image_id: int) -> None:
-        from photoaident.app import MainWindow  # local import breaks circular dep
-
-        main = self.window()
-        if isinstance(main, MainWindow):
-            main.go_to_labelling(image_id)
 
     def _build_images_data(self, images: list[Image]) -> list[SearchResult]:
         """Build SearchResult objects for ThumbnailGrid."""

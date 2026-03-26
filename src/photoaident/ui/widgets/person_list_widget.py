@@ -1,5 +1,4 @@
 import bisect
-from typing import Optional
 
 from PySide6 import QtCore, QtWidgets
 
@@ -12,7 +11,7 @@ class PersonListWidget(QtWidgets.QWidget):
     person_selected = QtCore.Signal(object)  # emits Optional[Person]
     new_person_requested = QtCore.Signal()
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedWidth(250)
         self._all_persons: list[Person] = []
@@ -92,8 +91,8 @@ class PersonListWidget(QtWidgets.QWidget):
 
     def _on_item_changed(
         self,
-        current: Optional[QtWidgets.QListWidgetItem],
-        _: Optional[QtWidgets.QListWidgetItem],
+        current: QtWidgets.QListWidgetItem | None,
+        _: QtWidgets.QListWidgetItem | None,
     ) -> None:
         if current is None:
             self.person_selected.emit(None)

@@ -56,7 +56,7 @@ class PreferencesDialog(QtWidgets.QDialog):
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
 
-    def _browse_path(self):
+    def _browse_path(self) -> None:
         """Open a directory selection dialog."""
         current_path = self.path_edit.text()
         directory = QtWidgets.QFileDialog.getExistingDirectory(

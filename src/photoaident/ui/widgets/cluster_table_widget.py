@@ -1,5 +1,3 @@
-from typing import Optional
-
 from PySide6 import QtCore, QtWidgets
 
 from photoaident.db.database import AGE_CLUSTERS, EmbeddingCluster
@@ -13,7 +11,7 @@ class ClusterTableWidget(QtWidgets.QWidget):
 
     cluster_selected = QtCore.Signal(object)  # emits Optional[EmbeddingCluster]
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
+    def __init__(self, parent: QtWidgets.QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -68,12 +66,12 @@ class ClusterTableWidget(QtWidgets.QWidget):
         self,
         cluster_by_age: dict[str, EmbeddingCluster],
         scores: dict[str, float],
-    ) -> Optional[int]:
+    ) -> int | None:
         """Fill rows with cluster data and similarity scores.
 
         Returns the index of the best-scoring row, or None if no scores available.
         """
-        best_row: Optional[int] = None
+        best_row: int | None = None
         best_score: float = -1.0
         self._table.blockSignals(True)
         self._table.clearSelection()

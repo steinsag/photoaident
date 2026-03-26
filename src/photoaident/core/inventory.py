@@ -1,7 +1,6 @@
 import logging
 import os
 from pathlib import Path
-from typing import List, Optional
 
 from PySide6 import QtCore
 from sqlalchemy import select
@@ -27,16 +26,16 @@ class InventoryTask(QtCore.QObject):
         self.session_factory = session_factory
         self._is_cancelled = False
 
-    def cancel(self):
+    def cancel(self) -> None:
         self._is_cancelled = True
 
-    def _scan_image_files(self, extensions: set) -> Optional[List[Path]]:
+    def _scan_image_files(self, extensions: set) -> list[Path] | None:
         """Walk root_path for matching files. Returns None if cancelled.
 
         Follows symlinks but skips directories already visited (by real path)
         to prevent infinite loops from circular symlinks.
         """
-        image_paths: List[Path] = []
+        image_paths: list[Path] = []
         visited: set[str] = set()
         for root, dirs, files in os.walk(self.root_path, followlinks=True):
             if self._is_cancelled:
@@ -68,7 +67,7 @@ class InventoryTask(QtCore.QObject):
         session.add(img)
         return True
 
-    def run(self):
+    def run(self) -> None:
         """Perform the scan and inventory."""
         if not self.root_path.exists() or not self.root_path.is_dir():
             self.finished.emit(0)

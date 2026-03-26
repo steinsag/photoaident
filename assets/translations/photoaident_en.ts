@@ -206,6 +206,41 @@ Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translat
     </message>
 </context>
 <context>
+    <name>FilterPanel</name>
+    <message>
+        <source>Location</source>
+        <translation>Location</translation>
+    </message>
+    <message>
+        <source>Click to set location</source>
+        <translation>Click to set location</translation>
+    </message>
+    <message>
+        <source>Clear Location</source>
+        <translation>Clear Location</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Time</translation>
+    </message>
+    <message>
+        <source>Click to set time range</source>
+        <translation>Click to set time range</translation>
+    </message>
+    <message>
+        <source>Clear Time</source>
+        <translation>Clear Time</translation>
+    </message>
+    <message>
+        <source>Person</source>
+        <translation>Person</translation>
+    </message>
+    <message>
+        <source>Type to filter</source>
+        <translation>Type to filter</translation>
+    </message>
+</context>
+<context>
     <name>GpuChecker</name>
     <message>
         <source>CPU only</source>
@@ -362,38 +397,6 @@ Please close it before starting a new one.</translation>
     <message>
         <source>Select a person, location, or time range to start searching.</source>
         <translation>Select a person, location, or time range to start searching.</translation>
-    </message>
-    <message>
-        <source>Location</source>
-        <translation>Location</translation>
-    </message>
-    <message>
-        <source>Click to set location</source>
-        <translation>Click to set location</translation>
-    </message>
-    <message>
-        <source>Clear Location</source>
-        <translation>Clear Location</translation>
-    </message>
-    <message>
-        <source>Time</source>
-        <translation>Time</translation>
-    </message>
-    <message>
-        <source>Click to set time range</source>
-        <translation>Click to set time range</translation>
-    </message>
-    <message>
-        <source>Clear Time</source>
-        <translation>Clear Time</translation>
-    </message>
-    <message>
-        <source>Person</source>
-        <translation>Person</translation>
-    </message>
-    <message>
-        <source>Type to filter</source>
-        <translation>Type to filter</translation>
     </message>
 </context>
 <context>
