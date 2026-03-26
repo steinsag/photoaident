@@ -196,9 +196,9 @@ class Face(Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     image: Mapped["Image"] = relationship("Image", back_populates="faces")
-    person: Mapped["Person"] = relationship("Person", back_populates="faces")
+    person: Mapped["Person | None"] = relationship("Person", back_populates="faces")
     cluster: Mapped["EmbeddingCluster"] = relationship(
-        "EmbeddingCluster", back_populates="faces"
+        "EmbeddingCluster | None", back_populates="faces"
     )
     suggestions: Mapped[list["Suggestion"]] = relationship(
         "Suggestion", back_populates="face", cascade=_CASCADE
