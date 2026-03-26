@@ -901,3 +901,32 @@ def test_confirm_when_selected_person_is_none(tmp_app_paths, qtbot):
         face = session.get(Face, face_id)
         assert face is not None
         assert face.state == FaceState.UNIDENTIFIED
+
+
+def test_confirm_face_only_does_not_reload_persons_list(tmp_app_paths, qtbot):
+    """Face-only confirm reloads the right panel but not the persons list."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Felix")
+    cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
+    img_id = _add_image(page.session_factory)
+    face_id = _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    load_persons_calls: list[None] = []
+    original_load = page._load_persons
+
+    def _tracking_load() -> None:
+        load_persons_calls.append(None)
+        original_load()
+
+    page._load_persons = _tracking_load  # type: ignore[method-assign]
+
+    page._on_remove_requested(face_id)
+    page._confirm()
+
+    assert (
+        load_persons_calls == []
+    ), "_load_persons should not be called for face-only changes"
+    assert not page._person_name_edit.isHidden()
+    assert page._selected_person_id == person_id
