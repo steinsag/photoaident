@@ -1,9 +1,9 @@
 """Tests for LibraryPage: persistent right-column person filter, image selection."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-from PySide6 import QtWidgets, QtGui
+from PySide6 import QtGui, QtWidgets
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -426,21 +426,14 @@ def test_load_images_empty_per_person_scores(
 
 
 def test_navigate_to_labelling(qtbot, session_factory, tmp_app_paths, vector_store):
+    """LibraryPage.navigate_to_labelling signal is emitted when the grid emits it."""
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    mock_main_window = MagicMock()
-    # We need to mock self.window() to return our mock_main_window
-    with patch.object(page, "window", return_value=mock_main_window):
-        # We also need to make sure isinstance(mock_main_window, MainWindow) is true
-        # But MainWindow is imported locally in the method.
-        # Actually, if we mock the class itself in the module where it's imported:
-        with patch("photoaident.app.MainWindow", new=MagicMock) as MockMW:
-            # Re-patching window to return an instance of MockMW
-            mw_instance = MockMW()
-            with patch.object(page, "window", return_value=mw_instance):
-                page._on_navigate_to_labelling(123)
-                mw_instance.go_to_labelling.assert_called_once_with(123)
+    with qtbot.waitSignal(page.navigate_to_labelling, timeout=1000) as blocker:
+        page.grid.navigate_to_labelling.emit(123)
+
+    assert blocker.args == [123]
 
 
 # --- Date filter tests ---

@@ -27,6 +27,8 @@ if TYPE_CHECKING:
 class LibraryPage(QtWidgets.QWidget):
     """Page showing all indexed images with filtering by person, location, and date."""
 
+    navigate_to_labelling = QtCore.Signal(int)
+
     def __init__(
         self,
         session_factory: "sessionmaker",
@@ -65,7 +67,7 @@ class LibraryPage(QtWidgets.QWidget):
 
         # Image grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self._paths)
-        self.grid.navigate_to_labelling.connect(self._on_navigate_to_labelling)
+        self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
         center_layout.addWidget(self.grid, stretch=1)
 
         # Placeholder shown when no filters are active
@@ -287,13 +289,6 @@ class LibraryPage(QtWidgets.QWidget):
         self.empty_label.hide()  # Explicit hide
         self.grid.setVisible(True)
         self.grid.show()  # Explicit show
-
-    def _on_navigate_to_labelling(self, image_id: int) -> None:
-        from photoaident.app import MainWindow  # local import breaks circular dep
-
-        main = self.window()
-        if isinstance(main, MainWindow):
-            main.go_to_labelling(image_id)
 
     @staticmethod
     def _add_section_separator(layout: QtWidgets.QVBoxLayout) -> None:

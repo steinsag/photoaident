@@ -146,6 +146,9 @@ class MainWindow(QtWidgets.QMainWindow):
             self._session_factory, self._paths, self._settings, self._vector_store
         )
 
+        self._library_page.navigate_to_labelling.connect(self.go_to_labelling)
+        self._browse_page.navigate_to_labelling.connect(self.go_to_labelling)
+
         # Stacked widget holding the pages (Search=0, Browse=1, Persons=2, Labelling=3)
         self._stacked_pages = QtWidgets.QStackedWidget()
         self._stacked_pages.addWidget(self._library_page)  # index 0 (Search)
