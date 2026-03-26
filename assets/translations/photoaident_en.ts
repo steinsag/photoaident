@@ -573,6 +573,10 @@ To get started, please select your photo collection folder.</translation>
         <translation>New Person…</translation>
     </message>
     <message>
+        <source>Delete Person…</source>
+        <translation>Delete Person…</translation>
+    </message>
+    <message>
         <source>Select a person to view their reference faces.</source>
         <translation>Select a person to view their reference faces.</translation>
     </message>
@@ -583,6 +587,22 @@ To get started, please select your photo collection folder.</translation>
     <message>
         <source>Confirm</source>
         <translation>Confirm</translation>
+    </message>
+    <message>
+        <source>Delete Person</source>
+        <translation>Delete Person</translation>
+    </message>
+    <message>
+        <source>Delete &quot;{name}&quot;?</source>
+        <translation>Delete &quot;{name}&quot;?</translation>
+    </message>
+    <message>
+        <source>This will permanently remove the person. All their labelled faces will be marked as unknown. This action cannot be undone.</source>
+        <translation>This will permanently remove the person. All their labelled faces will be marked as unknown. This action cannot be undone.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Delete</translation>
     </message>
     <message>
         <source>(No faces)</source>

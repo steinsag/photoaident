@@ -181,6 +181,11 @@ class PersonsPage(QtWidgets.QWidget):
         self._new_person_btn.clicked.connect(self._on_new_person)
         left_layout.addWidget(self._new_person_btn)
 
+        self._delete_person_btn = QtWidgets.QPushButton(self.tr("Delete Person\u2026"))
+        self._delete_person_btn.clicked.connect(self._on_delete_person)
+        self._delete_person_btn.setEnabled(False)
+        left_layout.addWidget(self._delete_person_btn)
+
         splitter.addWidget(left)
 
         # ── Right panel ─────────────────────────────────────────────────────
@@ -293,6 +298,51 @@ class PersonsPage(QtWidgets.QWidget):
                 self._person_list.setCurrentItem(item)
                 break
 
+    def _on_delete_person(self) -> None:
+        if self._selected_person_id is None or self._current_person_name is None:
+            return
+        msg = QtWidgets.QMessageBox(self)
+        msg.setWindowTitle(self.tr("Delete Person"))
+        msg.setText(self.tr('Delete "{name}"?').format(name=self._current_person_name))
+        msg.setInformativeText(
+            self.tr(
+                "This will permanently remove the person. "
+                "All their labelled faces will be marked as unknown. "
+                "This action cannot be undone."
+            )
+        )
+        msg.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        delete_btn = msg.addButton(
+            self.tr("Delete"), QtWidgets.QMessageBox.ButtonRole.DestructiveRole
+        )
+        msg.addButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        msg.setDefaultButton(QtWidgets.QMessageBox.StandardButton.Cancel)
+        msg.exec()
+        if msg.clickedButton() is not delete_btn:
+            return
+        self._delete_person(self._selected_person_id)
+
+    def _delete_person(self, person_id: int) -> None:
+        """Unlink all faces and delete the person with their clusters from the DB."""
+        with self.session_factory() as session:
+            person = session.get(Person, person_id)
+            if person is None:
+                return
+            # Unlink all identified faces so they return to the labelling queue
+            for face in person.faces:
+                face.state = FaceState.UNIDENTIFIED
+                face.person_id = None
+                face.cluster_id = None
+                face.labelled_at = None
+            session.delete(person)
+            session.commit()
+
+        self._selected_person_id = None
+        self._pending.clear()
+        self._pending_name = None
+        self._load_persons()
+        self._clear_right_panel()
+
     def _on_filter_changed(self, text: str) -> None:
         needle = text.lower().strip()
         for i in range(self._person_list.count()):
@@ -321,6 +371,7 @@ class PersonsPage(QtWidgets.QWidget):
         self._pending_name = None
         self._current_person_name = None
         self._face_widgets.clear()
+        self._delete_person_btn.setEnabled(False)
         self._update_action_buttons()
 
     def _query_person_and_clusters(
@@ -391,6 +442,7 @@ class PersonsPage(QtWidgets.QWidget):
         self._pending_name = None
         self._person_name_edit.setText(person_name)
         self._person_name_edit.setVisible(True)
+        self._delete_person_btn.setEnabled(True)
         self._placeholder_label.setVisible(False)
         self._scroll.setVisible(True)
 

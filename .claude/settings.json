@@ -9,10 +9,12 @@
         "hooks": [
           {
             "type": "command",
+            "blockOnError": true,
             "command": "uv run ruff check --fix --unfixable F401 --quiet ."
           },
           {
             "type": "command",
+            "blockOnError": true,
             "command": "uv run black --quiet --target-version py312 ."
           }
         ]
@@ -39,8 +41,6 @@
   },
   "enabledPlugins": {
     "commit-commands@claude-plugins-official": true,
-    "pyright-lsp@claude-plugins-official": true,
-    "claude-md-management@claude-plugins-official": true,
-    "claude-code-setup@claude-plugins-official": true
+    "pyright-lsp@claude-plugins-official": true
   }
 }

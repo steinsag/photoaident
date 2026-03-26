@@ -575,6 +575,10 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
         <translation>Neue Person…</translation>
     </message>
     <message>
+        <source>Delete Person…</source>
+        <translation>Person löschen…</translation>
+    </message>
+    <message>
         <source>Select a person to view their reference faces.</source>
         <translation>Person auswählen, um Referenzgesichter zu sehen.</translation>
     </message>
@@ -585,6 +589,22 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
     <message>
         <source>Confirm</source>
         <translation>Bestätigen</translation>
+    </message>
+    <message>
+        <source>Delete Person</source>
+        <translation>Person löschen</translation>
+    </message>
+    <message>
+        <source>Delete &quot;{name}&quot;?</source>
+        <translation>&quot;{name}&quot; löschen?</translation>
+    </message>
+    <message>
+        <source>This will permanently remove the person. All their labelled faces will be marked as unknown. This action cannot be undone.</source>
+        <translation>Die Person wird dauerhaft entfernt. Alle beschrifteten Gesichter dieser Person werden als unbekannt markiert. Diese Aktion kann nicht rückgängig gemacht werden.</translation>
+    </message>
+    <message>
+        <source>Delete</source>
+        <translation>Löschen</translation>
     </message>
     <message>
         <source>(No faces)</source>
