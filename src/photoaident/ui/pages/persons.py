@@ -481,7 +481,9 @@ class PersonsPage(QtWidgets.QWidget):
             self._person_name_edit.blockSignals(True)
             self._person_name_edit.setText(stripped)
             self._person_name_edit.blockSignals(False)
-        if stripped and stripped != self._current_person_name:
+        # Track any deviation from the saved name, including empty string.
+        # _pending_name="" means the field was cleared (dirty but invalid).
+        if stripped != self._current_person_name:
             self._pending_name = stripped
         else:
             self._pending_name = None
@@ -489,10 +491,12 @@ class PersonsPage(QtWidgets.QWidget):
 
     def _update_action_buttons(self) -> None:
         n = len(self._pending)
-        name_change = 1 if self._pending_name is not None else 0
-        total = n + name_change
+        name_is_dirty = self._pending_name is not None
+        # Empty _pending_name means the field was cleared — dirty but not committable.
+        name_is_valid = self._pending_name is None or bool(self._pending_name)
+        total = n + (1 if name_is_dirty else 0)
         has_pending = total > 0
-        self._confirm_btn.setEnabled(has_pending)
+        self._confirm_btn.setEnabled(has_pending and name_is_valid)
         self._cancel_btn.setEnabled(has_pending)
         if has_pending:
             self._changes_label.setText(
@@ -534,7 +538,7 @@ class PersonsPage(QtWidgets.QWidget):
         affected_cluster_ids: set[int] = set()
 
         with self.session_factory() as session:
-            if self._pending_name is not None and self._selected_person_id is not None:
+            if self._pending_name and self._selected_person_id is not None:
                 person = session.get(Person, self._selected_person_id)
                 if person is not None:
                     person.name = self._pending_name

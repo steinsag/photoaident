@@ -745,8 +745,10 @@ def test_name_edit_same_value_clears_pending(tmp_app_paths, qtbot):
     assert not page._confirm_btn.isEnabled()
 
 
-def test_name_edit_empty_clears_pending(tmp_app_paths, qtbot):
-    """Clearing the name field entirely does not set a pending change."""
+def test_name_edit_empty_marks_dirty_disables_confirm_enables_cancel(
+    tmp_app_paths, qtbot
+):
+    """Clearing the name marks dirty: Cancel enabled, Confirm disabled."""
     page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Alice")
     page.refresh()
@@ -754,22 +756,42 @@ def test_name_edit_empty_clears_pending(tmp_app_paths, qtbot):
 
     page._on_name_edited("")
 
-    assert page._pending_name is None
+    assert page._pending_name == ""
     assert not page._confirm_btn.isEnabled()
+    assert page._cancel_btn.isEnabled()
 
 
 def test_name_edit_whitespace_only_clears_pending_and_normalizes(tmp_app_paths, qtbot):
-    """Whitespace-only edit: widget text normalizes, no pending change."""
+    """Whitespace-only edit: normalizes to empty, Cancel enabled, Confirm disabled."""
     page = _make_page(tmp_app_paths, qtbot)
     _add_person_with_clusters(page.session_factory, "Alice")
     page.refresh()
     page._person_list.setCurrentRow(0)
 
-    page._person_name_edit.setText("  Alice  ")
-    page._on_name_edited("  Alice  ")
+    page._person_name_edit.setText("   ")
+    page._on_name_edited("   ")
+
+    assert page._person_name_edit.text() == ""
+    assert page._pending_name == ""
+    assert not page._confirm_btn.isEnabled()
+    assert page._cancel_btn.isEnabled()
+
+
+def test_cancel_after_empty_name_edit_restores_original(tmp_app_paths, qtbot):
+    """Cancel after clearing the name field restores the original name."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("")
+    assert page._cancel_btn.isEnabled()
+
+    page._cancel()
 
     assert page._person_name_edit.text() == "Alice"
     assert page._pending_name is None
+    assert not page._cancel_btn.isEnabled()
     assert not page._confirm_btn.isEnabled()
 
 
