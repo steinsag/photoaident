@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import Enum, auto
 from pathlib import Path
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
@@ -32,7 +32,7 @@ class _PendingKind(Enum):
 @dataclass
 class _PendingChange:
     kind: _PendingKind
-    new_cluster_id: Optional[int]  # only for MOVE
+    new_cluster_id: int | None  # only for MOVE
 
 
 class ReferenceFaceWidget(QtWidgets.QWidget):
@@ -47,7 +47,7 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         crop_path: Path,
         cluster_id: int,
         other_clusters: list[tuple[int, str]],
-        parent: Optional[QtWidgets.QWidget] = None,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._face_id = face_id
@@ -97,7 +97,7 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         self._move_btn.clicked.connect(self._on_move_clicked)
         layout.addWidget(self._move_btn)
 
-    def set_pending(self, change: Optional[_PendingChange]) -> None:
+    def set_pending(self, change: _PendingChange | None) -> None:
         """Update the visual state to reflect a staged change (or clear it)."""
         if change is None:
             self._status_label.setText("")
@@ -146,16 +146,16 @@ class PersonsPage(QtWidgets.QWidget):
         session_factory: "sessionmaker",
         paths: "AppPaths",
         vector_store: "VectorStore",
-        parent: Optional[QtWidgets.QWidget] = None,
+        parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.session_factory = session_factory
         self.paths = paths
         self.vector_store = vector_store
-        self._selected_person_id: Optional[int] = None
+        self._selected_person_id: int | None = None
         self._pending: dict[int, _PendingChange] = {}
-        self._pending_name: Optional[str] = None
-        self._current_person_name: Optional[str] = None
+        self._pending_name: str | None = None
+        self._current_person_name: str | None = None
         self._face_widgets: dict[int, ReferenceFaceWidget] = {}
         self._setup_ui()
 
@@ -303,8 +303,8 @@ class PersonsPage(QtWidgets.QWidget):
 
     def _on_person_selected(
         self,
-        current: Optional[QtWidgets.QListWidgetItem],
-        _previous: Optional[QtWidgets.QListWidgetItem],
+        current: QtWidgets.QListWidgetItem | None,
+        _previous: QtWidgets.QListWidgetItem | None,
     ) -> None:
         if current is None:
             self._selected_person_id = None
@@ -327,7 +327,7 @@ class PersonsPage(QtWidgets.QWidget):
         self,
         session: "Session",
         person_id: int,
-    ) -> Optional[tuple[str, list[tuple[int, str, list[tuple[int, Path]]]]]]:
+    ) -> tuple[str, list[tuple[int, str, list[tuple[int, Path]]]]] | None:
         """Query person name and per-cluster face data from DB.
 
         Returns ``(person_name, cluster_data)`` where each entry in
