@@ -21,7 +21,6 @@ from photoaident.core.search_filters import (
 from photoaident.core.search_person import (
     _SQLITE_IN_LIMIT,
     _collect_per_person_scores,
-    # noqa: F401 — re-exported for test imports
     _intersect_and_rank,
 )
 from photoaident.db.database import Image

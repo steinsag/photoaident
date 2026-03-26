@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy import select
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -11,9 +12,9 @@ from photoaident.ui.widgets.date_filter_dialog import (
 )
 from photoaident.ui.widgets.map_dialog import MapLocationDialog
 from photoaident.utils.resource_path import get_resource_path
-from sqlalchemy import select
 
 ASPECT_RATIO_WORLD_MAP_ICON = 1.97
+FILTER_PANEL_WIDTH = 220
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import sessionmaker
@@ -42,7 +43,7 @@ class FilterPanel(QtWidgets.QFrame):
 
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        self.setFixedWidth(220)
+        self.setFixedWidth(FILTER_PANEL_WIDTH)
         panel_layout = QtWidgets.QVBoxLayout(self)
 
         # --- Location section ---
@@ -57,7 +58,7 @@ class FilterPanel(QtWidgets.QFrame):
         world_map_icon = QtGui.QIcon(icon_path)
         self.map_location_btn.setIcon(world_map_icon)
         margins = panel_layout.contentsMargins()
-        icon_w = self.width() - margins.left() - margins.right()
+        icon_w = FILTER_PANEL_WIDTH - margins.left() - margins.right()
         self.map_location_btn.setIconSize(
             QtCore.QSize(icon_w, round(icon_w / ASPECT_RATIO_WORLD_MAP_ICON))
         )
