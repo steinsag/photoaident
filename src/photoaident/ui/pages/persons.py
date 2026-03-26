@@ -477,6 +477,10 @@ class PersonsPage(QtWidgets.QWidget):
 
     def _on_name_edited(self, text: str) -> None:
         stripped = text.strip()
+        if stripped != text:
+            self._person_name_edit.blockSignals(True)
+            self._person_name_edit.setText(stripped)
+            self._person_name_edit.blockSignals(False)
         if stripped and stripped != self._current_person_name:
             self._pending_name = stripped
         else:

@@ -758,6 +758,36 @@ def test_name_edit_empty_clears_pending(tmp_app_paths, qtbot):
     assert not page._confirm_btn.isEnabled()
 
 
+def test_name_edit_whitespace_only_clears_pending_and_normalizes(tmp_app_paths, qtbot):
+    """Whitespace-only edit: widget text normalizes, no pending change."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._person_name_edit.setText("  Alice  ")
+    page._on_name_edited("  Alice  ")
+
+    assert page._person_name_edit.text() == "Alice"
+    assert page._pending_name is None
+    assert not page._confirm_btn.isEnabled()
+
+
+def test_name_edit_whitespace_around_new_name_normalizes(tmp_app_paths, qtbot):
+    """Whitespace around a new name is stripped; the change is still pending."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._person_name_edit.setText("  Alicia  ")
+    page._on_name_edited("  Alicia  ")
+
+    assert page._person_name_edit.text() == "Alicia"
+    assert page._pending_name == "Alicia"
+    assert page._confirm_btn.isEnabled()
+
+
 def test_confirm_saves_new_name(tmp_app_paths, qtbot):
     """Confirming a name change persists the new name in the DB."""
     page = _make_page(tmp_app_paths, qtbot)
