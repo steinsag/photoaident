@@ -197,8 +197,8 @@ class Face(Base):
 
     image: Mapped["Image"] = relationship("Image", back_populates="faces")
     person: Mapped["Person | None"] = relationship("Person", back_populates="faces")
-    cluster: Mapped["EmbeddingCluster"] = relationship(
-        "EmbeddingCluster | None", back_populates="faces"
+    cluster: Mapped["EmbeddingCluster | None"] = relationship(
+        "EmbeddingCluster", back_populates="faces"
     )
     suggestions: Mapped[list["Suggestion"]] = relationship(
         "Suggestion", back_populates="face", cascade=_CASCADE
