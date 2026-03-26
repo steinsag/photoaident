@@ -553,7 +553,7 @@ class PersonsPage(QtWidgets.QWidget):
         if not self._pending and self._pending_name is None:
             return
 
-        name_changed, affected_cluster_ids = self._persist_pending_changes()
+        _, affected_cluster_ids = self._persist_pending_changes()
 
         for cluster_id in affected_cluster_ids:
             recompute_cluster_mean(cluster_id, self.session_factory, self.vector_store)
@@ -561,12 +561,7 @@ class PersonsPage(QtWidgets.QWidget):
         self._pending.clear()
         self._pending_name = None
 
-        if name_changed:
-            self._load_persons()
-        if self._selected_person_id is not None:
-            self._load_person(self._selected_person_id)
-        else:
-            self._update_action_buttons()
+        self.refresh()
 
     def _cancel(self) -> None:
         for widget in self._face_widgets.values():

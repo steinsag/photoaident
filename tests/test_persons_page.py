@@ -800,6 +800,7 @@ def test_cancel_reverts_name_edit(tmp_app_paths, qtbot):
     page.refresh()
     page._person_list.setCurrentRow(0)
 
+    page._person_name_edit.setText("Alicia")
     page._on_name_edited("Alicia")
     assert page._confirm_btn.isEnabled()
 
@@ -824,6 +825,26 @@ def test_pending_count_includes_name_change(tmp_app_paths, qtbot):
     page._on_remove_requested(face_id)
 
     assert "2" in page._changes_label.text()
+
+
+def test_confirm_name_change_keeps_person_selected(tmp_app_paths, qtbot):
+    """After confirming a name change, the same person remains selected in the list."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+    assert page._selected_person_id == person_id
+
+    page._on_name_edited("Alicia")
+    page._confirm()
+
+    # The list item text must be updated …
+    assert page._person_list.item(0).text() == "Alicia"
+    # … and still selected
+    current = page._person_list.currentItem()
+    assert current is not None
+    assert current.text() == "Alicia"
+    assert page._selected_person_id == person_id
 
 
 def test_confirm_when_selected_person_is_none(tmp_app_paths, qtbot):
