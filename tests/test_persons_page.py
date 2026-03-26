@@ -624,7 +624,7 @@ def test_person_deselect_clears_panel(tmp_app_paths, qtbot):
     page._person_list.setCurrentRow(0)
 
     # Panel should be showing the person
-    assert not page._person_name_label.isHidden()
+    assert not page._person_name_edit.isHidden()
     assert not page._scroll.isHidden()
 
     page._on_person_selected(None, None)
@@ -632,7 +632,7 @@ def test_person_deselect_clears_panel(tmp_app_paths, qtbot):
     assert page._selected_person_id is None
     assert not page._placeholder_label.isHidden()
     assert page._scroll.isHidden()
-    assert page._person_name_label.isHidden()
+    assert page._person_name_edit.isHidden()
     assert len(page._pending) == 0
 
 
@@ -644,13 +644,13 @@ def test_load_person_deleted_between_select_and_load(tmp_app_paths, qtbot):
     page._person_list.setCurrentRow(0)
 
     # Panel shows the person
-    assert not page._person_name_label.isHidden()
+    assert not page._person_name_edit.isHidden()
 
     # Simulate person disappearing from DB by using a never-existing ID
     page._load_person(999999)
 
     assert not page._placeholder_label.isHidden()
-    assert page._person_name_label.isHidden()
+    assert page._person_name_edit.isHidden()
 
 
 def test_load_person_skips_missing_age_groups(tmp_app_paths, qtbot):
@@ -715,6 +715,190 @@ def test_confirm_skips_deleted_face(tmp_app_paths, qtbot):
     assert len(page._pending) == 0
 
 
+def test_name_edit_marks_pending(tmp_app_paths, qtbot):
+    """Editing the name field sets _pending_name and enables Confirm."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._person_name_edit.setText("Alicia")
+    page._on_name_edited("Alicia")
+
+    assert page._pending_name == "Alicia"
+    assert page._confirm_btn.isEnabled()
+    assert page._cancel_btn.isEnabled()
+
+
+def test_name_edit_same_value_clears_pending(tmp_app_paths, qtbot):
+    """Reverting the name to its original value clears _pending_name."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("Alice Renamed")
+    assert page._pending_name is not None
+
+    page._on_name_edited("Alice")
+    assert page._pending_name is None
+    assert not page._confirm_btn.isEnabled()
+
+
+def test_name_edit_empty_marks_dirty_disables_confirm_enables_cancel(
+    tmp_app_paths, qtbot
+):
+    """Clearing the name marks dirty: Cancel enabled, Confirm disabled."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("")
+
+    assert page._pending_name == ""
+    assert not page._confirm_btn.isEnabled()
+    assert page._cancel_btn.isEnabled()
+
+
+def test_name_edit_whitespace_only_clears_pending_and_normalizes(tmp_app_paths, qtbot):
+    """Whitespace-only edit: normalizes to empty, Cancel enabled, Confirm disabled."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._person_name_edit.setText("   ")
+    page._on_name_edited("   ")
+
+    assert page._person_name_edit.text() == ""
+    assert page._pending_name == ""
+    assert not page._confirm_btn.isEnabled()
+    assert page._cancel_btn.isEnabled()
+
+
+def test_cancel_after_empty_name_edit_restores_original(tmp_app_paths, qtbot):
+    """Cancel after clearing the name field restores the original name."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("")
+    assert page._cancel_btn.isEnabled()
+
+    page._cancel()
+
+    assert page._person_name_edit.text() == "Alice"
+    assert page._pending_name is None
+    assert not page._cancel_btn.isEnabled()
+    assert not page._confirm_btn.isEnabled()
+
+
+def test_name_edit_whitespace_around_new_name_normalizes(tmp_app_paths, qtbot):
+    """Whitespace around a new name is stripped; the change is still pending."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._person_name_edit.setText("  Alicia  ")
+    page._on_name_edited("  Alicia  ")
+
+    assert page._person_name_edit.text() == "Alicia"
+    assert page._pending_name == "Alicia"
+    assert page._confirm_btn.isEnabled()
+
+
+def test_confirm_saves_new_name(tmp_app_paths, qtbot):
+    """Confirming a name change persists the new name in the DB."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("Alicia")
+    page._confirm()
+
+    with page.session_factory() as session:
+        from photoaident.db.database import Person as PersonModel
+
+        person = session.get(PersonModel, person_id)
+        assert person is not None
+        assert person.name == "Alicia"
+
+    assert page._pending_name is None
+    assert not page._confirm_btn.isEnabled()
+
+
+def test_confirm_name_change_refreshes_list(tmp_app_paths, qtbot):
+    """After confirming a name change, the person list shows the new name."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("Alicia")
+    page._confirm()
+
+    assert page._person_list.count() == 1
+    assert page._person_list.item(0).text() == "Alicia"
+
+
+def test_cancel_reverts_name_edit(tmp_app_paths, qtbot):
+    """Cancelling a pending name change restores the original name in the edit."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._person_name_edit.setText("Alicia")
+    page._on_name_edited("Alicia")
+    assert page._confirm_btn.isEnabled()
+
+    page._cancel()
+
+    assert page._person_name_edit.text() == "Alice"
+    assert page._pending_name is None
+    assert not page._confirm_btn.isEnabled()
+
+
+def test_pending_count_includes_name_change(tmp_app_paths, qtbot):
+    """Changes label counts the name change alongside face changes."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
+    img_id = _add_image(page.session_factory)
+    face_id = _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._on_name_edited("Alicia")
+    page._on_remove_requested(face_id)
+
+    assert "2" in page._changes_label.text()
+
+
+def test_confirm_name_change_keeps_person_selected(tmp_app_paths, qtbot):
+    """After confirming a name change, the same person remains selected in the list."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+    assert page._selected_person_id == person_id
+
+    page._on_name_edited("Alicia")
+    page._confirm()
+
+    # The list item text must be updated …
+    assert page._person_list.item(0).text() == "Alicia"
+    # … and still selected
+    current = page._person_list.currentItem()
+    assert current is not None
+    assert current.text() == "Alicia"
+    assert page._selected_person_id == person_id
+
+
 def test_confirm_when_selected_person_is_none(tmp_app_paths, qtbot):
     """_confirm() with _selected_person_id=None calls _update_action_buttons."""
     page = _make_page(tmp_app_paths, qtbot)
@@ -739,3 +923,32 @@ def test_confirm_when_selected_person_is_none(tmp_app_paths, qtbot):
         face = session.get(Face, face_id)
         assert face is not None
         assert face.state == FaceState.UNIDENTIFIED
+
+
+def test_confirm_face_only_does_not_reload_persons_list(tmp_app_paths, qtbot):
+    """Face-only confirm reloads the right panel but not the persons list."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Felix")
+    cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
+    img_id = _add_image(page.session_factory)
+    face_id = _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    load_persons_calls: list[None] = []
+    original_load = page._load_persons
+
+    def _tracking_load() -> None:
+        load_persons_calls.append(None)
+        original_load()
+
+    page._load_persons = _tracking_load  # type: ignore[method-assign]
+
+    page._on_remove_requested(face_id)
+    page._confirm()
+
+    assert (
+        load_persons_calls == []
+    ), "_load_persons should not be called for face-only changes"
+    assert not page._person_name_edit.isHidden()
+    assert page._selected_person_id == person_id

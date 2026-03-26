@@ -1,7 +1,6 @@
 from datetime import datetime
 from enum import Enum as PyEnum
 from pathlib import Path
-from typing import List, Optional
 
 from sqlalchemy import (
     DateTime,
@@ -78,7 +77,7 @@ class Image(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     file_path: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    file_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    file_hash: Mapped[str | None] = mapped_column(String, nullable=True)
     file_size: Mapped[int] = mapped_column(Integer, nullable=False)
     indexed_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
@@ -92,10 +91,10 @@ class Image(Base):
         uselist=False,
         cascade=_CASCADE,
     )
-    tags: Mapped[List["ImageTag"]] = relationship(
+    tags: Mapped[list["ImageTag"]] = relationship(
         "ImageTag", back_populates="image", cascade=_CASCADE
     )
-    faces: Mapped[List["Face"]] = relationship(
+    faces: Mapped[list["Face"]] = relationship(
         "Face", back_populates="image", cascade=_CASCADE
     )
 
@@ -113,16 +112,16 @@ class ImageMetadata(Base):
     image_id: Mapped[int] = mapped_column(
         ForeignKey(_FK_IMAGES), unique=True, nullable=False
     )
-    taken_at: Mapped[Optional[datetime]] = mapped_column(DateTime, index=True)
-    taken_at_source: Mapped[Optional[TakenAtSource]] = mapped_column(
+    taken_at: Mapped[datetime | None] = mapped_column(DateTime, index=True)
+    taken_at_source: Mapped[TakenAtSource | None] = mapped_column(
         Enum(TakenAtSource, values_callable=lambda x: [e.value for e in x]),
         nullable=True,
     )
-    camera_make: Mapped[Optional[str]] = mapped_column(String)
-    camera_model: Mapped[Optional[str]] = mapped_column(String)
-    gps_lat: Mapped[Optional[float]] = mapped_column(Numeric(precision=10, scale=8))
-    gps_lon: Mapped[Optional[float]] = mapped_column(Numeric(precision=11, scale=8))
-    gps_altitude: Mapped[Optional[float]] = mapped_column(Float)
+    camera_make: Mapped[str | None] = mapped_column(String)
+    camera_model: Mapped[str | None] = mapped_column(String)
+    gps_lat: Mapped[float | None] = mapped_column(Numeric(precision=10, scale=8))
+    gps_lon: Mapped[float | None] = mapped_column(Numeric(precision=11, scale=8))
+    gps_altitude: Mapped[float | None] = mapped_column(Float)
     width: Mapped[int] = mapped_column(Integer)
     height: Mapped[int] = mapped_column(Integer)
     orientation: Mapped[int] = mapped_column(Integer, default=1)
@@ -153,7 +152,7 @@ class ImageTag(Base):
     tag_source: Mapped[TagSource] = mapped_column(
         Enum(TagSource, values_callable=lambda x: [e.value for e in x]), nullable=False
     )
-    model_name: Mapped[Optional[str]] = mapped_column(String)
+    model_name: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     image: Mapped["Image"] = relationship("Image", back_populates="tags")
@@ -179,31 +178,29 @@ class Face(Base):
     image_id: Mapped[int] = mapped_column(
         ForeignKey(_FK_IMAGES), nullable=False, index=True
     )
-    faiss_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    faiss_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
     bbox_x: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_y: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_w: Mapped[int] = mapped_column(Integer, nullable=False)
     bbox_h: Mapped[int] = mapped_column(Integer, nullable=False)
     detection_confidence: Mapped[float] = mapped_column(Float, nullable=False)
-    person_id: Mapped[Optional[int]] = mapped_column(ForeignKey(_FK_PERSONS))
-    cluster_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("embedding_clusters.id")
-    )
+    person_id: Mapped[int | None] = mapped_column(ForeignKey(_FK_PERSONS))
+    cluster_id: Mapped[int | None] = mapped_column(ForeignKey("embedding_clusters.id"))
     state: Mapped[FaceState] = mapped_column(
         Enum(FaceState, values_callable=lambda x: [e.value for e in x]),
         default=FaceState.UNIDENTIFIED,
         index=True,
     )
-    labelled_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    labelled_at: Mapped[datetime | None] = mapped_column(DateTime)
     model_version: Mapped[str] = mapped_column(String, nullable=False)
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     image: Mapped["Image"] = relationship("Image", back_populates="faces")
-    person: Mapped[Optional["Person"]] = relationship("Person", back_populates="faces")
-    cluster: Mapped[Optional["EmbeddingCluster"]] = relationship(
-        "EmbeddingCluster", back_populates="faces"
+    person: Mapped["Person | None"] = relationship("Person", back_populates="faces")
+    cluster: Mapped["EmbeddingCluster"] = relationship(
+        "EmbeddingCluster | None", back_populates="faces"
     )
-    suggestions: Mapped[List["Suggestion"]] = relationship(
+    suggestions: Mapped[list["Suggestion"]] = relationship(
         "Suggestion", back_populates="face", cascade=_CASCADE
     )
 
@@ -221,14 +218,14 @@ class Person(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    notes: Mapped[Optional[str]] = mapped_column(String)
+    notes: Mapped[str | None] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    faces: Mapped[List["Face"]] = relationship("Face", back_populates="person")
-    clusters: Mapped[List["EmbeddingCluster"]] = relationship(
+    faces: Mapped[list["Face"]] = relationship("Face", back_populates="person")
+    clusters: Mapped[list["EmbeddingCluster"]] = relationship(
         "EmbeddingCluster", back_populates="person", cascade=_CASCADE
     )
-    suggestions: Mapped[List["Suggestion"]] = relationship(
+    suggestions: Mapped[list["Suggestion"]] = relationship(
         "Suggestion", back_populates="person", cascade=_CASCADE
     )
 
@@ -246,14 +243,14 @@ class EmbeddingCluster(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     person_id: Mapped[int] = mapped_column(ForeignKey(_FK_PERSONS), nullable=False)
-    label: Mapped[Optional[str]] = mapped_column(String)
-    age_group: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    mean_embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    label: Mapped[str | None] = mapped_column(String)
+    age_group: Mapped[str | None] = mapped_column(String, nullable=True)
+    mean_embedding: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     person: Mapped["Person"] = relationship("Person", back_populates="clusters")
-    faces: Mapped[List["Face"]] = relationship("Face", back_populates="cluster")
-    suggestions: Mapped[List["Suggestion"]] = relationship(
+    faces: Mapped[list["Face"]] = relationship("Face", back_populates="cluster")
+    suggestions: Mapped[list["Suggestion"]] = relationship(
         "Suggestion", back_populates="cluster", cascade=_CASCADE
     )
 
