@@ -311,7 +311,7 @@ class PersonsPage(QtWidgets.QWidget):
                 "This action cannot be undone."
             )
         )
-        msg.setIcon(QtWidgets.QMessageBox.Icon.Warning)
+        msg.setIcon(QtWidgets.QMessageBox.Icon.Critical)
         delete_btn = msg.addButton(
             self.tr("Delete"), QtWidgets.QMessageBox.ButtonRole.DestructiveRole
         )
