@@ -952,3 +952,188 @@ def test_confirm_face_only_does_not_reload_persons_list(tmp_app_paths, qtbot):
     ), "_load_persons should not be called for face-only changes"
     assert not page._person_name_edit.isHidden()
     assert page._selected_person_id == person_id
+
+
+# ===========================================================================
+# _delete_person_btn / _on_delete_person / _delete_person
+# ===========================================================================
+
+
+def test_delete_person_btn_disabled_initially(tmp_app_paths, qtbot):
+    """Delete Person button is disabled when no person is selected."""
+    page = _make_page(tmp_app_paths, qtbot)
+    assert not page._delete_person_btn.isEnabled()
+
+
+def test_delete_person_btn_enabled_after_selection(tmp_app_paths, qtbot):
+    """Delete Person button becomes enabled when a person is selected."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+
+    page._person_list.setCurrentRow(0)
+
+    assert page._delete_person_btn.isEnabled()
+
+
+def test_delete_person_btn_disabled_after_deselection(tmp_app_paths, qtbot):
+    """Delete Person button becomes disabled again after the selection is cleared."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+    assert page._delete_person_btn.isEnabled()
+
+    page._on_person_selected(None, None)
+
+    assert not page._delete_person_btn.isEnabled()
+
+
+def test_delete_person_removes_person_from_db(tmp_app_paths, qtbot):
+    """_delete_person removes the Person row from the database."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Alice")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._delete_person(person_id)
+
+    with page.session_factory() as session:
+        person = session.get(Person, person_id)
+        assert person is None
+
+
+def test_delete_person_cascades_to_clusters(tmp_app_paths, qtbot):
+    """_delete_person removes all EmbeddingCluster rows for the person."""
+    from sqlalchemy import select as sa_select
+
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Bob")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._delete_person(person_id)
+
+    with page.session_factory() as session:
+        count = (
+            session.execute(
+                sa_select(EmbeddingCluster).where(
+                    EmbeddingCluster.person_id == person_id
+                )
+            )
+            .scalars()
+            .all()
+        )
+        assert count == []
+
+
+def test_delete_person_unlinks_identified_faces(tmp_app_paths, qtbot):
+    """_delete_person sets face state to UNIDENTIFIED and clears person/cluster."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Carol")
+    cluster_id = _get_cluster_id(page.session_factory, person_id, "adult")
+    img_id = _add_image(page.session_factory)
+    face_id = _add_identified_face(page.session_factory, person_id, cluster_id, img_id)
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    page._delete_person(person_id)
+
+    with page.session_factory() as session:
+        face = session.get(Face, face_id)
+        assert face is not None
+        assert face.state == FaceState.UNIDENTIFIED
+        assert face.person_id is None
+        assert face.cluster_id is None
+        assert face.labelled_at is None
+
+
+def test_delete_person_refreshes_person_list(tmp_app_paths, qtbot):
+    """After _delete_person, the deleted person no longer appears in the list."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Dave")
+    _add_person_with_clusters(page.session_factory, "Eve")
+    page.refresh()
+    assert page._person_list.count() == 2
+
+    page._person_list.setCurrentRow(0)
+
+    page._delete_person(person_id)
+
+    assert page._person_list.count() == 1
+    assert page._person_list.item(0).text() == "Eve"
+
+
+def test_on_delete_person_cancel_does_nothing(tmp_app_paths, qtbot):
+    """_on_delete_person does not delete when the user cancels the dialog."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Frank")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    mock_msg = MagicMock()
+    delete_btn = MagicMock()
+    mock_msg.addButton.return_value = delete_btn
+    # clickedButton returns a different object → user did not click Delete
+    mock_msg.clickedButton.return_value = MagicMock()
+
+    with patch(
+        "photoaident.ui.pages.persons.QtWidgets.QMessageBox", return_value=mock_msg
+    ):
+        page._on_delete_person()
+
+    with page.session_factory() as session:
+        person = session.get(Person, person_id)
+        assert person is not None
+
+
+def test_on_delete_person_confirm_deletes_person(tmp_app_paths, qtbot):
+    """_on_delete_person deletes the person when the user confirms."""
+    page = _make_page(tmp_app_paths, qtbot)
+    person_id = _add_person_with_clusters(page.session_factory, "Grace")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    mock_msg = MagicMock()
+    delete_btn = MagicMock()
+    mock_msg.addButton.return_value = delete_btn
+    # clickedButton returns the same object as addButton → user clicked Delete
+    mock_msg.clickedButton.return_value = delete_btn
+
+    with patch(
+        "photoaident.ui.pages.persons.QtWidgets.QMessageBox", return_value=mock_msg
+    ):
+        page._on_delete_person()
+
+    with page.session_factory() as session:
+        person = session.get(Person, person_id)
+        assert person is None
+
+
+def test_on_delete_person_uses_pending_name_in_dialog(tmp_app_paths, qtbot):
+    """_on_delete_person shows the pending (edited) name in the confirmation dialog."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Harold")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    # Simulate the user editing the name without confirming (textEdited only fires on
+    # user input, not programmatic setText, so drive the handler directly)
+    page._on_name_edited("Harold Renamed")
+
+    mock_msg = MagicMock()
+    delete_btn = MagicMock()
+    mock_msg.addButton.return_value = delete_btn
+    mock_msg.clickedButton.return_value = MagicMock()  # cancel
+
+    setText_calls: list[str] = []
+    mock_msg.setText.side_effect = lambda t: setText_calls.append(t)
+
+    with patch(
+        "photoaident.ui.pages.persons.QtWidgets.QMessageBox", return_value=mock_msg
+    ):
+        page._on_delete_person()
+
+    assert setText_calls, "setText was never called on the message box"
+    assert "Harold Renamed" in setText_calls[0]
+    assert "Harold" not in setText_calls[0].replace("Harold Renamed", "")
