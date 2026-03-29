@@ -331,10 +331,7 @@ class PersonsPage(QtWidgets.QWidget):
                 return
             # Unlink all identified faces so they return to the labelling queue
             for face in person.faces:
-                face.state = FaceState.UNIDENTIFIED
-                face.person_id = None
-                face.cluster_id = None
-                face.labelled_at = None
+                PersonsPage._unlink_face(face)
             session.delete(person)
             session.commit()
 
@@ -557,13 +554,18 @@ class PersonsPage(QtWidgets.QWidget):
             self._changes_label.setText("")
 
     @staticmethod
+    def _unlink_face(face: Face) -> None:
+        """Reset a face to unidentified, removing all person/cluster assignments."""
+        face.state = FaceState.UNIDENTIFIED
+        face.person_id = None
+        face.cluster_id = None
+        face.labelled_at = None
+
+    @staticmethod
     def _apply_face_change(face: Face, change: _PendingChange) -> None:
         """Apply a pending change to a face object within an open session."""
         if change.kind == _PendingKind.REMOVE:
-            face.state = FaceState.UNIDENTIFIED
-            face.person_id = None
-            face.cluster_id = None
-            face.labelled_at = None
+            PersonsPage._unlink_face(face)
         elif change.kind == _PendingKind.MOVE:
             face.cluster_id = change.new_cluster_id
 
