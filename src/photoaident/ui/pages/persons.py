@@ -301,9 +301,10 @@ class PersonsPage(QtWidgets.QWidget):
     def _on_delete_person(self) -> None:
         if self._selected_person_id is None or self._current_person_name is None:
             return
+        display_name = self._pending_name or self._current_person_name
         msg = QtWidgets.QMessageBox(self)
         msg.setWindowTitle(self.tr("Delete Person"))
-        msg.setText(self.tr('Delete "{name}"?').format(name=self._current_person_name))
+        msg.setText(self.tr('Delete "{name}"?').format(name=display_name))
         msg.setInformativeText(
             self.tr(
                 "This will permanently remove the person. "

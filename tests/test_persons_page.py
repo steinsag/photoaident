@@ -1108,3 +1108,32 @@ def test_on_delete_person_confirm_deletes_person(tmp_app_paths, qtbot):
     with page.session_factory() as session:
         person = session.get(Person, person_id)
         assert person is None
+
+
+def test_on_delete_person_uses_pending_name_in_dialog(tmp_app_paths, qtbot):
+    """_on_delete_person shows the pending (edited) name in the confirmation dialog."""
+    page = _make_page(tmp_app_paths, qtbot)
+    _add_person_with_clusters(page.session_factory, "Harold")
+    page.refresh()
+    page._person_list.setCurrentRow(0)
+
+    # Simulate the user editing the name without confirming (textEdited only fires on
+    # user input, not programmatic setText, so drive the handler directly)
+    page._on_name_edited("Harold Renamed")
+
+    mock_msg = MagicMock()
+    delete_btn = MagicMock()
+    mock_msg.addButton.return_value = delete_btn
+    mock_msg.clickedButton.return_value = MagicMock()  # cancel
+
+    setText_calls: list[str] = []
+    mock_msg.setText.side_effect = lambda t: setText_calls.append(t)
+
+    with patch(
+        "photoaident.ui.pages.persons.QtWidgets.QMessageBox", return_value=mock_msg
+    ):
+        page._on_delete_person()
+
+    assert setText_calls, "setText was never called on the message box"
+    assert "Harold Renamed" in setText_calls[0]
+    assert "Harold" not in setText_calls[0].replace("Harold Renamed", "")
