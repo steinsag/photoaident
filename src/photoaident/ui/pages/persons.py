@@ -329,7 +329,7 @@ class PersonsPage(QtWidgets.QWidget):
             person = session.get(Person, person_id)
             if person is None:
                 return
-            # Unlink all identified faces so they return to the labelling queue
+            # Unlink all faces associated with person to return to the labeling queue
             for face in person.faces:
                 PersonsPage._unlink_face(face)
             session.delete(person)
