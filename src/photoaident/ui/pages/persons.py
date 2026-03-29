@@ -338,8 +338,6 @@ class PersonsPage(QtWidgets.QWidget):
             session.commit()
 
         self._selected_person_id = None
-        self._pending.clear()
-        self._pending_name = None
         self._load_persons()
         self._clear_right_panel()
 
