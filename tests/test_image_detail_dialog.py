@@ -468,9 +468,13 @@ def test_file_path_link_emits_navigate_to_browse(
 
     # Emit linkActivated directly; simulating a real mouse click on a QLabel
     # HTML link is not reliable in headless tests.
-    file_path_label.linkActivated.emit("#")
+    # The handler calls accept() before emitting; use waitSignal on finished so
+    # we catch both the dialog closing and the signal in the correct order.
+    with qtbot.waitSignal(dialog.finished):
+        file_path_label.linkActivated.emit("#")
 
     assert received == [str(img_path)]
+    assert dialog.isHidden()
 
 
 # ===========================================================================
