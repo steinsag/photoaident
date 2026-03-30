@@ -108,14 +108,17 @@ class BrowsePage(QtWidgets.QWidget):
 
         self._hint_label.setVisible(False)
         self._current_root = root
-        self._rebuild_root_column(root)
 
-        # After _rebuild_root_column, columns[0] = root and columns[1] = root's
-        # subfolders. Walk the path parts, selecting each segment in turn so
-        # that _on_column_item_changed builds the next column synchronously.
-        # Suppress the per-segment DB query; load images once for the final folder.
+        # Suppress all intermediate DB queries — _rebuild_root_column triggers
+        # _on_column_item_changed(0, …) for the root item, and the loop below
+        # triggers it for every path segment.  Load images exactly once at the end.
         self._suppress_image_load = True
         try:
+            self._rebuild_root_column(root)
+
+            # After _rebuild_root_column, columns[0] = root and columns[1] = root's
+            # subfolders. Walk the path parts, selecting each segment in turn so
+            # that _on_column_item_changed builds the next column synchronously.
             for col_index, part in enumerate(parts, start=1):
                 if col_index >= len(self._columns):
                     break
