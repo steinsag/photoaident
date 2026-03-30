@@ -31,7 +31,10 @@ def _apply_initial_bbox(root_obj: object, bbox: GpsBoundingBox) -> None:
         ("pendingBboxEast", bbox.east),
     ):
         root_obj.setProperty(name, value)  # type: ignore[attr-defined]
-    # Setting pendingBbox last triggers onPendingBboxChanged in QML.
+    # Toggle pendingBbox false→true so onPendingBboxChanged fires even when a
+    # previous call left it true (Qt property change signals only fire on a
+    # value change, so setting true while already true is a no-op).
+    root_obj.setProperty("pendingBbox", False)  # type: ignore[attr-defined]
     root_obj.setProperty("pendingBbox", True)  # type: ignore[attr-defined]
 
 

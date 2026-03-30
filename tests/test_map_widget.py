@@ -294,6 +294,24 @@ def test_apply_initial_bbox_sets_pending_bbox_last():
 
     last_call = mock_root.setProperty.call_args_list[-1]
     assert last_call.args[0] == "pendingBbox"
+    assert last_call.args[1] is True
+
+
+def test_apply_initial_bbox_toggles_pending_bbox():
+    """pendingBbox is set False then True so repeated calls always trigger the handler.
+
+    Qt property change signals only fire on a value change; toggling false→true
+    ensures onPendingBboxChanged fires even when pendingBbox was already true.
+    """
+    mock_root = MagicMock()
+    _apply_initial_bbox(mock_root, BBOX_GERMANY)
+
+    pending_calls = [
+        c for c in mock_root.setProperty.call_args_list if c.args[0] == "pendingBbox"
+    ]
+    assert len(pending_calls) == 2
+    assert pending_calls[0].args[1] is False
+    assert pending_calls[1].args[1] is True
 
 
 @pytest.mark.parametrize(
