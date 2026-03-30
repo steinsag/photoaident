@@ -359,8 +359,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
         return btn
 
-    def _switch_page(self, index: int) -> None:
-        """Switch to the given page index and highlight the active sidebar button."""
+    def _activate_page(self, index: int) -> None:
+        """Update sidebar buttons and stacked widget without triggering page refresh."""
         buttons = [
             self._page_btn_search,
             self._page_btn_browse,
@@ -370,6 +370,10 @@ class MainWindow(QtWidgets.QMainWindow):
         for i, btn in enumerate(buttons):
             btn.setChecked(i == index)
         self._stacked_pages.setCurrentIndex(index)
+
+    def _switch_page(self, index: int) -> None:
+        """Switch to the given page index, highlight the sidebar, and refresh."""
+        self._activate_page(index)
         if index == 1:
             self._browse_page.refresh()
         elif index == 2:
@@ -379,21 +383,17 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def go_to_labelling(self, priority_image_id: int) -> None:
         """Navigate to the Labelling page, prioritising faces from the given image."""
-        buttons = [
-            self._page_btn_search,
-            self._page_btn_browse,
-            self._page_btn_persons,
-            self._page_btn_label,
-        ]
-        for i, btn in enumerate(buttons):
-            btn.setChecked(i == 3)
-        self._stacked_pages.setCurrentIndex(3)
+        self._activate_page(3)
         self._labelling_page.refresh(priority_image_id=priority_image_id)
 
     def go_to_browse(self, file_path: str) -> None:
-        """Navigate to the Browse page with the image's folder pre-selected."""
+        """Navigate to the Browse page with the image's folder pre-selected.
+
+        Calls navigate_to_folder() directly (which loads the grid) and then
+        activates the page without triggering a second refresh() call.
+        """
         self._browse_page.navigate_to_folder(Path(file_path).parent)
-        self._switch_page(1)
+        self._activate_page(1)
 
     def _create_menus(self) -> None:
         menubar = self.menuBar()
