@@ -6,7 +6,7 @@ import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtWidgets
 
-from photoaident.core.search import SearchResult
+from photoaident.core.search import SearchResult, SortOrder
 from photoaident.db.database import (
     Face,
     FaceState,
@@ -788,3 +788,139 @@ def test_navigate_to_labelling_signal_forwarded(
         captured_slots[0](img_id)
 
     assert received == [img_id]
+
+
+# ---------------------------------------------------------------------------
+# Sort dropdown tests
+# ---------------------------------------------------------------------------
+
+
+def test_sort_combo_default_is_relevance_desc(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """Default sort is RELEVANCE_DESC and combo is enabled."""
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    assert grid._current_sort == SortOrder.RELEVANCE_DESC
+    assert grid._sort_combo.isEnabled()
+
+
+def test_set_sort_locked_disables_combo(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """set_sort_locked sets the given order and disables the combo."""
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    grid.set_sort_locked(SortOrder.FILENAME_ASC)
+
+    assert not grid._sort_combo.isEnabled()
+    assert grid._sort_entries[grid._sort_combo.currentIndex()] == SortOrder.FILENAME_ASC
+
+
+def test_set_relevance_available_false_disables_relevance_items(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """set_relevance_available(False) disables the two relevance combo items."""
+    from PySide6.QtGui import QStandardItemModel
+
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    grid.set_relevance_available(False)
+
+    model = grid._sort_combo.model()
+    assert isinstance(model, QStandardItemModel)
+    for i, order in enumerate(grid._sort_entries):
+        item = model.item(i)
+        assert item is not None
+        enabled = bool(item.flags() & QtCore.Qt.ItemFlag.ItemIsEnabled)
+        if order in (SortOrder.RELEVANCE_DESC, SortOrder.RELEVANCE_ASC):
+            assert not enabled, f"Expected {order} to be disabled"
+        else:
+            assert enabled, f"Expected {order} to be enabled"
+
+
+def test_set_relevance_available_true_reenables_relevance_items(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """set_relevance_available(True) re-enables relevance items after disabling."""
+    from PySide6.QtGui import QStandardItemModel
+
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    grid.set_relevance_available(False)
+    grid.set_relevance_available(True)
+
+    model = grid._sort_combo.model()
+    assert isinstance(model, QStandardItemModel)
+    for i in range(grid._sort_combo.count()):
+        item = model.item(i)
+        assert item is not None
+        assert bool(item.flags() & QtCore.Qt.ItemFlag.ItemIsEnabled)
+
+
+def test_set_relevance_unavailable_switches_from_relevance_sort(
+    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """When relevance sort is active and becomes unavailable, falls back to TAKEN_AT_DESC."""  # noqa: E501
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    assert grid._current_sort == SortOrder.RELEVANCE_DESC
+    grid.set_relevance_available(False)
+
+    assert grid._current_sort == SortOrder.TAKEN_AT_DESC
+    assert (
+        grid._sort_entries[grid._sort_combo.currentIndex()] == SortOrder.TAKEN_AT_DESC
+    )
+
+
+def test_sort_order_applied_on_set_results(
+    qtbot,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
+):
+    """Results are sorted by _current_sort when set_results() is called."""
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    # Switch to FILENAME_ASC before setting results
+    grid._sort_combo.setCurrentIndex(grid._sort_entries.index(SortOrder.FILENAME_ASC))
+
+    results = [
+        SearchResult(1, "/z_img.jpg", tmp_path / "z.jpg"),
+        SearchResult(2, "/a_img.jpg", tmp_path / "a.jpg"),
+        SearchResult(3, "/m_img.jpg", tmp_path / "m.jpg"),
+    ]
+    grid.set_results(results)
+
+    # After sorting by FILENAME_ASC: /a_img.jpg, /m_img.jpg, /z_img.jpg → ids 2, 3, 1
+    assert [r.image_id for r in grid._all_results] == [2, 3, 1]
+
+
+def test_changing_sort_combo_reorders_displayed_thumbnails(
+    qtbot,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
+):
+    """Changing the combo re-sorts and reloads the grid."""
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    results = [
+        SearchResult(1, "/z_img.jpg", tmp_path / "z.jpg"),
+        SearchResult(2, "/a_img.jpg", tmp_path / "a.jpg"),
+    ]
+    grid.set_results(results)
+
+    # Change to FILENAME_ASC
+    grid._sort_combo.setCurrentIndex(grid._sort_entries.index(SortOrder.FILENAME_ASC))
+
+    assert grid._all_results[0].image_id == 2  # /a_img.jpg first

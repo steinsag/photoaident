@@ -1,13 +1,14 @@
 """Orchestration tests for search_images(): multi-filter combinations and ranking."""
 
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pytest
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
-from photoaident.core.search import search_images
+from photoaident.core.search import SearchResult, SortOrder, search_images, sort_results
 from photoaident.db.cluster_means import recompute_cluster_mean
 from photoaident.db.database import (
     Face,
@@ -26,6 +27,130 @@ from tests.search_helpers import (
     _unit_emb,
     _zero_emb,
 )
+
+# ---------------------------------------------------------------------------
+# sort_results() unit tests
+# ---------------------------------------------------------------------------
+
+
+def _sr(
+    image_id: int,
+    file_path: str,
+    score: float | None = None,
+    taken_at: datetime | None = None,
+) -> SearchResult:
+    return SearchResult(
+        image_id=image_id,
+        file_path=file_path,
+        thumb_path=Path(file_path),
+        score=score,
+        taken_at=taken_at,
+    )
+
+
+def test_sort_relevance_desc():
+    """RELEVANCE_DESC: highest score first; None scores last."""
+    results = [
+        _sr(1, "/a.jpg", score=0.5),
+        _sr(2, "/b.jpg", score=None),
+        _sr(3, "/c.jpg", score=0.9),
+        _sr(4, "/d.jpg", score=0.2),
+    ]
+    sorted_results = sort_results(results, SortOrder.RELEVANCE_DESC)
+    ids = [r.image_id for r in sorted_results]
+    assert ids == [3, 1, 4, 2]
+
+
+def test_sort_relevance_asc():
+    """RELEVANCE_ASC: lowest score first; None scores last."""
+    results = [
+        _sr(1, "/a.jpg", score=0.5),
+        _sr(2, "/b.jpg", score=None),
+        _sr(3, "/c.jpg", score=0.9),
+        _sr(4, "/d.jpg", score=0.2),
+    ]
+    sorted_results = sort_results(results, SortOrder.RELEVANCE_ASC)
+    ids = [r.image_id for r in sorted_results]
+    assert ids == [4, 1, 3, 2]
+
+
+def test_sort_taken_at_desc():
+    """TAKEN_AT_DESC: newest first; None dates last."""
+    dt1 = datetime(2020, 1, 1)
+    dt2 = datetime(2022, 6, 15)
+    results = [
+        _sr(1, "/a.jpg", taken_at=dt1),
+        _sr(2, "/b.jpg", taken_at=None),
+        _sr(3, "/c.jpg", taken_at=dt2),
+    ]
+    sorted_results = sort_results(results, SortOrder.TAKEN_AT_DESC)
+    ids = [r.image_id for r in sorted_results]
+    assert ids == [3, 1, 2]
+
+
+def test_sort_taken_at_asc():
+    """TAKEN_AT_ASC: oldest first; None dates last."""
+    dt1 = datetime(2020, 1, 1)
+    dt2 = datetime(2022, 6, 15)
+    results = [
+        _sr(1, "/a.jpg", taken_at=dt1),
+        _sr(2, "/b.jpg", taken_at=None),
+        _sr(3, "/c.jpg", taken_at=dt2),
+    ]
+    sorted_results = sort_results(results, SortOrder.TAKEN_AT_ASC)
+    ids = [r.image_id for r in sorted_results]
+    assert ids == [1, 3, 2]
+
+
+def test_sort_filename_asc():
+    """FILENAME_ASC: alphabetical by path, case-insensitive."""
+    results = [
+        _sr(1, "/Zebra.jpg"),
+        _sr(2, "/apple.jpg"),
+        _sr(3, "/Mango.jpg"),
+    ]
+    sorted_results = sort_results(results, SortOrder.FILENAME_ASC)
+    ids = [r.image_id for r in sorted_results]
+    assert ids == [2, 3, 1]
+
+
+def test_sort_filename_desc():
+    """FILENAME_DESC: reverse alphabetical by path, case-insensitive."""
+    results = [
+        _sr(1, "/Zebra.jpg"),
+        _sr(2, "/apple.jpg"),
+        _sr(3, "/Mango.jpg"),
+    ]
+    sorted_results = sort_results(results, SortOrder.FILENAME_DESC)
+    ids = [r.image_id for r in sorted_results]
+    assert ids == [1, 3, 2]
+
+
+def test_sort_results_does_not_mutate_input():
+    """sort_results returns a new list; original is unchanged."""
+    results = [_sr(1, "/b.jpg", score=0.5), _sr(2, "/a.jpg", score=0.9)]
+    original_ids = [r.image_id for r in results]
+    sort_results(results, SortOrder.RELEVANCE_DESC)
+    assert [r.image_id for r in results] == original_ids
+
+
+def test_sort_results_all_none_scores():
+    """All None scores: stable result set returned regardless of order."""
+    results = [_sr(1, "/a.jpg"), _sr(2, "/b.jpg"), _sr(3, "/c.jpg")]
+    for order in (SortOrder.RELEVANCE_DESC, SortOrder.RELEVANCE_ASC):
+        sorted_results = sort_results(results, order)
+        assert len(sorted_results) == 3
+
+
+def test_sort_results_empty_list():
+    """Empty input returns empty output for all sort orders."""
+    for order in SortOrder:
+        assert sort_results([], order) == []
+
+
+# ---------------------------------------------------------------------------
+# search_images() tests
+# ---------------------------------------------------------------------------
 
 
 def test_search_images_empty_input_returns_empty(search_db, vector_store, tmp_path):

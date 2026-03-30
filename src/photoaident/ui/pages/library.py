@@ -108,6 +108,8 @@ class LibraryPage(QtWidgets.QWidget):
             filename_query=filename_query,
         )
 
+        self.grid.set_relevance_available(bool(person_ids))
+
         # Update visibility after retrieving results
         if not results:
             self.grid.clear()

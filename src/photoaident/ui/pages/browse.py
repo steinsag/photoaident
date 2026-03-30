@@ -7,7 +7,7 @@ from PySide6.QtGui import QKeyEvent
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from photoaident.core.search import SearchResult
+from photoaident.core.search import SearchResult, SortOrder
 from photoaident.db.database import Image
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
@@ -76,6 +76,7 @@ class BrowsePage(QtWidgets.QWidget):
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
         self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
         self.grid.navigate_to_browse.connect(self.navigate_to_browse)
+        self.grid.set_sort_locked(SortOrder.FILENAME_ASC)
         splitter.addWidget(self.grid)
 
         splitter.setStretchFactor(0, 0)
