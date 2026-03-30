@@ -44,6 +44,7 @@ class BrowsePage(QtWidgets.QWidget):
         self._columns: list[QtWidgets.QListWidget] = []
         self._selected_path: Path | None = None
         self._current_root: Path | None = None
+        self._suppress_image_load: bool = False
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -112,19 +113,21 @@ class BrowsePage(QtWidgets.QWidget):
         # After _rebuild_root_column, columns[0] = root and columns[1] = root's
         # subfolders. Walk the path parts, selecting each segment in turn so
         # that _on_column_item_changed builds the next column synchronously.
-        for col_index, part in enumerate(parts, start=1):
-            if col_index >= len(self._columns):
-                break
-            col = self._columns[col_index]
-            for row in range(col.count()):
-                item = col.item(row)
-                if item is None:
-                    continue
-                item_path: Path = item.data(QtCore.Qt.ItemDataRole.UserRole)
-                if item_path.name == part:
-                    col.setCurrentItem(item)
-                    self._on_column_item_changed(col_index, item)
+        # Suppress the per-segment DB query; load images once for the final folder.
+        self._suppress_image_load = True
+        try:
+            for col_index, part in enumerate(parts, start=1):
+                if col_index >= len(self._columns):
                     break
+                item = self._find_column_item(self._columns[col_index], part)
+                if item is not None:
+                    self._columns[col_index].setCurrentItem(item)
+                    self._on_column_item_changed(col_index, item)
+        finally:
+            self._suppress_image_load = False
+
+        if self._selected_path is not None:
+            self._load_images_for_folder(self._selected_path)
 
     def refresh(self) -> None:
         """Called when this page becomes active. Reloads from collection root.
@@ -259,11 +262,24 @@ class BrowsePage(QtWidgets.QWidget):
 
         folder: Path = current.data(QtCore.Qt.ItemDataRole.UserRole)
         self._selected_path = folder
-        self._load_images_for_folder(folder)
+        if not self._suppress_image_load:
+            self._load_images_for_folder(folder)
 
         subfolders = self._get_subfolders(folder)
         if subfolders:
             self._add_column(subfolders)
+
+    def _find_column_item(
+        self, col: QtWidgets.QListWidget, name: str
+    ) -> QtWidgets.QListWidgetItem | None:
+        """Return the item in *col* whose stored path has the given *name*, or None."""
+        for row in range(col.count()):
+            item = col.item(row)
+            if item is not None:
+                item_path: Path = item.data(QtCore.Qt.ItemDataRole.UserRole)
+                if item_path.name == name:
+                    return item
+        return None
 
     def _get_subfolders(self, path: Path) -> list[Path]:
         """Return sorted list of subdirectories under path."""
