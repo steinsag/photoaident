@@ -113,11 +113,19 @@ class MapWidget(QtWidgets.QWidget):
 
         self._zoom_out_btn = QtWidgets.QPushButton()
         self._zoom_out_btn.setIcon(QtGui.QIcon(_icon_path("zoom-out.svg")))
+        self._zoom_out_btn.setToolTip(self.tr("Zoom out"))
+        self._zoom_out_btn.setAccessibleName(self.tr("Zoom out"))
+        self._zoom_out_btn.setDefault(False)
+        self._zoom_out_btn.setAutoDefault(False)
         self._zoom_out_btn.clicked.connect(self._on_zoom_out)
         zoom_layout.addWidget(self._zoom_out_btn)
 
         self._zoom_in_btn = QtWidgets.QPushButton()
         self._zoom_in_btn.setIcon(QtGui.QIcon(_icon_path("zoom-in.svg")))
+        self._zoom_in_btn.setToolTip(self.tr("Zoom in"))
+        self._zoom_in_btn.setAccessibleName(self.tr("Zoom in"))
+        self._zoom_in_btn.setDefault(False)
+        self._zoom_in_btn.setAutoDefault(False)
         self._zoom_in_btn.clicked.connect(self._on_zoom_in)
         zoom_layout.addWidget(self._zoom_in_btn)
 

@@ -504,6 +504,17 @@ Möchten Sie wirklich fortfahren?</translation>
     </message>
 </context>
 <context>
+    <name>MapWidget</name>
+    <message>
+        <source>Zoom out</source>
+        <translation>Verkleinern</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Vergrößern</translation>
+    </message>
+</context>
+<context>
     <name>NewPersonDialog</name>
     <message>
         <source>New Person</source>

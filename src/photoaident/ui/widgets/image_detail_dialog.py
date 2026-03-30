@@ -180,6 +180,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             for f in self.image_data.faces
         )
         label_btn = QtWidgets.QPushButton(self.tr("Label Faces"))
+        label_btn.setAutoDefault(False)
         label_btn.setEnabled(has_unidentified)
         label_btn.clicked.connect(self._on_label_faces_clicked)
         metadata_layout.addWidget(label_btn)
@@ -187,10 +188,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         show_in_file_manager_btn = QtWidgets.QPushButton(
             self.tr("Show in File Manager")
         )
+        show_in_file_manager_btn.setAutoDefault(False)
         show_in_file_manager_btn.clicked.connect(self._on_show_in_file_manager_clicked)
         metadata_layout.addWidget(show_in_file_manager_btn)
 
         close_button = QtWidgets.QPushButton(self.tr("Close"))
+        close_button.setDefault(True)
         close_button.clicked.connect(self.accept)
         metadata_layout.addWidget(close_button)
 

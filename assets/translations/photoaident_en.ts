@@ -502,6 +502,17 @@ Do you really want to proceed?</translation>
     </message>
 </context>
 <context>
+    <name>MapWidget</name>
+    <message>
+        <source>Zoom out</source>
+        <translation>Zoom out</translation>
+    </message>
+    <message>
+        <source>Zoom in</source>
+        <translation>Zoom in</translation>
+    </message>
+</context>
+<context>
     <name>NewPersonDialog</name>
     <message>
         <source>New Person</source>
