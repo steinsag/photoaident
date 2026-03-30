@@ -210,7 +210,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         value = QtWidgets.QLabel(f'<a href="#">{escaped}</a>')
         value.setWordWrap(True)
         value.setTextInteractionFlags(
-            QtCore.Qt.TextInteractionFlag.LinksAccessibleByMouse
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+            | QtCore.Qt.TextInteractionFlag.TextSelectableByKeyboard
+            | QtCore.Qt.TextInteractionFlag.LinksAccessibleByMouse
             | QtCore.Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
         value.setOpenExternalLinks(False)
