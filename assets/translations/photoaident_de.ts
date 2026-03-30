@@ -294,6 +294,10 @@ Beispiele: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</transla
         <translation>Kamera</translation>
     </message>
     <message>
+        <source>Browse Photo Folder</source>
+        <translation>Fotoordner anzeigen</translation>
+    </message>
+    <message>
         <source>Label Faces</source>
         <translation>Gesichter beschriften</translation>
     </message>

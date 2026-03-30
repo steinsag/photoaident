@@ -896,6 +896,93 @@ def test_refresh_resets_root_when_collection_cleared(tmp_app_paths, qtbot):
     assert len(page._columns) == 0
 
 
+# ===========================================================================
+# navigate_to_folder — expands columns to target and loads its direct images
+# ===========================================================================
+
+
+def test_navigate_to_folder_expands_columns_and_loads_images(tmp_app_paths, qtbot):
+    """navigate_to_folder() expands Miller columns to target and shows direct images."""
+    collection = _make_collection_dir(tmp_app_paths)
+
+    year_dir = collection / "2023"
+    year_dir.mkdir()
+    month_dir = year_dir / "July"
+    month_dir.mkdir()
+
+    apply_migrations(f"sqlite:///{tmp_app_paths.db_path}")
+    engine = get_engine(str(tmp_app_paths.db_path))
+    session_factory = get_session_factory(engine)
+
+    with session_factory() as session:
+        session.add(Image(file_path=str(month_dir / "img1.jpg"), file_size=100))
+        session.add(Image(file_path=str(month_dir / "img2.jpg"), file_size=100))
+        session.add(Image(file_path=str(year_dir / "other.jpg"), file_size=100))
+        session.commit()
+
+    settings = Settings(collection_path=str(collection))
+    vector_store = VectorStore()
+    page = BrowsePage(session_factory, tmp_app_paths, settings, vector_store)
+    qtbot.addWidget(page)
+
+    page.navigate_to_folder(month_dir)
+    QtCore.QCoreApplication.processEvents()
+
+    # col 0 = root, col 1 = ["2023"] (selected), col 2 = ["July"] (selected, leaf)
+    assert len(page._columns) == 3
+
+    col1_item = page._columns[1].currentItem()
+    assert col1_item is not None
+    assert col1_item.text() == "2023"
+
+    col2_item = page._columns[2].currentItem()
+    assert col2_item is not None
+    assert col2_item.text() == "July"
+
+    # _selected_path must point to the target folder
+    assert page._selected_path == month_dir
+
+    # Grid must show only the 2 direct images of July, not the one in 2023/
+    assert page.grid._all_results is not None
+    assert len(page.grid._all_results) == 2
+
+
+# ===========================================================================
+# navigate_to_folder — no-op when collection path is not configured
+# ===========================================================================
+
+
+def test_navigate_to_folder_noop_when_no_collection(tmp_app_paths, qtbot):
+    """navigate_to_folder() returns immediately if no collection path is set."""
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path="")
+
+    page.navigate_to_folder(Path("/some/folder"))
+
+    assert len(page._columns) == 0
+
+
+# ===========================================================================
+# navigate_to_folder — no-op when folder is outside the collection root
+# ===========================================================================
+
+
+def test_navigate_to_folder_noop_when_outside_root(tmp_app_paths, qtbot):
+    """navigate_to_folder() with a path outside the collection root is a no-op."""
+    collection = _make_collection_dir(tmp_app_paths)
+    (collection / "sub").mkdir()
+
+    page = _make_browse_page(tmp_app_paths, qtbot, collection_path=str(collection))
+    page.refresh()
+    columns_before = len(page._columns)
+
+    outside = tmp_app_paths.thumbs_dir / "elsewhere"
+    outside.mkdir()
+    page.navigate_to_folder(outside)
+
+    # Page state must be unchanged
+    assert len(page._columns) == columns_before
+
+
 def _make_collection_dir(tmp_app_paths: AppPaths) -> Path:
     collection_dir = tmp_app_paths.thumbs_dir / "photos"
     collection_dir.mkdir(exist_ok=True)

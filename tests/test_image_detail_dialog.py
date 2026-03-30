@@ -392,6 +392,92 @@ def test_show_in_file_manager_button_always_enabled(
 
 
 # ===========================================================================
+# navigate_to_browse
+# ===========================================================================
+
+
+def test_browse_photo_folder_button_emits_navigate_to_browse(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """Clicking 'Browse Photo Folder' emits navigate_to_browse with the file path."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "browse_signal.jpg"
+    PILImage.new("RGB", (100, 100), "red").save(img_path)
+
+    db_image = Image(id=1100, file_path=str(img_path), file_size=500)
+    db_image.faces = []
+
+    dialog = ImageDetailDialog(
+        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
+    )
+    qtbot.addWidget(dialog)
+
+    received: list[str] = []
+    dialog.navigate_to_browse.connect(received.append)
+
+    browse_btn = next(
+        (
+            b
+            for b in dialog.findChildren(QtWidgets.QPushButton)
+            if b.text() == dialog.tr("Browse Photo Folder")
+        ),
+        None,
+    )
+    assert browse_btn is not None
+
+    # The button calls accept() before emitting; use waitSignal on finished so
+    # we catch both the dialog closing and the signal in the correct order.
+    with qtbot.waitSignal(dialog.finished):
+        qtbot.mouseClick(browse_btn, QtCore.Qt.MouseButton.LeftButton)
+
+    assert received == [str(img_path)]
+
+
+def test_file_path_link_emits_navigate_to_browse(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """Activating the file path link in the metadata panel emits navigate_to_browse."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "link_signal.jpg"
+    PILImage.new("RGB", (100, 100), "blue").save(img_path)
+
+    db_image = Image(id=1101, file_path=str(img_path), file_size=500)
+    db_image.faces = []
+
+    dialog = ImageDetailDialog(
+        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
+    )
+    qtbot.addWidget(dialog)
+
+    received: list[str] = []
+    dialog.navigate_to_browse.connect(received.append)
+
+    # Locate the clickable link label — it is the QLabel whose text contains
+    # an <a href="#"> wrapping the (HTML-escaped) file path.
+    file_path_label = next(
+        (
+            lbl
+            for lbl in dialog.findChildren(QtWidgets.QLabel)
+            if 'href="#"' in lbl.text()
+        ),
+        None,
+    )
+    assert file_path_label is not None
+
+    # Emit linkActivated directly; simulating a real mouse click on a QLabel
+    # HTML link is not reliable in headless tests.
+    # The handler calls accept() before emitting; use waitSignal on finished so
+    # we catch both the dialog closing and the signal in the correct order.
+    with qtbot.waitSignal(dialog.finished):
+        file_path_label.linkActivated.emit("#")
+
+    assert received == [str(img_path)]
+    assert dialog.isHidden()
+
+
+# ===========================================================================
 # Tooltip tests — _build_face_display_info
 # ===========================================================================
 

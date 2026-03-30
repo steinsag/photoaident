@@ -22,6 +22,7 @@ class BrowsePage(QtWidgets.QWidget):
     """Browse page: explore photo collection by folder using Miller columns."""
 
     navigate_to_labelling = QtCore.Signal(int)
+    navigate_to_browse = QtCore.Signal(str)  # file_path
 
     COLUMN_WIDTH = 200
     COLUMNS_AREA_HEIGHT = 250
@@ -43,6 +44,7 @@ class BrowsePage(QtWidgets.QWidget):
         self._columns: list[QtWidgets.QListWidget] = []
         self._selected_path: Path | None = None
         self._current_root: Path | None = None
+        self._suppress_image_load: bool = False
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -72,6 +74,7 @@ class BrowsePage(QtWidgets.QWidget):
         # Bottom: thumbnail grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
         self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
+        self.grid.navigate_to_browse.connect(self.navigate_to_browse)
         splitter.addWidget(self.grid)
 
         splitter.setStretchFactor(0, 0)
@@ -84,6 +87,50 @@ class BrowsePage(QtWidgets.QWidget):
         self._hint_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self._hint_label.setVisible(False)
         layout.addWidget(self._hint_label)
+
+    def navigate_to_folder(self, folder: Path) -> None:
+        """Pre-select *folder* in the Miller columns and show its images.
+
+        Rebuilds the column state from the collection root so the full path is
+        always visible, regardless of what was previously shown.
+        """
+        collection_path = self.settings.collection_path
+        if not collection_path:
+            return
+        root = Path(collection_path)
+        if not root.exists():
+            return
+
+        try:
+            parts = folder.relative_to(root).parts
+        except ValueError:
+            return  # folder is not under the collection root
+
+        self._hint_label.setVisible(False)
+        self._current_root = root
+
+        # Suppress all intermediate DB queries — _rebuild_root_column triggers
+        # _on_column_item_changed(0, …) for the root item, and the loop below
+        # triggers it for every path segment.  Load images exactly once at the end.
+        self._suppress_image_load = True
+        try:
+            self._rebuild_root_column(root)
+
+            # After _rebuild_root_column, columns[0] = root and columns[1] = root's
+            # subfolders. Walk the path parts, selecting each segment in turn so
+            # that _on_column_item_changed builds the next column synchronously.
+            for col_index, part in enumerate(parts, start=1):
+                if col_index >= len(self._columns):
+                    break
+                item = self._find_column_item(self._columns[col_index], part)
+                if item is not None:
+                    self._columns[col_index].setCurrentItem(item)
+                    self._on_column_item_changed(col_index, item)
+        finally:
+            self._suppress_image_load = False
+
+        if self._selected_path is not None:
+            self._load_images_for_folder(self._selected_path)
 
     def refresh(self) -> None:
         """Called when this page becomes active. Reloads from collection root.
@@ -218,11 +265,24 @@ class BrowsePage(QtWidgets.QWidget):
 
         folder: Path = current.data(QtCore.Qt.ItemDataRole.UserRole)
         self._selected_path = folder
-        self._load_images_for_folder(folder)
+        if not self._suppress_image_load:
+            self._load_images_for_folder(folder)
 
         subfolders = self._get_subfolders(folder)
         if subfolders:
             self._add_column(subfolders)
+
+    def _find_column_item(
+        self, col: QtWidgets.QListWidget, name: str
+    ) -> QtWidgets.QListWidgetItem | None:
+        """Return the item in *col* whose stored path has the given *name*, or None."""
+        for row in range(col.count()):
+            item = col.item(row)
+            if item is not None:
+                item_path: Path = item.data(QtCore.Qt.ItemDataRole.UserRole)
+                if item_path.name == name:
+                    return item
+        return None
 
     def _get_subfolders(self, path: Path) -> list[Path]:
         """Return sorted list of subdirectories under path."""

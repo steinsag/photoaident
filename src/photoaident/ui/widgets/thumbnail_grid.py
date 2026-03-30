@@ -244,6 +244,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     image_selected = QtCore.Signal(int)
     navigate_to_labelling = QtCore.Signal(int)
+    navigate_to_browse = QtCore.Signal(str)  # file_path
     results_changed = QtCore.Signal(int)  # total result count, emitted on set_results()
     page_loaded = QtCore.Signal(int, int)  # (loaded_so_far, total)
 
@@ -312,6 +313,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
                     parent=self,
                 )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
+                dialog.navigate_to_browse.connect(self.navigate_to_browse.emit)
                 dialog.exec()
 
     def clear(self):
