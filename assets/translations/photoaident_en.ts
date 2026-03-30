@@ -500,14 +500,6 @@ Do you really want to proceed?</translation>
         <source>Pan and zoom the map. The highlighted area defines the search region.</source>
         <translation>Pan and zoom the map. The highlighted area defines the search region.</translation>
     </message>
-    <message>
-        <source>Zoom in</source>
-        <translation>Zoom in</translation>
-    </message>
-    <message>
-        <source>Zoom out</source>
-        <translation>Zoom out</translation>
-    </message>
 </context>
 <context>
     <name>NewPersonDialog</name>
