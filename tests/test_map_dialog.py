@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PySide6 import QtQuickWidgets, QtWidgets
@@ -57,18 +57,39 @@ def test_on_accept_stores_selected_bbox(map_dialog):
     assert map_dialog.selected_bbox() == expected
 
 
+def _mock_map_root(dialog: MapLocationDialog) -> MagicMock:
+    """Replace the map widget's internal QQuickWidget with a mock root."""
+    mock_root = MagicMock()
+    dialog._map_widget._quick_widget = MagicMock()
+    dialog._map_widget._quick_widget.rootObject.return_value = mock_root
+    return mock_root
+
+
 # --- initial_bbox forwarded to MapWidget ---
 
 
 def test_initial_bbox_forwarded_to_map_widget(map_dialog_with_bbox):
-    """When initial_bbox is provided, set_initial_bbox is called on the map widget."""
-    # Verified by the pending op buffered because QML is not yet ready in tests.
-    assert len(map_dialog_with_bbox._map_widget._pending_ops) >= 1
+    """initial_bbox is provided — bbox properties are set on the QML root when ready."""
+    mock_root = _mock_map_root(map_dialog_with_bbox)
+
+    map_dialog_with_bbox._map_widget._on_qml_status_changed(
+        QtQuickWidgets.QQuickWidget.Status.Ready
+    )
+
+    set_props = {c.args[0] for c in mock_root.setProperty.call_args_list}
+    assert "pendingBbox" in set_props
 
 
 def test_no_initial_bbox_leaves_pending_ops_empty(map_dialog):
-    """No pending ops are buffered when no initial_bbox is provided."""
-    assert map_dialog._map_widget._pending_ops == []
+    """No initial_bbox — no bbox properties are set on the QML root when ready."""
+    mock_root = _mock_map_root(map_dialog)
+
+    map_dialog._map_widget._on_qml_status_changed(
+        QtQuickWidgets.QQuickWidget.Status.Ready
+    )
+
+    set_props = {c.args[0] for c in mock_root.setProperty.call_args_list}
+    assert "pendingBbox" not in set_props
 
 
 # --- done (geometry save) ---
