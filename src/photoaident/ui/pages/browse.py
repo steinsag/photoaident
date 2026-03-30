@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, cast
 from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QKeyEvent
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from photoaident.core.search import SearchResult
 from photoaident.db.database import Image
@@ -298,8 +299,12 @@ class BrowsePage(QtWidgets.QWidget):
         """Query DB for images whose direct parent is folder, update grid."""
         prefix = str(folder) + os.sep
         with self.session_factory() as session:
-            stmt = select(Image).where(Image.file_path.like(f"{prefix}%"))
-            images = session.scalars(stmt).all()
+            stmt = (
+                select(Image)
+                .options(joinedload(Image.metadata_rel))
+                .where(Image.file_path.like(f"{prefix}%"))
+            )
+            images = session.execute(stmt).unique().scalars().all()
             direct = [img for img in images if Path(img.file_path).parent == folder]
             self.grid.set_results(self._build_images_data(direct))
 
@@ -369,6 +374,7 @@ class BrowsePage(QtWidgets.QWidget):
                 file_path=img.file_path,
                 thumb_path=self.paths.thumbs_dir
                 / (f"{img.file_hash}.jpg" if img.file_hash else "unknown.jpg"),
+                taken_at=img.metadata_rel.taken_at if img.metadata_rel else None,
             )
             for img in images
         ]

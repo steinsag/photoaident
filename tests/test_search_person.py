@@ -2,6 +2,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 import photoaident.core.search as search_module
 from photoaident.core.search import search_images
 from photoaident.core.search_person import (
@@ -375,12 +377,17 @@ def test_intersect_and_rank_no_common_ids():
 
 
 def test_intersect_and_rank_multiple_persons():
-    """Common image IDs are ranked by weakest per-person score."""
+    """Common image IDs are ranked by weakest per-person score, with scores attached."""
     scores_a = {10: 0.9, 20: 0.7, 30: 0.5}
     scores_b = {10: 0.6, 20: 0.8, 30: 0.4}
     result = _intersect_and_rank([scores_a, scores_b])
     # min scores: 10→0.6, 20→0.7, 30→0.4 → sorted desc: [20, 10, 30]
-    assert result == [20, 10, 30]
+    ids = [img_id for img_id, _ in result]
+    assert ids == [20, 10, 30]
+    scores = {img_id: score for img_id, score in result}
+    assert scores[20] == pytest.approx(0.7)
+    assert scores[10] == pytest.approx(0.6)
+    assert scores[30] == pytest.approx(0.4)
 
 
 # ===========================================================================
