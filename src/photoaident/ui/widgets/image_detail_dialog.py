@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import Face, FaceState, Image as DBImage
+from photoaident.ui.widgets.map_widget import MapWidget
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
 
@@ -163,6 +164,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
             if meta.camera_make or meta.camera_model:
                 camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
                 add_meta(self.tr("Camera"), camera)
+            if meta.gps_lat is not None and meta.gps_lon is not None:
+                lat = float(meta.gps_lat)
+                lon = float(meta.gps_lon)
+                map_widget = MapWidget(self._paths, show_overlay=False)
+                map_widget.setFixedHeight(200)
+                map_widget.set_center(lat, lon, zoom=14)
+                map_widget.set_marker(lat, lon)
+                metadata_layout.addWidget(map_widget)
 
         metadata_layout.addStretch()
 
