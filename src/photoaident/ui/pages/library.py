@@ -17,6 +17,7 @@ class LibraryPage(QtWidgets.QWidget):
     """Page showing all indexed images with filtering by person, location, and date."""
 
     navigate_to_labelling = QtCore.Signal(int)
+    navigate_to_browse = QtCore.Signal(str)  # file_path
 
     def __init__(
         self,
@@ -55,6 +56,7 @@ class LibraryPage(QtWidgets.QWidget):
         # Image grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self._paths)
         self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
+        self.grid.navigate_to_browse.connect(self.navigate_to_browse)
         center_layout.addWidget(self.grid, stretch=1)
 
         # Placeholder shown when no filters are active

@@ -1,5 +1,6 @@
 import logging
 import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
@@ -147,7 +148,9 @@ class MainWindow(QtWidgets.QMainWindow):
         )
 
         self._library_page.navigate_to_labelling.connect(self.go_to_labelling)
+        self._library_page.navigate_to_browse.connect(self.go_to_browse)
         self._browse_page.navigate_to_labelling.connect(self.go_to_labelling)
+        self._browse_page.navigate_to_browse.connect(self.go_to_browse)
 
         # Stacked widget holding the pages (Search=0, Browse=1, Persons=2, Labelling=3)
         self._stacked_pages = QtWidgets.QStackedWidget()
@@ -386,6 +389,11 @@ class MainWindow(QtWidgets.QMainWindow):
             btn.setChecked(i == 3)
         self._stacked_pages.setCurrentIndex(3)
         self._labelling_page.refresh(priority_image_id=priority_image_id)
+
+    def go_to_browse(self, file_path: str) -> None:
+        """Navigate to the Browse page with the image's folder pre-selected."""
+        self._browse_page.navigate_to_folder(Path(file_path).parent)
+        self._switch_page(1)
 
     def _create_menus(self) -> None:
         menubar = self.menuBar()

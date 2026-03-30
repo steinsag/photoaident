@@ -1,3 +1,4 @@
+import html
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -88,6 +89,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
     """
 
     navigate_to_labelling = QtCore.Signal(int)  # image_id
+    navigate_to_browse = QtCore.Signal(str)  # file_path
 
     def __init__(
         self,
@@ -141,7 +143,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
     def _add_image_metadata_rows(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Populate layout with metadata rows and optional map widget."""
         self._add_meta_row(layout, self.tr("ID"), self.image_data.id)
-        self._add_meta_row(layout, self.tr("File Path"), self.image_data.file_path)
+        self._add_clickable_meta_row(
+            layout, self.tr("File Path"), self.image_data.file_path
+        )
         self._add_meta_row(
             layout,
             self.tr("File Size"),
@@ -192,6 +196,31 @@ class ImageDetailDialog(QtWidgets.QDialog):
         row_layout.addWidget(value)
         layout.addLayout(row_layout)
 
+    def _add_clickable_meta_row(
+        self,
+        layout: QtWidgets.QVBoxLayout,
+        label_text: str,
+        value_text: str,
+    ) -> None:
+        """Add a two-column label/link row; clicking emits navigate_to_browse."""
+        row_layout = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
+        label.setFixedWidth(80)
+        escaped = html.escape(value_text)
+        value = QtWidgets.QLabel(f'<a href="#">{escaped}</a>')
+        value.setWordWrap(True)
+        value.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | QtCore.Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        value.setOpenExternalLinks(False)
+        value.linkActivated.connect(
+            lambda _: self.navigate_to_browse.emit(str(self.image_data.file_path))
+        )
+        row_layout.addWidget(label)
+        row_layout.addWidget(value)
+        layout.addLayout(row_layout)
+
     def _create_map_widget(self, lat: float, lon: float) -> MapWidget:
         """Create a MapWidget centred on the given GPS coordinates."""
         map_widget = MapWidget(self._paths, show_overlay=False)
@@ -201,7 +230,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         return map_widget
 
     def _add_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
-        """Append Label Faces, Show in File Manager, and Close buttons to layout."""
+        """Append action buttons to the layout."""
+        browse_btn = QtWidgets.QPushButton(self.tr("Browse Photo Folder"))
+        browse_btn.setAutoDefault(False)
+        browse_btn.clicked.connect(self._on_browse_photo_folder_clicked)
+        layout.addWidget(browse_btn)
+
         has_unidentified = any(
             f.state == FaceState.UNIDENTIFIED and f.deleted_at is None
             for f in self.image_data.faces
@@ -349,6 +383,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
             QtCore.Qt.TransformationMode.SmoothTransformation,
         )
         self.image_label.setPixmap(scaled_pixmap)
+
+    def _on_browse_photo_folder_clicked(self) -> None:
+        self.accept()
+        self.navigate_to_browse.emit(str(self.image_data.file_path))
 
     def _on_label_faces_clicked(self) -> None:
         self.accept()

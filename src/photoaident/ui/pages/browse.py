@@ -22,6 +22,7 @@ class BrowsePage(QtWidgets.QWidget):
     """Browse page: explore photo collection by folder using Miller columns."""
 
     navigate_to_labelling = QtCore.Signal(int)
+    navigate_to_browse = QtCore.Signal(str)  # file_path
 
     COLUMN_WIDTH = 200
     COLUMNS_AREA_HEIGHT = 250
@@ -72,6 +73,7 @@ class BrowsePage(QtWidgets.QWidget):
         # Bottom: thumbnail grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
         self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
+        self.grid.navigate_to_browse.connect(self.navigate_to_browse)
         splitter.addWidget(self.grid)
 
         splitter.setStretchFactor(0, 0)
@@ -84,6 +86,45 @@ class BrowsePage(QtWidgets.QWidget):
         self._hint_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self._hint_label.setVisible(False)
         layout.addWidget(self._hint_label)
+
+    def navigate_to_folder(self, folder: Path) -> None:
+        """Pre-select *folder* in the Miller columns and show its images.
+
+        Rebuilds the column state from the collection root so the full path is
+        always visible, regardless of what was previously shown.
+        """
+        collection_path = self.settings.collection_path
+        if not collection_path:
+            return
+        root = Path(collection_path)
+        if not root.exists():
+            return
+
+        try:
+            parts = folder.relative_to(root).parts
+        except ValueError:
+            return  # folder is not under the collection root
+
+        self._hint_label.setVisible(False)
+        self._current_root = root
+        self._rebuild_root_column(root)
+
+        # After _rebuild_root_column, columns[0] = root and columns[1] = root's
+        # subfolders. Walk the path parts, selecting each segment in turn so
+        # that _on_column_item_changed builds the next column synchronously.
+        for col_index, part in enumerate(parts, start=1):
+            if col_index >= len(self._columns):
+                break
+            col = self._columns[col_index]
+            for row in range(col.count()):
+                item = col.item(row)
+                if item is None:
+                    continue
+                item_path: Path = item.data(QtCore.Qt.ItemDataRole.UserRole)
+                if item_path.name == part:
+                    col.setCurrentItem(item)
+                    self._on_column_item_changed(col_index, item)
+                    break
 
     def refresh(self) -> None:
         """Called when this page becomes active. Reloads from collection root.
