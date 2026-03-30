@@ -32,7 +32,7 @@ def _old_format_store(embeddings: list[np.ndarray]) -> VectorStore:
     store = VectorStore(dimension=_DIM)
     raw = IndexFlatIP(_DIM)
     for emb in embeddings:
-        raw.add(emb.reshape(1, -1).astype(VectorStore.EMBEDDING_DTYPE))  # type: ignore[call-arg]
+        raw.add(emb.reshape(1, -1).astype(VectorStore.EMBEDDING_DTYPE))  # type: ignore[call-arg]  # ty: ignore[missing-argument]
     store.index = raw
     return store
 

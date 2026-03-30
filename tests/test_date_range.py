@@ -104,4 +104,4 @@ class TestValidation:
     def test_frozen(self):
         dr = DateRange(start_year=2020)
         with pytest.raises(Exception):
-            dr.start_year = 2021  # type: ignore[misc]
+            dr.start_year = 2021  # type: ignore[misc]  # ty: ignore[invalid-assignment]

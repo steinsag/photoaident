@@ -31,6 +31,10 @@ from photoaident.utils.resource_path import get_resource_path
 
 logger = logging.getLogger(__name__)
 
+# Module-level reference to prevent the active translator from being
+# garbage-collected while the application is running.
+_active_translator: QtCore.QTranslator | None = None
+
 if TYPE_CHECKING:
     from photoaident.paths import AppPaths
 
@@ -45,6 +49,8 @@ class CorruptIndexError(Exception):
 
 def load_translations(app: QtWidgets.QApplication) -> None:
     """Load translations for the current system locale."""
+    global _active_translator
+
     locale = QtCore.QLocale.system().name()  # e.g. "en_US", "de_DE"
 
     # We also check the base name (e.g. "de" for "de_DE")
@@ -62,8 +68,8 @@ def load_translations(app: QtWidgets.QApplication) -> None:
         path = get_resource_path(os.path.join("assets", "translations", filename))
         if os.path.exists(path) and translator.load(path):
             app.installTranslator(translator)
-            # Keep a reference to prevent garbage collection
-            app._translator = translator  # type: ignore[attr-defined]
+            # Keep a module-level reference to prevent garbage collection.
+            _active_translator = translator
             # Align QLocale with the loaded UI language so that locale-aware
             # APIs (e.g. QLocale.standaloneMonthName) match the UI language.
             QtCore.QLocale.setDefault(QtCore.QLocale(loc))

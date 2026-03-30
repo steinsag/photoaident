@@ -942,7 +942,7 @@ def test_confirm_face_only_does_not_reload_persons_list(tmp_app_paths, qtbot):
         load_persons_calls.append(None)
         original_load()
 
-    page._load_persons = _tracking_load  # type: ignore[method-assign]
+    page._load_persons = _tracking_load  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]
 
     page._on_remove_requested(face_id)
     page._confirm()
