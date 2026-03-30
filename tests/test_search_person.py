@@ -384,7 +384,7 @@ def test_intersect_and_rank_multiple_persons():
     # min scores: 10→0.6, 20→0.7, 30→0.4 → sorted desc: [20, 10, 30]
     ids = [img_id for img_id, _ in result]
     assert ids == [20, 10, 30]
-    scores = {img_id: score for img_id, score in result}
+    scores = dict(result)
     assert scores[20] == pytest.approx(0.7)
     assert scores[10] == pytest.approx(0.6)
     assert scores[30] == pytest.approx(0.4)

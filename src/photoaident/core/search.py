@@ -157,7 +157,7 @@ def search_images(
         return []
 
     ordered_ids = [img_id for img_id, _ in ordered_pairs]
-    scores = {img_id: score for img_id, score in ordered_pairs}
+    scores = dict(ordered_pairs)
     images = _fetch_ordered_images(session_factory, ordered_ids)
     return _format_results(images, thumbs_dir, scores)
 
