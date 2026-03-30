@@ -214,9 +214,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             | QtCore.Qt.TextInteractionFlag.LinksAccessibleByKeyboard
         )
         value.setOpenExternalLinks(False)
-        value.linkActivated.connect(
-            lambda _: self.navigate_to_browse.emit(str(self.image_data.file_path))
-        )
+        value.linkActivated.connect(lambda _: self._on_browse_photo_folder_clicked())
         row_layout.addWidget(label)
         row_layout.addWidget(value)
         layout.addLayout(row_layout)
