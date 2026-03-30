@@ -2,7 +2,7 @@
 
 import logging
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
 
@@ -35,9 +35,7 @@ def _apply_initial_bbox(root_obj: object, bbox: GpsBoundingBox) -> None:
     root_obj.setProperty("pendingBbox", True)  # type: ignore[attr-defined]
 
 
-def _build_bbox(
-    south: float, west: float, north: float, east: float
-) -> GpsBoundingBox | None:
+def _build_bbox(south: Any, west: Any, north: Any, east: Any) -> GpsBoundingBox | None:
     """Build a GpsBoundingBox from raw coordinate values, or None on error."""
     try:
         return GpsBoundingBox(

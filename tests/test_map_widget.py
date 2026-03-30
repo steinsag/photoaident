@@ -270,7 +270,7 @@ def test_build_bbox_valid():
 
 def test_build_bbox_invalid():
     """Returns None when values are not float-convertible."""
-    assert _build_bbox(None, None, None, None) is None  # type: ignore[arg-type]
+    assert _build_bbox(None, None, None, None) is None
 
 
 # --- _apply_initial_bbox ---
