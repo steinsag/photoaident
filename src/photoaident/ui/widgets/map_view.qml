@@ -12,6 +12,15 @@ Item {
     property double initialLon: 10.0
     property int initialZoom: 5
 
+    // Controls visibility of the blue selection rectangle and bbox extraction.
+    // Set to false for display-only maps that show a marker instead.
+    property bool showOverlay: true
+
+    // Marker pin: set showMarker=true and provide coordinates to display a pin.
+    property bool   showMarker: false
+    property double markerLat:  0
+    property double markerLon:  0
+
     // Pending zoom: Python sets pendingZoomDelta to +1 (in) or -1 (out) via
     // setProperty().  The handler calls the appropriate zoom function and resets
     // the delta to 0 so subsequent clicks are re-detected as a change.
@@ -209,6 +218,8 @@ Item {
         onHeightChanged: { updateBbox(); root._applyPendingBboxIfReady() }
 
         function updateBbox() {
+            // Bbox extraction is only needed for selection overlays.
+            if (!root.showOverlay) return
             // Skip extraction while a pending bbox is being (re-)applied — the
             // map centre/zoom are still converging and extracting now would
             // overwrite the initial bbox with a transient intermediate value.
@@ -229,9 +240,62 @@ Item {
             root.east = coordBottomRight.longitude
         }
 
+        // Pin marker for display-only maps (show_overlay=false).
+        // anchorPoint places the tip of the teardrop at the exact coordinate.
+        MapQuickItem {
+            id: pinMarker
+            visible: root.showMarker
+            coordinate: QtPositioning.coordinate(root.markerLat, root.markerLon)
+            anchorPoint: Qt.point(pinCanvas.width / 2, pinCanvas.height)
+
+            sourceItem: Canvas {
+                id: pinCanvas
+                width: 24
+                height: 32
+
+                onPaint: {
+                    var ctx = getContext("2d")
+                    ctx.clearRect(0, 0, width, height)
+
+                    // Circle centre at top half of item; tip at bottom centre.
+                    var cx   = width / 2
+                    var cy   = cx          // circle centre y = radius from top
+                    var r    = cx - 1.5    // radius with 1.5 px margin for stroke
+                    var tipY = height - 1  // tip y (1 px from bottom edge)
+                    var d    = tipY - cy   // distance from circle centre to tip
+
+                    // Half-angle at the circle centre between the centre→tip
+                    // direction and each centre→tangent-point direction.
+                    // Derived from cos(halfArc) = r / d (right triangle at tangent).
+                    var halfArc = Math.acos(r / d)
+
+                    // Canvas angles: 0 = +x axis, clockwise positive (y-axis down).
+                    // "Straight down" from centre = π/2.
+                    var rightAngle = Math.PI / 2 - halfArc
+                    var leftAngle  = Math.PI / 2 + halfArc
+
+                    ctx.beginPath()
+                    // Start at tip; moveTo causes the implicit line to the arc
+                    // start (right tangent point).  Arc goes counter-clockwise
+                    // (up and over the top) to the left tangent point.
+                    // closePath draws the final straight line back to the tip.
+                    ctx.moveTo(cx, tipY)
+                    ctx.arc(cx, cy, r, rightAngle, leftAngle, true)
+                    ctx.closePath()
+
+                    ctx.fillStyle = "#E8392A"
+                    ctx.fill()
+                    ctx.strokeStyle = "white"
+                    ctx.lineWidth = 2
+                    ctx.stroke()
+                }
+            }
+        }
+
         // Overlay rectangle to show the search area
         Rectangle {
             id: selectionRect
+            visible: root.showOverlay
             anchors.centerIn: parent
             width: parent.width * 0.7
             height: parent.height * 0.7

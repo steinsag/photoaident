@@ -2,7 +2,7 @@ from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
 
 from photoaident.db.database import (
     Face,
@@ -17,6 +17,7 @@ from photoaident.ui.widgets.image_detail_dialog import (
     ImageDetailDialog,
     _FaceOverlayLabel,
 )
+from photoaident.ui.widgets.map_widget import MapWidget
 
 
 @pytest.fixture
@@ -904,3 +905,84 @@ def test_image_detail_dialog_with_exif_rotation(
     # After 90 degree rotation, width should be 200 and height 100
     assert pm.width() == 200
     assert pm.height() == 100
+
+
+# ===========================================================================
+# GPS map widget presence tests
+# ===========================================================================
+
+
+def test_map_shown_when_gps_available(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """A MapWidget is added to the metadata panel when GPS coordinates are present."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "gps.jpg"
+    PILImage.new("RGB", (100, 100), "green").save(img_path)
+
+    db_image = Image(id=1001, file_path=str(img_path), file_size=500)
+    db_image.metadata_rel = ImageMetadata(
+        width=100,
+        height=100,
+        gps_lat=48.137154,
+        gps_lon=11.576124,
+        taken_at_source=TakenAtSource.EXIF,
+    )
+    db_image.faces = []
+
+    with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
+        dialog = ImageDetailDialog(
+            db_image, mock_session_factory, mock_vector_store, tmp_app_paths
+        )
+    qtbot.add_widget(dialog)
+
+    map_widgets = dialog.findChildren(MapWidget)
+    assert len(map_widgets) == 1
+
+
+def test_map_not_shown_when_no_gps(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """No MapWidget is added when metadata exists but has no GPS coordinates."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "no_gps.jpg"
+    PILImage.new("RGB", (100, 100), "red").save(img_path)
+
+    db_image = Image(id=1002, file_path=str(img_path), file_size=500)
+    db_image.metadata_rel = ImageMetadata(
+        width=100,
+        height=100,
+        taken_at_source=TakenAtSource.EXIF,
+    )
+    db_image.faces = []
+
+    dialog = ImageDetailDialog(
+        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
+    )
+    qtbot.add_widget(dialog)
+
+    map_widgets = dialog.findChildren(MapWidget)
+    assert len(map_widgets) == 0
+
+
+def test_map_not_shown_when_no_metadata(
+    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+):
+    """No MapWidget is added when metadata_rel is None."""
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / "no_meta.jpg"
+    PILImage.new("RGB", (100, 100), "blue").save(img_path)
+
+    db_image = Image(id=1003, file_path=str(img_path), file_size=500)
+    db_image.faces = []
+
+    dialog = ImageDetailDialog(
+        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
+    )
+    qtbot.add_widget(dialog)
+
+    map_widgets = dialog.findChildren(MapWidget)
+    assert len(map_widgets) == 0

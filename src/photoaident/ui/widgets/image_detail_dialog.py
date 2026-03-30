@@ -5,6 +5,7 @@ from PySide6 import QtCore, QtGui, QtWidgets
 
 from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import Face, FaceState, Image as DBImage
+from photoaident.ui.widgets.map_widget import MapWidget
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
 
@@ -119,75 +120,111 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     def _setup_ui(self) -> None:
         main_layout = QtWidgets.QHBoxLayout(self)
+        main_layout.addWidget(self._create_metadata_panel())
+        main_layout.addWidget(self._create_image_area(), 1)
 
-        # Left panel: Metadata
-        metadata_panel = QtWidgets.QFrame()
-        metadata_panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        metadata_panel.setFixedWidth(250)
-        metadata_layout = QtWidgets.QVBoxLayout(metadata_panel)
-        metadata_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+    def _create_metadata_panel(self) -> QtWidgets.QFrame:
+        """Build and return the left metadata panel."""
+        panel = QtWidgets.QFrame()
+        panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        panel.setFixedWidth(250)
+        layout = QtWidgets.QVBoxLayout(panel)
+        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-        title_label = QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>")
-        metadata_layout.addWidget(title_label)
+        layout.addWidget(QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>"))
+        self._add_image_metadata_rows(layout)
+        layout.addStretch()
+        self._add_action_buttons(layout)
 
-        # Helper to add metadata rows
-        def add_meta(label_text: str, value_text: str | int | None) -> None:
-            if value_text is None:
-                return
-            row_layout = QtWidgets.QHBoxLayout()
-            label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
-            label.setFixedWidth(80)
-            value = QtWidgets.QLabel(str(value_text))
-            value.setWordWrap(True)
-            value.setTextInteractionFlags(
-                QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
-            )
-            row_layout.addWidget(label)
-            row_layout.addWidget(value)
-            metadata_layout.addLayout(row_layout)
+        return panel
 
-        add_meta(self.tr("ID"), self.image_data.id)
-        add_meta(self.tr("File Path"), self.image_data.file_path)
-        add_meta(
-            self.tr("File Size"), self._format_file_size(self.image_data.file_size)
+    def _add_image_metadata_rows(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """Populate layout with metadata rows and optional map widget."""
+        self._add_meta_row(layout, self.tr("ID"), self.image_data.id)
+        self._add_meta_row(layout, self.tr("File Path"), self.image_data.file_path)
+        self._add_meta_row(
+            layout,
+            self.tr("File Size"),
+            self._format_file_size(self.image_data.file_size),
         )
 
-        if self.image_data.metadata_rel:
-            meta = self.image_data.metadata_rel
-            if meta.width and meta.height:
-                add_meta(self.tr("Dimensions"), f"{meta.width} x {meta.height}")
-            if meta.taken_at:
-                add_meta(
-                    self.tr("Taken At"), meta.taken_at.strftime("%Y-%m-%d %H:%M:%S")
-                )
-            if meta.camera_make or meta.camera_model:
-                camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
-                add_meta(self.tr("Camera"), camera)
+        if not self.image_data.metadata_rel:
+            return
 
-        metadata_layout.addStretch()
+        meta = self.image_data.metadata_rel
+        if meta.width and meta.height:
+            self._add_meta_row(
+                layout, self.tr("Dimensions"), f"{meta.width} x {meta.height}"
+            )
+        if meta.taken_at:
+            self._add_meta_row(
+                layout,
+                self.tr("Taken At"),
+                meta.taken_at.strftime("%Y-%m-%d %H:%M:%S"),
+            )
+        if meta.camera_make or meta.camera_model:
+            camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
+            self._add_meta_row(layout, self.tr("Camera"), camera)
+        if meta.gps_lat is not None and meta.gps_lon is not None:
+            map_widget = self._create_map_widget(
+                float(meta.gps_lat), float(meta.gps_lon)
+            )
+            layout.addWidget(map_widget)
 
+    def _add_meta_row(
+        self,
+        layout: QtWidgets.QVBoxLayout,
+        label_text: str,
+        value_text: str | int | None,
+    ) -> None:
+        """Add a two-column label/value row to *layout*. No-ops when value is None."""
+        if value_text is None:
+            return
+        row_layout = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
+        label.setFixedWidth(80)
+        value = QtWidgets.QLabel(str(value_text))
+        value.setWordWrap(True)
+        value.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        row_layout.addWidget(label)
+        row_layout.addWidget(value)
+        layout.addLayout(row_layout)
+
+    def _create_map_widget(self, lat: float, lon: float) -> MapWidget:
+        """Create a MapWidget centred on the given GPS coordinates."""
+        map_widget = MapWidget(self._paths, show_overlay=False)
+        map_widget.setFixedHeight(200)
+        map_widget.set_center(lat, lon, zoom=14)
+        map_widget.set_marker(lat, lon)
+        return map_widget
+
+    def _add_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """Append Label Faces, Show in File Manager, and Close buttons to layout."""
         has_unidentified = any(
             f.state == FaceState.UNIDENTIFIED and f.deleted_at is None
             for f in self.image_data.faces
         )
+
         label_btn = QtWidgets.QPushButton(self.tr("Label Faces"))
+        label_btn.setAutoDefault(False)
         label_btn.setEnabled(has_unidentified)
         label_btn.clicked.connect(self._on_label_faces_clicked)
-        metadata_layout.addWidget(label_btn)
+        layout.addWidget(label_btn)
 
-        show_in_file_manager_btn = QtWidgets.QPushButton(
-            self.tr("Show in File Manager")
-        )
-        show_in_file_manager_btn.clicked.connect(self._on_show_in_file_manager_clicked)
-        metadata_layout.addWidget(show_in_file_manager_btn)
+        show_btn = QtWidgets.QPushButton(self.tr("Show in File Manager"))
+        show_btn.setAutoDefault(False)
+        show_btn.clicked.connect(self._on_show_in_file_manager_clicked)
+        layout.addWidget(show_btn)
 
         close_button = QtWidgets.QPushButton(self.tr("Close"))
+        close_button.setDefault(True)
         close_button.clicked.connect(self.accept)
-        metadata_layout.addWidget(close_button)
+        layout.addWidget(close_button)
 
-        main_layout.addWidget(metadata_panel)
-
-        # Right panel: Image View
+    def _create_image_area(self) -> QtWidgets.QScrollArea:
+        """Build and return the right-panel scroll area containing the image label."""
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -196,7 +233,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.scroll_area.setWidget(self.image_label)
 
-        main_layout.addWidget(self.scroll_area, 1)
+        return self.scroll_area
 
     def _get_face_display_info(self, face: Face) -> tuple[QtCore.Qt.GlobalColor, str]:
         """Return (color, tooltip) for a single face based on its state."""
