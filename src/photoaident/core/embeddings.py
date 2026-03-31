@@ -48,8 +48,8 @@ class FaceEmbedder:
         if longest <= max_dim:
             return image, 1.0
         scale = max_dim / longest
-        new_w = round(w * scale)
-        new_h = round(h * scale)
+        new_w = max(1, int(round(w * scale)))
+        new_h = max(1, int(round(h * scale)))
         scaled = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
         return scaled, scale
 
