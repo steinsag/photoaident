@@ -3,7 +3,6 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
 
 from photoaident.core.search import SearchResult
@@ -15,7 +14,6 @@ from photoaident.db.database import (
     Person,
     TakenAtSource,
 )
-from photoaident.db.vector_store import VectorStore
 from photoaident.ui.widgets.image_detail_dialog import (
     ImageDetailDialog,
     _FaceOverlayLabel,
@@ -23,27 +21,17 @@ from photoaident.ui.widgets.image_detail_dialog import (
 from photoaident.ui.widgets.map_widget import MapWidget
 
 
-@pytest.fixture
-def mock_session_factory():
-    return MagicMock()
-
-
-@pytest.fixture
-def mock_vector_store():
-    return MagicMock(spec=VectorStore)
-
-
 def test_image_detail_dialog_init(
     qtbot,
     sample_image_with_metadata,
-    mock_session_factory,
-    mock_vector_store,
+    session_factory,
+    vector_store,
     tmp_app_paths,
 ):
     dialog = ImageDetailDialog(
         sample_image_with_metadata,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
     )
     qtbot.add_widget(dialog)
@@ -62,16 +50,14 @@ def test_image_detail_dialog_init(
 
 
 def test_image_detail_dialog_missing_file(
-    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, session_factory, vector_store, tmp_app_paths
 ):
     db_image = Image(
         id=456,
         file_path="/non/existent/path.jpg",
         file_size=0,
     )
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     assert "not found" in dialog.image_label.text().lower()
@@ -80,14 +66,14 @@ def test_image_detail_dialog_missing_file(
 def test_image_detail_dialog_close(
     qtbot,
     sample_image_with_metadata,
-    mock_session_factory,
-    mock_vector_store,
+    session_factory,
+    vector_store,
     tmp_app_paths,
 ):
     dialog = ImageDetailDialog(
         sample_image_with_metadata,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
     )
     qtbot.add_widget(dialog)
@@ -106,7 +92,7 @@ def test_image_detail_dialog_close(
 
 
 def test_large_file_size_shows_mb(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """File size ≥ 1 MB is displayed in MB units."""
     from PIL import Image as PILImage
@@ -119,9 +105,7 @@ def test_large_file_size_shows_mb(
         file_path=str(img_path),
         file_size=2 * 1024 * 1024,  # 2 MB
     )
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     labels = dialog.findChildren(QtWidgets.QLabel)
@@ -130,7 +114,7 @@ def test_large_file_size_shows_mb(
 
 
 def test_taken_at_in_metadata_is_displayed(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """taken_at field in ImageMetadata appears in the dialog."""
     from PIL import Image as PILImage
@@ -147,9 +131,7 @@ def test_taken_at_in_metadata_is_displayed(
     )
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     labels = dialog.findChildren(QtWidgets.QLabel)
@@ -158,16 +140,14 @@ def test_taken_at_in_metadata_is_displayed(
 
 
 def test_load_image_failure_shows_error(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """A file with invalid image content shows a failure message."""
     bad_file = tmp_path / "bad.jpg"
     bad_file.write_bytes(b"this is not a valid jpeg")
 
     db_image = Image(id=400, file_path=str(bad_file), file_size=25)
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     text = dialog.image_label.text().lower()
@@ -175,13 +155,11 @@ def test_load_image_failure_shows_error(
 
 
 def test_update_image_display_without_pixmap_is_noop(
-    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, session_factory, vector_store, tmp_app_paths
 ):
     """_update_image_display returns early if _original_pixmap is not set."""
     db_image = Image(id=500, file_path="/nonexistent.jpg", file_size=0)
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     assert not hasattr(dialog, "_original_pixmap")
@@ -191,15 +169,15 @@ def test_update_image_display_without_pixmap_is_noop(
 def test_resize_event_schedules_redisplay(
     qtbot,
     sample_image_with_metadata,
-    mock_session_factory,
-    mock_vector_store,
+    session_factory,
+    vector_store,
     tmp_app_paths,
 ):
     """resizeEvent does not raise and schedules a display update."""
     dialog = ImageDetailDialog(
         sample_image_with_metadata,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
     )
     qtbot.add_widget(dialog)
@@ -211,15 +189,15 @@ def test_resize_event_schedules_redisplay(
 def test_label_faces_button_enabled_when_unidentified_faces(
     qtbot,
     sample_image_with_metadata,
-    mock_session_factory,
-    mock_vector_store,
+    session_factory,
+    vector_store,
     tmp_app_paths,
 ):
     """Label button is enabled when the image has at least one unidentified face."""
     dialog = ImageDetailDialog(
         sample_image_with_metadata,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
     )
     qtbot.add_widget(dialog)
@@ -231,7 +209,7 @@ def test_label_faces_button_enabled_when_unidentified_faces(
 
 
 def test_label_faces_button_disabled_when_no_unidentified_faces(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Label button is disabled when the image has no unidentified faces."""
     from PIL import Image as PILImage
@@ -252,9 +230,7 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
         )
     ]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -264,7 +240,7 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
 
 
 def test_label_faces_button_emits_signal(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Clicking the label button emits navigate_to_labelling with the image id."""
     from PIL import Image as PILImage
@@ -285,9 +261,7 @@ def test_label_faces_button_emits_signal(
         )
     ]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     emitted_ids: list[int] = []
@@ -310,15 +284,15 @@ def test_label_faces_button_emits_signal(
 def test_show_in_file_manager_button_exists(
     qtbot,
     sample_image_with_metadata,
-    mock_session_factory,
-    mock_vector_store,
+    session_factory,
+    vector_store,
     tmp_app_paths,
 ):
     """Show in File Manager button is present in the dialog."""
     dialog = ImageDetailDialog(
         sample_image_with_metadata,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
     )
     qtbot.addWidget(dialog)
@@ -333,15 +307,15 @@ def test_show_in_file_manager_button_exists(
 def test_show_in_file_manager_button_calls_reveal(
     qtbot,
     sample_image_with_metadata,
-    mock_session_factory,
-    mock_vector_store,
+    session_factory,
+    vector_store,
     tmp_app_paths,
 ):
     """Clicking the button calls reveal_in_file_manager with the image file path."""
     dialog = ImageDetailDialog(
         sample_image_with_metadata,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
     )
     qtbot.addWidget(dialog)
@@ -360,7 +334,7 @@ def test_show_in_file_manager_button_calls_reveal(
 
 
 def test_show_in_file_manager_button_always_enabled(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Show in File Manager button is enabled regardless of face labelling state."""
     from PIL import Image as PILImage
@@ -381,9 +355,7 @@ def test_show_in_file_manager_button_always_enabled(
         )
     ]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.addWidget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
@@ -400,7 +372,7 @@ def test_show_in_file_manager_button_always_enabled(
 
 
 def test_browse_photo_folder_button_emits_navigate_to_browse(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Clicking 'Browse Photo Folder' emits navigate_to_browse with the file path."""
     from PIL import Image as PILImage
@@ -411,9 +383,7 @@ def test_browse_photo_folder_button_emits_navigate_to_browse(
     db_image = Image(id=1100, file_path=str(img_path), file_size=500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.addWidget(dialog)
 
     received: list[str] = []
@@ -438,7 +408,7 @@ def test_browse_photo_folder_button_emits_navigate_to_browse(
 
 
 def test_file_path_link_emits_navigate_to_browse(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Activating the file path link in the metadata panel emits navigate_to_browse."""
     from PIL import Image as PILImage
@@ -449,9 +419,7 @@ def test_file_path_link_emits_navigate_to_browse(
     db_image = Image(id=1101, file_path=str(img_path), file_size=500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.addWidget(dialog)
 
     received: list[str] = []
@@ -486,7 +454,7 @@ def test_file_path_link_emits_navigate_to_browse(
 
 
 def test_face_tooltip_identified_shows_person_name(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_build_face_display_info returns the person's name for IDENTIFIED faces."""
     from PIL import Image as PILImage
@@ -509,9 +477,7 @@ def test_face_tooltip_identified_shows_person_name(
     db_image = Image(id=1, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -521,7 +487,7 @@ def test_face_tooltip_identified_shows_person_name(
 
 
 def test_face_tooltip_anonymous_shows_anonymous(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_build_face_display_info returns 'Anonymous' for ANONYMOUS faces."""
     from PIL import Image as PILImage
@@ -542,9 +508,7 @@ def test_face_tooltip_anonymous_shows_anonymous(
     db_image = Image(id=2, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -554,7 +518,7 @@ def test_face_tooltip_anonymous_shows_anonymous(
 
 
 def test_face_tooltip_unidentified_no_vector_match(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_build_face_display_info: UNIDENTIFIED with no vector match → Unknown + red."""
     # This covers the case where _resolve_best_person_name returns None
@@ -577,9 +541,7 @@ def test_face_tooltip_unidentified_no_vector_match(
     db_image = Image(id=3, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -589,7 +551,7 @@ def test_face_tooltip_unidentified_no_vector_match(
 
 
 def test_face_tooltip_deleted_face_excluded(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_build_face_display_info skips faces where deleted_at is set."""
     from PIL import Image as PILImage
@@ -620,9 +582,7 @@ def test_face_tooltip_deleted_face_excluded(
     db_image = Image(id=4, file_path=str(img_path), file_size=500)
     db_image.faces = [active_face, deleted_face]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     regions = dialog._build_face_display_info()
@@ -880,7 +840,7 @@ def test_face_tooltip_unidentified_with_vector_store_no_match(
 
 
 def test_bounding_box_colors_by_state(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Verify that face boxes are drawn in different colors for different states."""
     from PIL import Image as PILImage
@@ -923,9 +883,7 @@ def test_bounding_box_colors_by_state(
     db_image = Image(id=5, file_path=str(img_path), file_size=500)
     db_image.faces = [identified_face, anonymous_face, unidentified_face]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     # The pixmap has bounding boxes drawn; verify it's not null and loaded correctly
@@ -954,7 +912,7 @@ def test_bounding_box_colors_by_state(
 
 
 def test_image_detail_dialog_with_exif_rotation(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Image with EXIF rotation triggers the transformation block."""
     from PIL import Image as PILImage
@@ -980,9 +938,7 @@ def test_image_detail_dialog_with_exif_rotation(
         )
     ]
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     # If the EXIF rotation transformation block was executed, the
@@ -1002,7 +958,7 @@ def test_image_detail_dialog_with_exif_rotation(
 
 
 def test_map_shown_when_gps_available(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """A MapWidget is added to the metadata panel when GPS coordinates are present."""
     from PIL import Image as PILImage
@@ -1022,7 +978,7 @@ def test_map_shown_when_gps_available(
 
     with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
         dialog = ImageDetailDialog(
-            db_image, mock_session_factory, mock_vector_store, tmp_app_paths
+            db_image, session_factory, vector_store, tmp_app_paths
         )
     qtbot.add_widget(dialog)
 
@@ -1031,7 +987,7 @@ def test_map_shown_when_gps_available(
 
 
 def test_map_not_shown_when_no_gps(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No MapWidget is added when metadata exists but has no GPS coordinates."""
     from PIL import Image as PILImage
@@ -1047,9 +1003,7 @@ def test_map_not_shown_when_no_gps(
     )
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     map_widgets = dialog.findChildren(MapWidget)
@@ -1057,7 +1011,7 @@ def test_map_not_shown_when_no_gps(
 
 
 def test_map_not_shown_when_no_metadata(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No MapWidget is added when metadata_rel is None."""
     from PIL import Image as PILImage
@@ -1068,9 +1022,7 @@ def test_map_not_shown_when_no_metadata(
     db_image = Image(id=1003, file_path=str(img_path), file_size=500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     map_widgets = dialog.findChildren(MapWidget)
@@ -1089,7 +1041,7 @@ def _make_search_result(image_id: int, file_path: str, thumb_path: str | Path):
 
 
 def test_navigation_buttons_exist(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Previous and Next buttons are present in the dialog."""
     from PIL import Image as PILImage
@@ -1107,8 +1059,8 @@ def test_navigation_buttons_exist(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1124,7 +1076,7 @@ def test_navigation_buttons_exist(
 
 
 def test_navigation_buttons_disabled_at_first_position(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Previous is disabled when viewing the first image in the list."""
     from PIL import Image as PILImage
@@ -1142,8 +1094,8 @@ def test_navigation_buttons_disabled_at_first_position(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1161,7 +1113,7 @@ def test_navigation_buttons_disabled_at_first_position(
 
 
 def test_navigation_buttons_disabled_at_last_position(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Next is disabled when viewing the last image in the list."""
     from PIL import Image as PILImage
@@ -1179,8 +1131,8 @@ def test_navigation_buttons_disabled_at_last_position(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
@@ -1198,7 +1150,7 @@ def test_navigation_buttons_disabled_at_last_position(
 
 
 def test_navigation_buttons_both_disabled_when_no_results(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Both buttons are disabled when there are no results."""
     from PIL import Image as PILImage
@@ -1211,8 +1163,8 @@ def test_navigation_buttons_both_disabled_when_no_results(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=[],
@@ -1230,7 +1182,7 @@ def test_navigation_buttons_both_disabled_when_no_results(
 
 
 def test_navigation_buttons_both_disabled_for_single_result(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Both buttons are disabled when there is only one image in the results."""
     from PIL import Image as PILImage
@@ -1243,8 +1195,8 @@ def test_navigation_buttons_both_disabled_for_single_result(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=[_make_search_result(5500, str(img_path), str(tmp_path / "t.jpg"))],
@@ -1262,7 +1214,7 @@ def test_navigation_buttons_both_disabled_for_single_result(
 
 
 def test_navigation_label_shows_position(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """The navigation label displays the correct position (e.g., '2 / 3')."""
     from PIL import Image as PILImage
@@ -1281,8 +1233,8 @@ def test_navigation_label_shows_position(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
@@ -1293,7 +1245,7 @@ def test_navigation_label_shows_position(
 
 
 def test_navigation_label_empty_when_no_results(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """The navigation label is empty when there are no results."""
     from PIL import Image as PILImage
@@ -1306,8 +1258,8 @@ def test_navigation_label_empty_when_no_results(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=[],
@@ -1318,7 +1270,7 @@ def test_navigation_label_empty_when_no_results(
 
 
 def test_keyboard_left_arrow_navigates_previous(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Pressing the left arrow key calls _show_previous_image."""
     from PIL import Image as PILImage
@@ -1336,8 +1288,8 @@ def test_keyboard_left_arrow_navigates_previous(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
@@ -1355,7 +1307,7 @@ def test_keyboard_left_arrow_navigates_previous(
 
 
 def test_keyboard_right_arrow_navigates_next(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Pressing the right arrow key calls _show_next_image."""
     from PIL import Image as PILImage
@@ -1373,8 +1325,8 @@ def test_keyboard_right_arrow_navigates_next(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1392,7 +1344,7 @@ def test_keyboard_right_arrow_navigates_next(
 
 
 def test_other_keys_do_not_navigate(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Keys other than left/right do not trigger navigation."""
     from PIL import Image as PILImage
@@ -1410,8 +1362,8 @@ def test_other_keys_do_not_navigate(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
@@ -1439,7 +1391,7 @@ def test_other_keys_do_not_navigate(
 
 
 def test_show_next_image_disabled_at_end(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_show_next_image does nothing when already at the last image."""
     from PIL import Image as PILImage
@@ -1457,8 +1409,8 @@ def test_show_next_image_disabled_at_end(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
@@ -1471,7 +1423,7 @@ def test_show_next_image_disabled_at_end(
 
 
 def test_show_previous_image_disabled_at_start(
-    qtbot, tmp_path, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_show_previous_image does nothing when already at the first image."""
     from PIL import Image as PILImage
@@ -1489,8 +1441,8 @@ def test_show_previous_image_disabled_at_start(
 
     dialog = ImageDetailDialog(
         db_image,
-        mock_session_factory,
-        mock_vector_store,
+        session_factory,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1508,14 +1460,12 @@ def test_show_previous_image_disabled_at_start(
 
 
 def test_add_meta_row_skipped_when_value_is_none(
-    qtbot, mock_session_factory, mock_vector_store, tmp_app_paths
+    qtbot, session_factory, vector_store, tmp_app_paths
 ):
     """_add_meta_row adds no row when value_text is None."""
     db_image = Image(id=9001, file_path="/nonexistent.jpg", file_size=0)
     db_image.faces = []
-    dialog = ImageDetailDialog(
-        db_image, mock_session_factory, mock_vector_store, tmp_app_paths
-    )
+    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     layout = QtWidgets.QVBoxLayout()
@@ -1523,9 +1473,7 @@ def test_add_meta_row_skipped_when_value_is_none(
     assert layout.count() == 0
 
 
-def test_show_next_image_loads_next_image(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
-):
+def test_show_next_image_loads_next_image(qtbot, tmp_path, vector_store, tmp_app_paths):
     """Clicking Next actually loads the next image via _load_image_by_index."""
     from PIL import Image as PILImage
 
@@ -1564,7 +1512,7 @@ def test_show_next_image_loads_next_image(
     dialog = ImageDetailDialog(
         db_image1,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1578,7 +1526,7 @@ def test_show_next_image_loads_next_image(
 
 
 def test_show_previous_image_loads_previous_image(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """Clicking Previous actually loads the previous image via _load_image_by_index."""
     from PIL import Image as PILImage
@@ -1618,7 +1566,7 @@ def test_show_previous_image_loads_previous_image(
     dialog = ImageDetailDialog(
         db_image2,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
@@ -1632,7 +1580,7 @@ def test_show_previous_image_loads_previous_image(
 
 
 def test_load_image_by_index_clears_resolved_names(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_load_image_by_index clears _resolved_names before loading the new image."""
     from PIL import Image as PILImage
@@ -1672,7 +1620,7 @@ def test_load_image_by_index_clears_resolved_names(
     dialog = ImageDetailDialog(
         db_image1,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1687,7 +1635,7 @@ def test_load_image_by_index_clears_resolved_names(
 
 
 def test_load_image_by_index_updates_navigation(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_load_image_by_index calls _update_navigation after loading."""
     from PIL import Image as PILImage
@@ -1733,7 +1681,7 @@ def test_load_image_by_index_updates_navigation(
     dialog = ImageDetailDialog(
         db_image1,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1755,7 +1703,7 @@ def test_load_image_by_index_updates_navigation(
 
 
 def test_load_image_by_index_updates_metadata_panel(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_load_image_by_index calls _update_metadata_panel after loading the new image."""
     from PIL import Image as PILImage
@@ -1795,7 +1743,7 @@ def test_load_image_by_index_updates_metadata_panel(
     dialog = ImageDetailDialog(
         db_image1,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -1808,7 +1756,7 @@ def test_load_image_by_index_updates_metadata_panel(
 
 
 def test_update_metadata_panel_updates_id_label(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the ID label text."""
     from PIL import Image as PILImage
@@ -1819,7 +1767,7 @@ def test_update_metadata_panel_updates_id_label(
     db_image = Image(id=9600, file_path=str(img_path), file_size=500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), mock_vector_store, tmp_app_paths)
+    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     db_image.id = 9601
@@ -1831,7 +1779,7 @@ def test_update_metadata_panel_updates_id_label(
 
 
 def test_update_metadata_panel_updates_file_path_label(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the file path label text."""
     from PIL import Image as PILImage
@@ -1842,7 +1790,7 @@ def test_update_metadata_panel_updates_file_path_label(
     db_image = Image(id=9700, file_path=str(img_path), file_size=500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), mock_vector_store, tmp_app_paths)
+    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     new_path = str(tmp_path / "new_path.jpg")
@@ -1855,7 +1803,7 @@ def test_update_metadata_panel_updates_file_path_label(
 
 
 def test_update_metadata_panel_updates_file_size_label(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the file size label with formatted value."""
     from PIL import Image as PILImage
@@ -1866,7 +1814,7 @@ def test_update_metadata_panel_updates_file_size_label(
     db_image = Image(id=9800, file_path=str(img_path), file_size=500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), mock_vector_store, tmp_app_paths)
+    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     db_image.file_size = 2048
@@ -1878,7 +1826,7 @@ def test_update_metadata_panel_updates_file_size_label(
 
 
 def test_update_metadata_panel_updates_dimensions_label(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the dimensions label from metadata_rel."""
     from PIL import Image as PILImage
@@ -1890,7 +1838,7 @@ def test_update_metadata_panel_updates_dimensions_label(
     db_image.metadata_rel = ImageMetadata(width=200, height=150)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), mock_vector_store, tmp_app_paths)
+    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     db_image.metadata_rel.width = 300
@@ -1903,7 +1851,7 @@ def test_update_metadata_panel_updates_dimensions_label(
 
 
 def test_update_metadata_panel_updates_taken_at_label(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the taken_at label from metadata_rel."""
     from PIL import Image as PILImage
@@ -1915,7 +1863,7 @@ def test_update_metadata_panel_updates_taken_at_label(
     db_image.metadata_rel = ImageMetadata(taken_at=datetime(2020, 1, 1, 12, 0, 0))
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), mock_vector_store, tmp_app_paths)
+    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     db_image.metadata_rel.taken_at = datetime(2023, 6, 15, 9, 30, 0)
@@ -1927,7 +1875,7 @@ def test_update_metadata_panel_updates_taken_at_label(
 
 
 def test_update_metadata_panel_updates_camera_label(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the camera label from metadata_rel."""
     from PIL import Image as PILImage
@@ -1939,7 +1887,7 @@ def test_update_metadata_panel_updates_camera_label(
     db_image.metadata_rel = ImageMetadata(camera_make="Canon", camera_model="EOS")
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), mock_vector_store, tmp_app_paths)
+    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     db_image.metadata_rel.camera_make = "Nikon"
@@ -1953,7 +1901,7 @@ def test_update_metadata_panel_updates_camera_label(
 
 
 def test_update_metadata_panel_updates_map_widget(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel calls set_center and set_marker on the map widget."""
     from PIL import Image as PILImage
@@ -1966,9 +1914,7 @@ def test_update_metadata_panel_updates_map_widget(
     db_image.faces = []
 
     with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
-        dialog = ImageDetailDialog(
-            db_image, MagicMock(), mock_vector_store, tmp_app_paths
-        )
+        dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
     assert dialog._map_widget is not None
@@ -1984,7 +1930,7 @@ def test_update_metadata_panel_updates_map_widget(
 
 
 def test_show_next_image_updates_metadata_panel(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """Clicking Next updates the metadata panel to show the new image's metadata."""
     from PIL import Image as PILImage
@@ -2026,7 +1972,7 @@ def test_show_next_image_updates_metadata_panel(
     dialog = ImageDetailDialog(
         db_image1,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=0,
         all_results=results,
@@ -2041,7 +1987,7 @@ def test_show_next_image_updates_metadata_panel(
 
 
 def test_show_previous_image_updates_metadata_panel(
-    qtbot, tmp_path, mock_vector_store, tmp_app_paths
+    qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """Clicking Previous updates the metadata panel to show the previous image."""
     from PIL import Image as PILImage
@@ -2082,7 +2028,7 @@ def test_show_previous_image_updates_metadata_panel(
     dialog = ImageDetailDialog(
         db_image2,
         mock_sf,
-        mock_vector_store,
+        vector_store,
         tmp_app_paths,
         current_index=1,
         all_results=results,
