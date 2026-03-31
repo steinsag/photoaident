@@ -88,7 +88,10 @@ class MapWidget(QtWidgets.QWidget):
         self._quick_widget.setResizeMode(
             QtQuickWidgets.QQuickWidget.ResizeMode.SizeRootObjectToView
         )
-        self._quick_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        if self._show_overlay:
+            self._quick_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        else:
+            self._quick_widget.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self._quick_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -226,3 +229,15 @@ class MapWidget(QtWidgets.QWidget):
         root = self._root_object()
         if root:
             root.setProperty("pendingZoomDelta", -1)
+
+    def cleanup(self) -> None:
+        """Tear down the QML surface before widget destruction.
+
+        Clears focus, stops QML rendering, and releases the scene-graph
+        resources so that the platform window system does not retain a
+        stale input grab after the owning dialog is closed.
+        """
+        self._quick_widget.clearFocus()
+        self._quick_widget.setSource(QtCore.QUrl())
+        self._ready = False
+        self._pending_ops.clear()

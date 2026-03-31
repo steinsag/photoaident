@@ -121,14 +121,19 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._map_widget: MapWidget | None = None
         self._metadata_layout: QtWidgets.QVBoxLayout | None = None
         self._map_container: QtWidgets.QWidget | None = None
+        self._resize_timer: QtCore.QTimer | None = None
+        self._left_shortcut: QtGui.QShortcut | None = None
+        self._right_shortcut: QtGui.QShortcut | None = None
 
         self._setup_ui()
-        QtGui.QShortcut(
+        self._left_shortcut = QtGui.QShortcut(
             QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self
-        ).activated.connect(self._show_previous_image)
-        QtGui.QShortcut(
+        )
+        self._left_shortcut.activated.connect(self._show_previous_image)
+        self._right_shortcut = QtGui.QShortcut(
             QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self
-        ).activated.connect(self._show_next_image)
+        )
+        self._right_shortcut.activated.connect(self._show_next_image)
         restore_widget_geometry(self, self._paths.window_state_file)
         self._load_image()
 
@@ -631,11 +636,18 @@ class ImageDetailDialog(QtWidgets.QDialog):
         reveal_in_file_manager(self.image_data.file_path)
 
     def done(self, result: int) -> None:
-        """Save geometry before closing."""
+        """Save geometry and clean up resources before closing."""
+        if self._resize_timer is not None:
+            self._resize_timer.stop()
+        if self._map_widget is not None:
+            self._map_widget.cleanup()
         save_widget_geometry(self, self._paths.window_state_file)
         super().done(result)
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
-        # Re-scale image when dialog is resized
-        QtCore.QTimer.singleShot(10, self._update_image_display)
+        if self._resize_timer is None:
+            self._resize_timer = QtCore.QTimer(self)
+            self._resize_timer.setSingleShot(True)
+            self._resize_timer.timeout.connect(self._update_image_display)
+        self._resize_timer.start(10)

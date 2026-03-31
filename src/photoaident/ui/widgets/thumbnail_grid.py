@@ -479,6 +479,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
+        if not shiboken6.isValid(self):
+            return
         # Recalculate columns based on width
         # Subtract some margin for scrollbar
         new_cols = max(
@@ -491,6 +493,8 @@ class ThumbnailGrid(QtWidgets.QWidget):
             self._rearrange_grid()
 
     def _rearrange_grid(self):
+        if not shiboken6.isValid(self):
+            return
         for i, thumb in enumerate(self.thumbnails):
             self.grid_layout.removeWidget(thumb)
             row = i // self.cols
