@@ -62,7 +62,7 @@ def _make_mock_session_factory(return_image):
     mock_session = MagicMock()
     mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
 
-    def fake_execute(_stmt):
+    def fake_execute(_):
         result = MagicMock()
         result.unique = MagicMock(return_value=result)
         result.scalar_one_or_none = MagicMock(return_value=return_image)

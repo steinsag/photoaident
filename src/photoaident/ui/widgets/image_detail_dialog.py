@@ -117,6 +117,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._all_results = all_results or []
         self._metadata_widgets: dict[str, QtWidgets.QLabel] = {}
         self._map_widget: MapWidget | None = None
+        self._metadata_layout: QtWidgets.QVBoxLayout | None = None
+        self._map_container: QtWidgets.QWidget | None = None
 
         self._setup_ui()
         QtGui.QShortcut(
@@ -175,13 +177,18 @@ class ImageDetailDialog(QtWidgets.QDialog):
         panel = QtWidgets.QFrame()
         panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         panel.setFixedWidth(250)
-        layout = QtWidgets.QVBoxLayout(panel)
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self._metadata_layout = QtWidgets.QVBoxLayout(panel)
+        self._metadata_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-        layout.addWidget(QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>"))
-        self._add_image_metadata_rows(layout)
-        layout.addStretch()
-        self._add_action_buttons(layout)
+        self._metadata_layout.addWidget(
+            QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>")
+        )
+        self._map_container = QtWidgets.QWidget()
+        self._map_container.setLayout(QtWidgets.QVBoxLayout())
+        self._add_image_metadata_rows(self._metadata_layout)
+        self._metadata_layout.addWidget(self._map_container)
+        self._metadata_layout.addStretch()
+        self._add_action_buttons(self._metadata_layout)
 
         return panel
 
@@ -220,10 +227,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
             camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
             self._add_meta_row(layout, self.tr("Camera"), camera, "camera")
         if meta.gps_lat is not None and meta.gps_lon is not None:
-            map_widget = self._create_map_widget(
-                float(meta.gps_lat), float(meta.gps_lon)
+            self._create_map_widget(float(meta.gps_lat), float(meta.gps_lon))
+            map_layout = (
+                self._map_container.layout()
+                if self._map_container is not None
+                else None
             )
-            layout.addWidget(map_widget)
+            if map_layout is not None and self._map_widget is not None:
+                map_layout.addWidget(self._map_widget)
 
     def _add_meta_row(
         self,
@@ -369,38 +380,110 @@ class ImageDetailDialog(QtWidgets.QDialog):
         """Update the metadata panel widgets with data from the current image."""
         image = self.image_data
 
-        if id_widget := self._metadata_widgets.get("id"):
-            id_widget.setText(str(image.id))
-
-        if fp_widget := self._metadata_widgets.get("file_path"):
-            fp_widget.setText(f'<a href="#">{html.escape(image.file_path)}</a>')
-
-        if fs_widget := self._metadata_widgets.get("file_size"):
-            fs_widget.setText(self._format_file_size(image.file_size))
+        self._metadata_widgets["id"].setText(str(image.id))
+        self._metadata_widgets["file_path"].setText(
+            f'<a href="#">{html.escape(image.file_path)}</a>'
+        )
+        self._metadata_widgets["file_size"].setText(
+            self._format_file_size(image.file_size)
+        )
 
         meta = image.metadata_rel
-        if meta:
-            if dim_widget := self._metadata_widgets.get("dimensions"):
-                if meta.width and meta.height:
-                    dim_widget.setText(f"{meta.width} x {meta.height}")
 
-            if ta_widget := self._metadata_widgets.get("taken_at"):
-                if meta.taken_at:
-                    ta_widget.setText(meta.taken_at.strftime("%Y-%m-%d %H:%M:%S"))
+        self._update_optional_field(
+            present=bool(meta and meta.width and meta.height),
+            value=f"{meta.width} x {meta.height}" if meta and meta.width else "",
+            label=self.tr("Dimensions"),
+            key="dimensions",
+        )
 
-            if cam_widget := self._metadata_widgets.get("camera"):
-                camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
-                cam_widget.setText(camera)
+        self._update_optional_field(
+            present=bool(meta and meta.taken_at is not None),
+            value=(
+                meta.taken_at.strftime("%Y-%m-%d %H:%M:%S")
+                if meta and meta.taken_at
+                else ""
+            ),
+            label=self.tr("Taken At"),
+            key="taken_at",
+        )
 
-            if (
-                self._map_widget
-                and meta.gps_lat is not None
-                and meta.gps_lon is not None
-            ):
-                self._map_widget.set_center(
-                    float(meta.gps_lat), float(meta.gps_lon), zoom=14
-                )
-                self._map_widget.set_marker(float(meta.gps_lat), float(meta.gps_lon))
+        camera = (
+            f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
+            if meta and (meta.camera_make or meta.camera_model)
+            else ""
+        )
+        self._update_optional_field(
+            present=bool(camera),
+            value=camera,
+            label=self.tr("Camera"),
+            key="camera",
+        )
+
+        self._update_map_widget(
+            present=bool(
+                meta and meta.gps_lat is not None and meta.gps_lon is not None
+            ),
+            lat=float(meta.gps_lat) if meta and meta.gps_lat else 0.0,
+            lon=float(meta.gps_lon) if meta and meta.gps_lon else 0.0,
+        )
+
+    def _update_optional_field(
+        self,
+        present: bool,
+        value: str,
+        label: str,
+        key: str,
+    ) -> None:
+        """Show or hide an optional metadata field, creating it if needed."""
+        widget = self._metadata_widgets.get(key)
+        if widget is None and present:
+            widget = self._create_optional_meta_row(label, key)
+        if widget is None:
+            return
+        widget.setVisible(present)
+        if present:
+            widget.setText(value)
+
+    def _update_map_widget(self, present: bool, lat: float, lon: float) -> None:
+        """Show or hide the map widget, creating it if needed."""
+        if self._map_container is None:
+            return
+        if not present:
+            self._map_container.setVisible(False)
+            return
+        if self._map_widget is None:
+            map_layout = self._map_container.layout()
+            if map_layout is not None:
+                self._map_widget = self._create_map_widget(lat, lon)
+                map_layout.addWidget(self._map_widget)
+        else:
+            self._map_widget.set_center(lat, lon, zoom=14)
+            self._map_widget.set_marker(lat, lon)
+        self._map_container.setVisible(True)
+
+    def _create_optional_meta_row(
+        self,
+        label_text: str,
+        key: str,
+    ) -> QtWidgets.QLabel | None:
+        """Create and register an optional metadata row that may be shown/hidden."""
+        if self._metadata_layout is None:
+            return None
+        row_layout = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
+        label.setFixedWidth(80)
+        value = QtWidgets.QLabel()
+        value.setWordWrap(True)
+        value.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        row_layout.addWidget(label)
+        row_layout.addWidget(value)
+        meta_layout = self._metadata_layout
+        meta_layout.insertLayout(meta_layout.count() - 1, row_layout)
+        self._metadata_widgets[key] = value
+        return value
 
     def _get_face_display_info(self, face: Face) -> tuple[QtCore.Qt.GlobalColor, str]:
         """Return (color, tooltip) for a single face based on its state."""
