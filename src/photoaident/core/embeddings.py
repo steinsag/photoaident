@@ -13,6 +13,9 @@ from photoaident.utils.image_utils import open_image
 class FaceEmbedder:
     """Wrapper for InsightFace to detect faces and compute embeddings."""
 
+    # Images larger than this dimension are prescaled before detection.
+    _MAX_DETECTION_DIM = 1024
+
     def __init__(self, model_name: str = "buffalo_l", ctx_id: int = 0):
         """Initialize the FaceAnalysis app.
 
@@ -22,7 +25,33 @@ class FaceEmbedder:
         """
         providers = select_providers()
         self.app = FaceAnalysis(name=model_name, providers=providers)
-        self.app.prepare(ctx_id=ctx_id, det_size=(640, 640))
+        self.app.prepare(ctx_id=ctx_id, det_size=(1024, 1024))
+
+    @staticmethod
+    def _prescale_for_detection(
+        image: np.ndarray, max_dim: int
+    ) -> tuple[np.ndarray, float]:
+        """Downscale *image* so its longest side is at most *max_dim*.
+
+        Args:
+            image: HWC ndarray (any channel order — cv2.resize is channel-agnostic).
+            max_dim: Maximum allowed size for the longest dimension.
+
+        Returns:
+            A (scaled_image, scale) tuple where *scale* is the factor applied
+            (< 1.0 when downscaled, exactly 1.0 when the image is already small
+            enough).  Dividing detection bboxes by *scale* maps them back to
+            original-image coordinates.
+        """
+        h, w = image.shape[:2]
+        longest = max(h, w)
+        if longest <= max_dim:
+            return image, 1.0
+        scale = max_dim / longest
+        new_w = round(w * scale)
+        new_h = round(h * scale)
+        scaled = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_AREA)
+        return scaled, scale
 
     def process_image(self, image_path: Path) -> list[dict[str, Any]]:
         """Detect faces and compute embeddings for an image.
@@ -47,23 +76,23 @@ class FaceEmbedder:
         if rgb_array.size == 0:
             return []
 
-        # InsightFace expects BGR
-        bgr_array = cv2.cvtColor(rgb_array, cv2.COLOR_RGB2BGR)
-        faces = self.app.get(bgr_array)
+        # Prescale before BGR conversion — avoids a full-res BGR copy for large images.
+        det_rgb, scale = self._prescale_for_detection(
+            rgb_array, self._MAX_DETECTION_DIM
+        )
+        det_bgr = cv2.cvtColor(det_rgb, cv2.COLOR_RGB2BGR)
+        faces = self.app.get(det_bgr)
 
-        results = []
-        for face in faces:
-            results.append(
-                {
-                    "bbox": face.bbox.astype(int).tolist(),
-                    "embedding": face.normed_embedding,
-                    "det_score": float(face.det_score),
-                    "gender": int(face.gender),
-                    "age": int(face.age),
-                }
-            )
-
-        return results
+        return [
+            {
+                "bbox": (face.bbox / scale).astype(int).tolist(),
+                "embedding": face.normed_embedding,
+                "det_score": float(face.det_score),
+                "gender": int(face.gender),
+                "age": int(face.age),
+            }
+            for face in faces
+        ]
 
     @staticmethod
     def extract_face_crop(
