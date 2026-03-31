@@ -21,6 +21,63 @@ from photoaident.ui.widgets.image_detail_dialog import (
 from photoaident.ui.widgets.map_widget import MapWidget
 
 
+def _make_test_image(tmp_path, color: str, img_id: int, file_size: int = 500):
+    from PIL import Image as PILImage
+
+    img_path = tmp_path / f"img_{img_id}.jpg"
+    PILImage.new("RGB", (100, 100), color).save(img_path)
+    return img_path, Image(id=img_id, file_path=str(img_path), file_size=file_size)
+
+
+def _make_dialog(
+    qtbot,
+    image,
+    session_factory,
+    vector_store,
+    tmp_app_paths,
+    current_index: int = 0,
+    all_results: list | None = None,
+):
+    dialog = ImageDetailDialog(
+        image,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+        current_index=current_index,
+        all_results=all_results or [],
+    )
+    qtbot.add_widget(dialog)
+    return dialog
+
+
+def _find_button(dialog, text: str):
+    return next(
+        (b for b in dialog.findChildren(QtWidgets.QPushButton) if text in b.text()),
+        None,
+    )
+
+
+def _make_mock_session_factory(return_image):
+    mock_sf = MagicMock()
+    mock_session = MagicMock()
+    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
+
+    def fake_execute(_stmt):
+        result = MagicMock()
+        result.unique = MagicMock(return_value=result)
+        result.scalar_one_or_none = MagicMock(return_value=return_image)
+        return result
+
+    mock_session.execute = fake_execute
+    return mock_sf
+
+
+def _make_search_result(image_id: int, file_path: str, thumb_path: str | Path):
+    return SearchResult(
+        image_id=image_id, file_path=file_path, thumb_path=Path(thumb_path)
+    )
+
+
 def test_image_detail_dialog_init(
     qtbot,
     sample_image_with_metadata,
@@ -28,37 +85,26 @@ def test_image_detail_dialog_init(
     vector_store,
     tmp_app_paths,
 ):
-    dialog = ImageDetailDialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
+    dialog = _make_dialog(
+        qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
     )
-    qtbot.add_widget(dialog)
 
-    # Check metadata display (look for some expected strings)
     labels = dialog.findChildren(QtWidgets.QLabel)
     texts = [label.text() for label in labels]
 
-    assert any("123" in t for t in texts)  # ID
-    assert any("TestCamera" in t for t in texts)  # Camera make
-    assert any("1000 x 800" in t for t in texts)  # Dimensions
-    assert any("1.0 KB" in t for t in texts)  # File size formatted
+    assert any("123" in t for t in texts)
+    assert any("TestCamera" in t for t in texts)
+    assert any("1000 x 800" in t for t in texts)
+    assert any("1.0 KB" in t for t in texts)
 
-    # Check if image is loaded
     assert not dialog.image_label.pixmap().isNull()
 
 
 def test_image_detail_dialog_missing_file(
     qtbot, session_factory, vector_store, tmp_app_paths
 ):
-    db_image = Image(
-        id=456,
-        file_path="/non/existent/path.jpg",
-        file_size=0,
-    )
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    db_image = Image(id=456, file_path="/non/existent/path.jpg", file_size=0)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     assert "not found" in dialog.image_label.text().lower()
 
@@ -70,15 +116,10 @@ def test_image_detail_dialog_close(
     vector_store,
     tmp_app_paths,
 ):
-    dialog = ImageDetailDialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
+    dialog = _make_dialog(
+        qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
     )
-    qtbot.add_widget(dialog)
 
-    # Close button should accept the dialog
     close_button = None
     for button in dialog.findChildren(QtWidgets.QPushButton):
         if "Close" in button.text():
@@ -100,13 +141,8 @@ def test_large_file_size_shows_mb(
     img_path = tmp_path / "big.jpg"
     PILImage.new("RGB", (10, 10), "green").save(img_path)
 
-    db_image = Image(
-        id=200,
-        file_path=str(img_path),
-        file_size=2 * 1024 * 1024,  # 2 MB
-    )
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    db_image = Image(id=200, file_path=str(img_path), file_size=2 * 1024 * 1024)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     labels = dialog.findChildren(QtWidgets.QLabel)
     texts = [label.text() for label in labels]
@@ -131,8 +167,7 @@ def test_taken_at_in_metadata_is_displayed(
     )
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     labels = dialog.findChildren(QtWidgets.QLabel)
     texts = [label.text() for label in labels]
@@ -147,8 +182,7 @@ def test_load_image_failure_shows_error(
     bad_file.write_bytes(b"this is not a valid jpeg")
 
     db_image = Image(id=400, file_path=str(bad_file), file_size=25)
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     text = dialog.image_label.text().lower()
     assert "failed" in text
@@ -159,11 +193,10 @@ def test_update_image_display_without_pixmap_is_noop(
 ):
     """_update_image_display returns early if _original_pixmap is not set."""
     db_image = Image(id=500, file_path="/nonexistent.jpg", file_size=0)
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     assert not hasattr(dialog, "_original_pixmap")
-    dialog._update_image_display()  # must not raise
+    dialog._update_image_display()
 
 
 def test_resize_event_schedules_redisplay(
@@ -174,16 +207,12 @@ def test_resize_event_schedules_redisplay(
     tmp_app_paths,
 ):
     """resizeEvent does not raise and schedules a display update."""
-    dialog = ImageDetailDialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
+    dialog = _make_dialog(
+        qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
     )
-    qtbot.add_widget(dialog)
 
     event = QtGui.QResizeEvent(QtCore.QSize(900, 700), QtCore.QSize(800, 600))
-    dialog.resizeEvent(event)  # must not raise
+    dialog.resizeEvent(event)
 
 
 def test_label_faces_button_enabled_when_unidentified_faces(
@@ -194,13 +223,9 @@ def test_label_faces_button_enabled_when_unidentified_faces(
     tmp_app_paths,
 ):
     """Label button is enabled when the image has at least one unidentified face."""
-    dialog = ImageDetailDialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
+    dialog = _make_dialog(
+        qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
     )
-    qtbot.add_widget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
     label_btn = next((b for b in buttons if "Label" in b.text()), None)
@@ -212,12 +237,7 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Label button is disabled when the image has no unidentified faces."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "identified.jpg"
-    PILImage.new("RGB", (100, 100), "blue").save(img_path)
-
-    db_image = Image(id=600, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "blue", 600)
     db_image.faces = [
         Face(
             bbox_x=0,
@@ -230,11 +250,9 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
         )
     ]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    label_btn = next((b for b in buttons if "Label" in b.text()), None)
+    label_btn = _find_button(dialog, "Label")
     assert label_btn is not None
     assert not label_btn.isEnabled()
 
@@ -243,12 +261,7 @@ def test_label_faces_button_emits_signal(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Clicking the label button emits navigate_to_labelling with the image id."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "signal_test.jpg"
-    PILImage.new("RGB", (100, 100), "green").save(img_path)
-
-    db_image = Image(id=700, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "green", 700)
     db_image.faces = [
         Face(
             bbox_x=0,
@@ -261,14 +274,12 @@ def test_label_faces_button_emits_signal(
         )
     ]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     emitted_ids: list[int] = []
     dialog.navigate_to_labelling.connect(emitted_ids.append)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    label_btn = next((b for b in buttons if "Label" in b.text()), None)
+    label_btn = _find_button(dialog, "Label")
     assert label_btn is not None
 
     qtbot.mouseClick(label_btn, QtCore.Qt.MouseButton.LeftButton)
@@ -289,13 +300,9 @@ def test_show_in_file_manager_button_exists(
     tmp_app_paths,
 ):
     """Show in File Manager button is present in the dialog."""
-    dialog = ImageDetailDialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
+    dialog = _make_dialog(
+        qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
     )
-    qtbot.addWidget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
     show_btn = next(
@@ -312,13 +319,9 @@ def test_show_in_file_manager_button_calls_reveal(
     tmp_app_paths,
 ):
     """Clicking the button calls reveal_in_file_manager with the image file path."""
-    dialog = ImageDetailDialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
+    dialog = _make_dialog(
+        qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
     )
-    qtbot.addWidget(dialog)
 
     buttons = dialog.findChildren(QtWidgets.QPushButton)
     show_btn = next(
@@ -337,12 +340,7 @@ def test_show_in_file_manager_button_always_enabled(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Show in File Manager button is enabled regardless of face labelling state."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "all_identified.jpg"
-    PILImage.new("RGB", (100, 100), "cyan").save(img_path)
-
-    db_image = Image(id=800, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "cyan", 800)
     db_image.faces = [
         Face(
             bbox_x=0,
@@ -355,12 +353,15 @@ def test_show_in_file_manager_button_always_enabled(
         )
     ]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.addWidget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
     show_btn = next(
-        (b for b in buttons if b.text() == dialog.tr("Show in File Manager")), None
+        (
+            b
+            for b in dialog.findChildren(QtWidgets.QPushButton)
+            if b.text() == dialog.tr("Show in File Manager")
+        ),
+        None,
     )
     assert show_btn is not None
     assert show_btn.isEnabled()
@@ -375,16 +376,10 @@ def test_browse_photo_folder_button_emits_navigate_to_browse(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Clicking 'Browse Photo Folder' emits navigate_to_browse with the file path."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "browse_signal.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img_path)
-
-    db_image = Image(id=1100, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "red", 1100)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.addWidget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     received: list[str] = []
     dialog.navigate_to_browse.connect(received.append)
@@ -399,9 +394,7 @@ def test_browse_photo_folder_button_emits_navigate_to_browse(
     )
     assert browse_btn is not None
 
-    # The button calls accept() before emitting; use waitSignal on finished so
-    # we catch both the dialog closing and the signal in the correct order.
-    with qtbot.waitSignal(dialog.finished):
+    with qtbot.wait_signal(dialog.finished):
         qtbot.mouseClick(browse_btn, QtCore.Qt.MouseButton.LeftButton)
 
     assert received == [str(img_path)]
@@ -411,22 +404,14 @@ def test_file_path_link_emits_navigate_to_browse(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Activating the file path link in the metadata panel emits navigate_to_browse."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "link_signal.jpg"
-    PILImage.new("RGB", (100, 100), "blue").save(img_path)
-
-    db_image = Image(id=1101, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "blue", 1101)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.addWidget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     received: list[str] = []
     dialog.navigate_to_browse.connect(received.append)
 
-    # Locate the clickable link label — it is the QLabel whose text contains
-    # an <a href="#"> wrapping the (HTML-escaped) file path.
     file_path_label = next(
         (
             lbl
@@ -437,11 +422,7 @@ def test_file_path_link_emits_navigate_to_browse(
     )
     assert file_path_label is not None
 
-    # Emit linkActivated directly; simulating a real mouse click on a QLabel
-    # HTML link is not reliable in headless tests.
-    # The handler calls accept() before emitting; use waitSignal on finished so
-    # we catch both the dialog closing and the signal in the correct order.
-    with qtbot.waitSignal(dialog.finished):
+    with qtbot.wait_signal(dialog.finished):
         file_path_label.linkActivated.emit("#")
 
     assert received == [str(img_path)]
@@ -477,8 +458,7 @@ def test_face_tooltip_identified_shows_person_name(
     db_image = Image(id=1, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     regions = dialog._build_face_display_info()
     assert len(regions) == 1
@@ -508,8 +488,7 @@ def test_face_tooltip_anonymous_shows_anonymous(
     db_image = Image(id=2, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     regions = dialog._build_face_display_info()
     assert len(regions) == 1
@@ -521,8 +500,6 @@ def test_face_tooltip_unidentified_no_vector_match(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_build_face_display_info: UNIDENTIFIED with no vector match → Unknown + red."""
-    # This covers the case where _resolve_best_person_name returns None
-    # even though a vector_store instance is available.
     from PIL import Image as PILImage
 
     img_path = tmp_path / "unknown.jpg"
@@ -541,8 +518,7 @@ def test_face_tooltip_unidentified_no_vector_match(
     db_image = Image(id=3, file_path=str(img_path), file_size=500)
     db_image.faces = [face]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     regions = dialog._build_face_display_info()
     assert len(regions) == 1
@@ -582,8 +558,7 @@ def test_face_tooltip_deleted_face_excluded(
     db_image = Image(id=4, file_path=str(img_path), file_size=500)
     db_image.faces = [active_face, deleted_face]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     regions = dialog._build_face_display_info()
     assert len(regions) == 1
@@ -600,7 +575,6 @@ def test_face_overlay_label_hit_detection(qtbot):
     label = _FaceOverlayLabel()
     qtbot.add_widget(label)
 
-    # Set a pixmap and face region
     pixmap = QtGui.QPixmap(200, 200)
     pixmap.fill(QtGui.QColor("white"))
     label.setPixmap(pixmap)
@@ -612,7 +586,6 @@ def test_face_overlay_label_hit_detection(qtbot):
     with patch(
         "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.showText"
     ) as mock_show:
-        # Simulate mouse move inside the bbox (center = 80, 80)
         event = QtGui.QMouseEvent(
             QtCore.QEvent.Type.MouseMove,
             QtCore.QPointF(80.0, 80.0),
@@ -626,6 +599,17 @@ def test_face_overlay_label_hit_detection(qtbot):
         assert mock_show.call_args[0][1] == "Alice"
 
 
+def _make_mouse_move_event(x: float, y: float):
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseMove,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(x, y),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
 def test_face_overlay_label_no_regions_early_return(qtbot):
     """mouseMoveEvent returns early when no face regions are set."""
     label = _FaceOverlayLabel()
@@ -635,7 +619,6 @@ def test_face_overlay_label_no_regions_early_return(qtbot):
     pixmap.fill(QtGui.QColor("white"))
     label.setPixmap(pixmap)
     label.resize(200, 200)
-    # Do NOT call set_face_regions — _face_regions stays empty
 
     with (
         patch(
@@ -645,15 +628,7 @@ def test_face_overlay_label_no_regions_early_return(qtbot):
             "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
         ) as mock_hide,
     ):
-        event = QtGui.QMouseEvent(
-            QtCore.QEvent.Type.MouseMove,
-            QtCore.QPointF(80.0, 80.0),
-            QtCore.QPointF(80.0, 80.0),
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.KeyboardModifier.NoModifier,
-        )
-        label.mouseMoveEvent(event)
+        label.mouseMoveEvent(_make_mouse_move_event(80.0, 80.0))
         mock_show.assert_not_called()
         mock_hide.assert_not_called()
 
@@ -666,7 +641,6 @@ def test_face_overlay_label_no_pixmap_early_return(qtbot):
 
     region = (QtCore.QRectF(50, 50, 60, 60), "Alice")
     label.set_face_regions([region], QtCore.QSize(200, 200))
-    # No pixmap set — label.pixmap() returns a null pixmap
 
     with (
         patch(
@@ -676,15 +650,7 @@ def test_face_overlay_label_no_pixmap_early_return(qtbot):
             "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
         ) as mock_hide,
     ):
-        event = QtGui.QMouseEvent(
-            QtCore.QEvent.Type.MouseMove,
-            QtCore.QPointF(80.0, 80.0),
-            QtCore.QPointF(80.0, 80.0),
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.KeyboardModifier.NoModifier,
-        )
-        label.mouseMoveEvent(event)
+        label.mouseMoveEvent(_make_mouse_move_event(80.0, 80.0))
         mock_show.assert_not_called()
         mock_hide.assert_not_called()
 
@@ -712,15 +678,7 @@ def test_face_overlay_label_zero_size_pixmap_early_return(qtbot):
             "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
         ) as mock_hide,
     ):
-        event = QtGui.QMouseEvent(
-            QtCore.QEvent.Type.MouseMove,
-            QtCore.QPointF(80.0, 80.0),
-            QtCore.QPointF(80.0, 80.0),
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.KeyboardModifier.NoModifier,
-        )
-        label.mouseMoveEvent(event)
+        label.mouseMoveEvent(_make_mouse_move_event(80.0, 80.0))
         mock_show.assert_not_called()
         mock_hide.assert_not_called()
 
@@ -741,16 +699,7 @@ def test_face_overlay_label_miss_detection(qtbot):
     with patch(
         "photoaident.ui.widgets.image_detail_dialog.QtWidgets.QToolTip.hideText"
     ) as mock_hide:
-        # Simulate mouse move outside the bbox (10, 10 is outside 50-110 range)
-        event = QtGui.QMouseEvent(
-            QtCore.QEvent.Type.MouseMove,
-            QtCore.QPointF(10.0, 10.0),
-            QtCore.QPointF(10.0, 10.0),
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.MouseButton.NoButton,
-            QtCore.Qt.KeyboardModifier.NoModifier,
-        )
-        label.mouseMoveEvent(event)
+        label.mouseMoveEvent(_make_mouse_move_event(10.0, 10.0))
         mock_hide.assert_called_once()
 
 
@@ -883,30 +832,24 @@ def test_bounding_box_colors_by_state(
     db_image = Image(id=5, file_path=str(img_path), file_size=500)
     db_image.faces = [identified_face, anonymous_face, unidentified_face]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
-    # The pixmap has bounding boxes drawn; verify it's not null and loaded correctly
     assert hasattr(dialog, "_original_pixmap")
     assert not dialog._original_pixmap.isNull()
 
-    # Sample pixels at box centers to verify colors
     img = dialog._original_pixmap.toImage()
 
     def pixel_color(x: int, y: int) -> QtGui.QColor:
         return QtGui.QColor(img.pixel(x, y))
 
-    # Green box at identified face border (top edge y=10, center x=30)
     green_identified = pixel_color(30, 10)
     assert green_identified.green() > green_identified.red()
     assert green_identified.green() > green_identified.blue()
 
-    # Green box at anonymous face border (top edge y=10, center x=90) — same color
     green_anon = pixel_color(90, 10)
     assert green_anon.green() > green_anon.red()
     assert green_anon.green() > green_anon.blue()
 
-    # Red box at unidentified face border (top edge y=10, center x=150)
     red = pixel_color(150, 10)
     assert red.red() > red.green() and red.red() > red.blue()
 
@@ -918,11 +861,9 @@ def test_image_detail_dialog_with_exif_rotation(
     from PIL import Image as PILImage
 
     img_path = tmp_path / "rotated.jpg"
-    # Create an image and save it with orientation metadata.
-    # Orientation 6 is Rotate 90 CW
     img = PILImage.new("RGB", (100, 200), "blue")
     exif = img.getexif()
-    exif[0x0112] = 6  # Orientation tag
+    exif[0x0112] = 6
     img.save(img_path, exif=exif)
 
     db_image = Image(id=900, file_path=str(img_path), file_size=1000)
@@ -938,16 +879,10 @@ def test_image_detail_dialog_with_exif_rotation(
         )
     ]
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
-    # If the EXIF rotation transformation block was executed, the
-    # pixmap dimensions should be swapped (100x200 -> 200x100)
-    # PIL (100, 200) -> QImageReader reads it.
-    # Orientation 6 is Rotate 90.
     assert hasattr(dialog, "_original_pixmap")
     pm = dialog._original_pixmap
-    # After 90 degree rotation, width should be 200 and height 100
     assert pm.width() == 200
     assert pm.height() == 100
 
@@ -961,12 +896,7 @@ def test_map_shown_when_gps_available(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """A MapWidget is added to the metadata panel when GPS coordinates are present."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "gps.jpg"
-    PILImage.new("RGB", (100, 100), "green").save(img_path)
-
-    db_image = Image(id=1001, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "green", 1001)
     db_image.metadata_rel = ImageMetadata(
         width=100,
         height=100,
@@ -977,10 +907,9 @@ def test_map_shown_when_gps_available(
     db_image.faces = []
 
     with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
-        dialog = ImageDetailDialog(
-            db_image, session_factory, vector_store, tmp_app_paths
+        dialog = _make_dialog(
+            qtbot, db_image, session_factory, vector_store, tmp_app_paths
         )
-    qtbot.add_widget(dialog)
 
     map_widgets = dialog.findChildren(MapWidget)
     assert len(map_widgets) == 1
@@ -990,12 +919,7 @@ def test_map_not_shown_when_no_gps(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No MapWidget is added when metadata exists but has no GPS coordinates."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "no_gps.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img_path)
-
-    db_image = Image(id=1002, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "red", 1002)
     db_image.metadata_rel = ImageMetadata(
         width=100,
         height=100,
@@ -1003,8 +927,7 @@ def test_map_not_shown_when_no_gps(
     )
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     map_widgets = dialog.findChildren(MapWidget)
     assert len(map_widgets) == 0
@@ -1014,16 +937,10 @@ def test_map_not_shown_when_no_metadata(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No MapWidget is added when metadata_rel is None."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "no_meta.jpg"
-    PILImage.new("RGB", (100, 100), "blue").save(img_path)
-
-    db_image = Image(id=1003, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "blue", 1003)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     map_widgets = dialog.findChildren(MapWidget)
     assert len(map_widgets) == 0
@@ -1034,22 +951,11 @@ def test_map_not_shown_when_no_metadata(
 # ===========================================================================
 
 
-def _make_search_result(image_id: int, file_path: str, thumb_path: str | Path):
-    return SearchResult(
-        image_id=image_id, file_path=file_path, thumb_path=Path(thumb_path)
-    )
-
-
 def test_navigation_buttons_exist(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Previous and Next buttons are present in the dialog."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "nav_test.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img_path)
-
-    db_image = Image(id=2000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "red", 2000)
     db_image.faces = []
 
     results = [
@@ -1057,19 +963,12 @@ def test_navigation_buttons_exist(
         _make_search_result(2001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=0,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 0, results
     )
-    qtbot.add_widget(dialog)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    prev_btn = next((b for b in buttons if "Previous" in b.text()), None)
-    next_btn = next((b for b in buttons if "Next" in b.text()), None)
+    prev_btn = _find_button(dialog, "Previous")
+    next_btn = _find_button(dialog, "Next")
 
     assert prev_btn is not None
     assert next_btn is not None
@@ -1079,12 +978,7 @@ def test_navigation_buttons_disabled_at_first_position(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Previous is disabled when viewing the first image in the list."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "first.jpg"
-    PILImage.new("RGB", (100, 100), "green").save(img_path)
-
-    db_image = Image(id=3000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "green", 3000)
     db_image.faces = []
 
     results = [
@@ -1092,19 +986,12 @@ def test_navigation_buttons_disabled_at_first_position(
         _make_search_result(3001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=0,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 0, results
     )
-    qtbot.add_widget(dialog)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    prev_btn = next((b for b in buttons if "Previous" in b.text()), None)
-    next_btn = next((b for b in buttons if "Next" in b.text()), None)
+    prev_btn = _find_button(dialog, "Previous")
+    next_btn = _find_button(dialog, "Next")
 
     assert prev_btn is not None
     assert next_btn is not None
@@ -1116,12 +1003,7 @@ def test_navigation_buttons_disabled_at_last_position(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Next is disabled when viewing the last image in the list."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "last.jpg"
-    PILImage.new("RGB", (100, 100), "blue").save(img_path)
-
-    db_image = Image(id=4000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "blue", 4000)
     db_image.faces = []
 
     results = [
@@ -1129,19 +1011,12 @@ def test_navigation_buttons_disabled_at_last_position(
         _make_search_result(4001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=1,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 1, results
     )
-    qtbot.add_widget(dialog)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    prev_btn = next((b for b in buttons if "Previous" in b.text()), None)
-    next_btn = next((b for b in buttons if "Next" in b.text()), None)
+    prev_btn = _find_button(dialog, "Previous")
+    next_btn = _find_button(dialog, "Next")
 
     assert prev_btn is not None
     assert next_btn is not None
@@ -1153,27 +1028,15 @@ def test_navigation_buttons_both_disabled_when_no_results(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Both buttons are disabled when there are no results."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "solo.jpg"
-    PILImage.new("RGB", (100, 100), "yellow").save(img_path)
-
-    db_image = Image(id=5000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "yellow", 5000)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=0,
-        all_results=[],
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 0, []
     )
-    qtbot.add_widget(dialog)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    prev_btn = next((b for b in buttons if "Previous" in b.text()), None)
-    next_btn = next((b for b in buttons if "Next" in b.text()), None)
+    prev_btn = _find_button(dialog, "Previous")
+    next_btn = _find_button(dialog, "Next")
 
     assert prev_btn is not None
     assert next_btn is not None
@@ -1185,27 +1048,21 @@ def test_navigation_buttons_both_disabled_for_single_result(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Both buttons are disabled when there is only one image in the results."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "single.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img_path)
-
-    db_image = Image(id=5500, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "red", 5500)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
+    dialog = _make_dialog(
+        qtbot,
         db_image,
         session_factory,
         vector_store,
         tmp_app_paths,
-        current_index=0,
-        all_results=[_make_search_result(5500, str(img_path), str(tmp_path / "t.jpg"))],
+        0,
+        [_make_search_result(5500, str(img_path), str(tmp_path / "t.jpg"))],
     )
-    qtbot.add_widget(dialog)
 
-    buttons = dialog.findChildren(QtWidgets.QPushButton)
-    prev_btn = next((b for b in buttons if "Previous" in b.text()), None)
-    next_btn = next((b for b in buttons if "Next" in b.text()), None)
+    prev_btn = _find_button(dialog, "Previous")
+    next_btn = _find_button(dialog, "Next")
 
     assert prev_btn is not None
     assert next_btn is not None
@@ -1217,12 +1074,7 @@ def test_navigation_label_shows_position(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """The navigation label displays the correct position (e.g., '2 / 3')."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "pos.jpg"
-    PILImage.new("RGB", (100, 100), "purple").save(img_path)
-
-    db_image = Image(id=6000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "purple", 6000)
     db_image.faces = []
 
     results = [
@@ -1231,15 +1083,9 @@ def test_navigation_label_shows_position(
         _make_search_result(6002, str(img_path), str(tmp_path / "t3.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=1,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 1, results
     )
-    qtbot.add_widget(dialog)
 
     assert dialog._nav_label.text() == "2 / 3"
 
@@ -1248,23 +1094,12 @@ def test_navigation_label_empty_when_no_results(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """The navigation label is empty when there are no results."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "empty_nav.jpg"
-    PILImage.new("RGB", (100, 100), "orange").save(img_path)
-
-    db_image = Image(id=7000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "orange", 7000)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=0,
-        all_results=[],
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 0, []
     )
-    qtbot.add_widget(dialog)
 
     assert dialog._nav_label.text() == ""
 
@@ -1273,12 +1108,7 @@ def test_keyboard_left_arrow_navigates_previous(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Pressing the left arrow key calls _show_previous_image."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "key_prev.jpg"
-    PILImage.new("RGB", (100, 100), "pink").save(img_path)
-
-    db_image = Image(id=8000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "pink", 8000)
     db_image.faces = []
 
     results = [
@@ -1286,15 +1116,9 @@ def test_keyboard_left_arrow_navigates_previous(
         _make_search_result(8001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=1,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 1, results
     )
-    qtbot.add_widget(dialog)
 
     with patch.object(dialog, "_show_previous_image") as mock_prev:
         key_event = QtGui.QKeyEvent(
@@ -1310,12 +1134,7 @@ def test_keyboard_right_arrow_navigates_next(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Pressing the right arrow key calls _show_next_image."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "key_next.jpg"
-    PILImage.new("RGB", (100, 100), "cyan").save(img_path)
-
-    db_image = Image(id=9000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "cyan", 9000)
     db_image.faces = []
 
     results = [
@@ -1323,15 +1142,9 @@ def test_keyboard_right_arrow_navigates_next(
         _make_search_result(9001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=0,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 0, results
     )
-    qtbot.add_widget(dialog)
 
     with patch.object(dialog, "_show_next_image") as mock_next:
         key_event = QtGui.QKeyEvent(
@@ -1347,12 +1160,7 @@ def test_other_keys_do_not_navigate(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Keys other than left/right do not trigger navigation."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "other_key.jpg"
-    PILImage.new("RGB", (100, 100), "gray").save(img_path)
-
-    db_image = Image(id=10000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "gray", 10000)
     db_image.faces = []
 
     results = [
@@ -1360,15 +1168,9 @@ def test_other_keys_do_not_navigate(
         _make_search_result(10001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=1,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 1, results
     )
-    qtbot.add_widget(dialog)
 
     with (
         patch.object(dialog, "_show_previous_image") as mock_prev,
@@ -1394,12 +1196,7 @@ def test_show_next_image_disabled_at_end(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_show_next_image does nothing when already at the last image."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "at_end.jpg"
-    PILImage.new("RGB", (100, 100), "white").save(img_path)
-
-    db_image = Image(id=11000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "white", 11000)
     db_image.faces = []
 
     results = [
@@ -1407,15 +1204,9 @@ def test_show_next_image_disabled_at_end(
         _make_search_result(11001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=1,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 1, results
     )
-    qtbot.add_widget(dialog)
 
     assert dialog._current_index == 1
     dialog._show_next_image()
@@ -1426,12 +1217,7 @@ def test_show_previous_image_disabled_at_start(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """_show_previous_image does nothing when already at the first image."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "at_start.jpg"
-    PILImage.new("RGB", (100, 100), "black").save(img_path)
-
-    db_image = Image(id=12000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "black", 12000)
     db_image.faces = []
 
     results = [
@@ -1439,15 +1225,9 @@ def test_show_previous_image_disabled_at_start(
         _make_search_result(12001, str(img_path), str(tmp_path / "t2.jpg")),
     ]
 
-    dialog = ImageDetailDialog(
-        db_image,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-        current_index=0,
-        all_results=results,
+    dialog = _make_dialog(
+        qtbot, db_image, session_factory, vector_store, tmp_app_paths, 0, results
     )
-    qtbot.add_widget(dialog)
 
     assert dialog._current_index == 0
     dialog._show_previous_image()
@@ -1465,8 +1245,7 @@ def test_add_meta_row_skipped_when_value_is_none(
     """_add_meta_row adds no row when value_text is None."""
     db_image = Image(id=9001, file_path="/nonexistent.jpg", file_size=0)
     db_image.faces = []
-    dialog = ImageDetailDialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
 
     layout = QtWidgets.QVBoxLayout()
     dialog._add_meta_row(layout, "Label", None)
@@ -1475,17 +1254,9 @@ def test_add_meta_row_skipped_when_value_is_none(
 
 def test_show_next_image_loads_next_image(qtbot, tmp_path, vector_store, tmp_app_paths):
     """Clicking Next actually loads the next image via _load_image_by_index."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "img1.jpg"
-    img2_path = tmp_path / "img2.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img1_path)
-    PILImage.new("RGB", (100, 100), "blue").save(img2_path)
-
-    db_image1 = Image(id=9100, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "red", 9100, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "blue", 9101, 600)
     db_image1.faces = []
-
-    db_image2 = Image(id=9101, file_path=str(img2_path), file_size=600)
     db_image2.faces = []
 
     results = [
@@ -1497,17 +1268,7 @@ def test_show_next_image_loads_next_image(qtbot, tmp_path, vector_store, tmp_app
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image2)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image2)
 
     dialog = ImageDetailDialog(
         db_image1,
@@ -1529,17 +1290,9 @@ def test_show_previous_image_loads_previous_image(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """Clicking Previous actually loads the previous image via _load_image_by_index."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "prev1.jpg"
-    img2_path = tmp_path / "prev2.jpg"
-    PILImage.new("RGB", (100, 100), "green").save(img1_path)
-    PILImage.new("RGB", (100, 100), "yellow").save(img2_path)
-
-    db_image1 = Image(id=9200, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "green", 9200, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "yellow", 9201, 600)
     db_image1.faces = []
-
-    db_image2 = Image(id=9201, file_path=str(img2_path), file_size=600)
     db_image2.faces = []
 
     results = [
@@ -1551,17 +1304,7 @@ def test_show_previous_image_loads_previous_image(
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image1)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image1)
 
     dialog = ImageDetailDialog(
         db_image2,
@@ -1583,17 +1326,9 @@ def test_load_image_by_index_clears_resolved_names(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_load_image_by_index clears _resolved_names before loading the new image."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "clr1.jpg"
-    img2_path = tmp_path / "clr2.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img1_path)
-    PILImage.new("RGB", (100, 100), "blue").save(img2_path)
-
-    db_image1 = Image(id=9300, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "red", 9300, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "blue", 9301, 600)
     db_image1.faces = []
-
-    db_image2 = Image(id=9301, file_path=str(img2_path), file_size=600)
     db_image2.faces = []
 
     results = [
@@ -1605,17 +1340,7 @@ def test_load_image_by_index_clears_resolved_names(
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image2)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image2)
 
     dialog = ImageDetailDialog(
         db_image1,
@@ -1638,20 +1363,11 @@ def test_load_image_by_index_updates_navigation(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_load_image_by_index calls _update_navigation after loading."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "nav1.jpg"
-    img2_path = tmp_path / "nav2.jpg"
-    img3_path = tmp_path / "nav3.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img1_path)
-    PILImage.new("RGB", (100, 100), "blue").save(img2_path)
-    PILImage.new("RGB", (100, 100), "green").save(img3_path)
-
-    db_image1 = Image(id=9400, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "red", 9400, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "blue", 9401, 600)
+    img3_path, db_image3 = _make_test_image(tmp_path, "green", 9402, 700)
     db_image1.faces = []
-    db_image2 = Image(id=9401, file_path=str(img2_path), file_size=600)
     db_image2.faces = []
-    db_image3 = Image(id=9402, file_path=str(img3_path), file_size=700)
     db_image3.faces = []
 
     results = [
@@ -1666,17 +1382,7 @@ def test_load_image_by_index_updates_navigation(
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image2)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image2)
 
     dialog = ImageDetailDialog(
         db_image1,
@@ -1706,17 +1412,9 @@ def test_load_image_by_index_updates_metadata_panel(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_load_image_by_index calls _update_metadata_panel after loading the new image."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "meta1.jpg"
-    img2_path = tmp_path / "meta2.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img1_path)
-    PILImage.new("RGB", (100, 100), "blue").save(img2_path)
-
-    db_image1 = Image(id=9500, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "red", 9500, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "blue", 9501, 600)
     db_image1.faces = []
-
-    db_image2 = Image(id=9501, file_path=str(img2_path), file_size=600)
     db_image2.faces = []
 
     results = [
@@ -1728,17 +1426,7 @@ def test_load_image_by_index_updates_metadata_panel(
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image2)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image2)
 
     dialog = ImageDetailDialog(
         db_image1,
@@ -1759,16 +1447,10 @@ def test_update_metadata_panel_updates_id_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the ID label text."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "upid.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img_path)
-
-    db_image = Image(id=9600, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "red", 9600)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     db_image.id = 9601
     dialog._update_metadata_panel()
@@ -1782,16 +1464,10 @@ def test_update_metadata_panel_updates_file_path_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the file path label text."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "upfp.jpg"
-    PILImage.new("RGB", (100, 100), "blue").save(img_path)
-
-    db_image = Image(id=9700, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "blue", 9700)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     new_path = str(tmp_path / "new_path.jpg")
     db_image.file_path = new_path
@@ -1806,16 +1482,10 @@ def test_update_metadata_panel_updates_file_size_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the file size label with formatted value."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "upfs.jpg"
-    PILImage.new("RGB", (100, 100), "green").save(img_path)
-
-    db_image = Image(id=9800, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "green", 9800)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     db_image.file_size = 2048
     dialog._update_metadata_panel()
@@ -1829,17 +1499,11 @@ def test_update_metadata_panel_updates_dimensions_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the dimensions label from metadata_rel."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "updim.jpg"
-    PILImage.new("RGB", (100, 100), "yellow").save(img_path)
-
-    db_image = Image(id=9900, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "yellow", 9900)
     db_image.metadata_rel = ImageMetadata(width=200, height=150)
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     db_image.metadata_rel.width = 300
     db_image.metadata_rel.height = 400
@@ -1854,17 +1518,11 @@ def test_update_metadata_panel_updates_taken_at_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the taken_at label from metadata_rel."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "uptaken.jpg"
-    PILImage.new("RGB", (100, 100), "cyan").save(img_path)
-
-    db_image = Image(id=10000, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "cyan", 10000)
     db_image.metadata_rel = ImageMetadata(taken_at=datetime(2020, 1, 1, 12, 0, 0))
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     db_image.metadata_rel.taken_at = datetime(2023, 6, 15, 9, 30, 0)
     dialog._update_metadata_panel()
@@ -1878,17 +1536,11 @@ def test_update_metadata_panel_updates_camera_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the camera label from metadata_rel."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "upcam.jpg"
-    PILImage.new("RGB", (100, 100), "magenta").save(img_path)
-
-    db_image = Image(id=10100, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "magenta", 10100)
     db_image.metadata_rel = ImageMetadata(camera_make="Canon", camera_model="EOS")
     db_image.faces = []
 
-    dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+    dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     db_image.metadata_rel.camera_make = "Nikon"
     db_image.metadata_rel.camera_model = "Z6"
@@ -1904,18 +1556,12 @@ def test_update_metadata_panel_updates_map_widget(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel calls set_center and set_marker on the map widget."""
-    from PIL import Image as PILImage
-
-    img_path = tmp_path / "upmap.jpg"
-    PILImage.new("RGB", (100, 100), "white").save(img_path)
-
-    db_image = Image(id=10200, file_path=str(img_path), file_size=500)
+    img_path, db_image = _make_test_image(tmp_path, "white", 10200)
     db_image.metadata_rel = ImageMetadata(gps_lat=48.0, gps_lon=11.0)
     db_image.faces = []
 
     with patch.object(QtQuickWidgets.QQuickWidget, "setSource"):
-        dialog = ImageDetailDialog(db_image, MagicMock(), vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
+        dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
 
     assert dialog._map_widget is not None
     with (
@@ -1933,18 +1579,10 @@ def test_show_next_image_updates_metadata_panel(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """Clicking Next updates the metadata panel to show the new image's metadata."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "next1.jpg"
-    img2_path = tmp_path / "next2.jpg"
-    PILImage.new("RGB", (100, 100), "red").save(img1_path)
-    PILImage.new("RGB", (100, 100), "blue").save(img2_path)
-
-    db_image1 = Image(id=10300, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "red", 10300, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "blue", 10301, 600)
     db_image1.metadata_rel = ImageMetadata(width=100, height=100)
     db_image1.faces = []
-
-    db_image2 = Image(id=10301, file_path=str(img2_path), file_size=600)
     db_image2.metadata_rel = ImageMetadata(width=200, height=150)
     db_image2.faces = []
 
@@ -1957,17 +1595,7 @@ def test_show_next_image_updates_metadata_panel(
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image2)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image2)
 
     dialog = ImageDetailDialog(
         db_image1,
@@ -1990,17 +1618,9 @@ def test_show_previous_image_updates_metadata_panel(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """Clicking Previous updates the metadata panel to show the previous image."""
-    from PIL import Image as PILImage
-
-    img1_path = tmp_path / "prev_nav1.jpg"
-    img2_path = tmp_path / "prev_nav2.jpg"
-    PILImage.new("RGB", (100, 100), "green").save(img1_path)
-    PILImage.new("RGB", (100, 100), "yellow").save(img2_path)
-
-    db_image1 = Image(id=10400, file_path=str(img1_path), file_size=500)
+    img1_path, db_image1 = _make_test_image(tmp_path, "green", 10400, 500)
+    img2_path, db_image2 = _make_test_image(tmp_path, "yellow", 10401, 600)
     db_image1.faces = []
-
-    db_image2 = Image(id=10401, file_path=str(img2_path), file_size=600)
     db_image2.metadata_rel = ImageMetadata(taken_at=datetime(2022, 5, 10))
     db_image2.faces = []
 
@@ -2013,17 +1633,7 @@ def test_show_previous_image_updates_metadata_panel(
         ),
     ]
 
-    mock_sf = MagicMock()
-    mock_session = MagicMock()
-    mock_sf.side_effect = contextmanager(lambda: (yield mock_session))
-
-    def fake_execute(_stmt):
-        result = MagicMock()
-        result.unique = MagicMock(return_value=result)
-        result.scalar_one_or_none = MagicMock(return_value=db_image1)
-        return result
-
-    mock_session.execute = fake_execute
+    mock_sf = _make_mock_session_factory(db_image1)
 
     dialog = ImageDetailDialog(
         db_image2,
