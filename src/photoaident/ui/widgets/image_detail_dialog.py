@@ -3,7 +3,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
+from photoaident.core.search import SearchResult
 from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import Face, FaceState, Image as DBImage
 from photoaident.ui.widgets.map_widget import MapWidget
@@ -97,18 +100,31 @@ class ImageDetailDialog(QtWidgets.QDialog):
         session_factory: "sessionmaker",
         vector_store: "VectorStore",
         paths: "AppPaths",
+        current_index: int = 0,
+        all_results: list[SearchResult] | None = None,
         parent=None,
     ):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Image Details"))
         self.setMinimumSize(800, 600)
+        self.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.image_data = image
         self._session_factory = session_factory
         self._vector_store = vector_store
         self._paths = paths
         self._resolved_names: dict[int, tuple[str, float] | None] = {}
+        self._current_index = current_index
+        self._all_results = all_results or []
+        self._metadata_widgets: dict[str, QtWidgets.QLabel] = {}
+        self._map_widget: MapWidget | None = None
 
         self._setup_ui()
+        QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self
+        ).activated.connect(self._show_previous_image)
+        QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self
+        ).activated.connect(self._show_next_image)
         restore_widget_geometry(self, self._paths.window_state_file)
         self._load_image()
 
@@ -123,7 +139,36 @@ class ImageDetailDialog(QtWidgets.QDialog):
     def _setup_ui(self) -> None:
         main_layout = QtWidgets.QHBoxLayout(self)
         main_layout.addWidget(self._create_metadata_panel())
-        main_layout.addWidget(self._create_image_area(), 1)
+        main_layout.addWidget(self._create_image_container(), 1)
+
+    def _create_image_container(self) -> QtWidgets.QWidget:
+        container = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._create_image_area(), 1)
+
+        nav_layout = QtWidgets.QHBoxLayout()
+        nav_layout.addStretch()
+
+        self._prev_btn = QtWidgets.QPushButton("< " + self.tr("Previous"))
+        self._prev_btn.setAutoDefault(False)
+        self._prev_btn.clicked.connect(self._show_previous_image)
+        nav_layout.addWidget(self._prev_btn)
+
+        self._nav_label = QtWidgets.QLabel()
+        self._nav_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        nav_layout.addWidget(self._nav_label)
+
+        self._next_btn = QtWidgets.QPushButton(self.tr("Next") + " >")
+        self._next_btn.setAutoDefault(False)
+        self._next_btn.clicked.connect(self._show_next_image)
+        nav_layout.addWidget(self._next_btn)
+
+        nav_layout.addStretch()
+
+        layout.addLayout(nav_layout)
+        self._update_navigation()
+        return container
 
     def _create_metadata_panel(self) -> QtWidgets.QFrame:
         """Build and return the left metadata panel."""
@@ -142,14 +187,15 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     def _add_image_metadata_rows(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Populate layout with metadata rows and optional map widget."""
-        self._add_meta_row(layout, self.tr("ID"), self.image_data.id)
+        self._add_meta_row(layout, self.tr("ID"), self.image_data.id, "id")
         self._add_clickable_meta_row(
-            layout, self.tr("File Path"), self.image_data.file_path
+            layout, self.tr("File Path"), self.image_data.file_path, "file_path"
         )
         self._add_meta_row(
             layout,
             self.tr("File Size"),
             self._format_file_size(self.image_data.file_size),
+            "file_size",
         )
 
         if not self.image_data.metadata_rel:
@@ -158,17 +204,21 @@ class ImageDetailDialog(QtWidgets.QDialog):
         meta = self.image_data.metadata_rel
         if meta.width and meta.height:
             self._add_meta_row(
-                layout, self.tr("Dimensions"), f"{meta.width} x {meta.height}"
+                layout,
+                self.tr("Dimensions"),
+                f"{meta.width} x {meta.height}",
+                "dimensions",
             )
         if meta.taken_at:
             self._add_meta_row(
                 layout,
                 self.tr("Taken At"),
                 meta.taken_at.strftime("%Y-%m-%d %H:%M:%S"),
+                "taken_at",
             )
         if meta.camera_make or meta.camera_model:
             camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
-            self._add_meta_row(layout, self.tr("Camera"), camera)
+            self._add_meta_row(layout, self.tr("Camera"), camera, "camera")
         if meta.gps_lat is not None and meta.gps_lon is not None:
             map_widget = self._create_map_widget(
                 float(meta.gps_lat), float(meta.gps_lon)
@@ -180,6 +230,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         layout: QtWidgets.QVBoxLayout,
         label_text: str,
         value_text: str | int | None,
+        key: str | None = None,
     ) -> None:
         """Add a two-column label/value row to *layout*. No-ops when value is None."""
         if value_text is None:
@@ -195,12 +246,15 @@ class ImageDetailDialog(QtWidgets.QDialog):
         row_layout.addWidget(label)
         row_layout.addWidget(value)
         layout.addLayout(row_layout)
+        if key is not None:
+            self._metadata_widgets[key] = value
 
     def _add_clickable_meta_row(
         self,
         layout: QtWidgets.QVBoxLayout,
         label_text: str,
         value_text: str,
+        key: str | None = None,
     ) -> None:
         """Add a two-column label/link row; clicking emits navigate_to_browse."""
         row_layout = QtWidgets.QHBoxLayout()
@@ -220,6 +274,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
         row_layout.addWidget(label)
         row_layout.addWidget(value)
         layout.addLayout(row_layout)
+        if key is not None:
+            self._metadata_widgets[key] = value
 
     def _create_map_widget(self, lat: float, lon: float) -> MapWidget:
         """Create a MapWidget centred on the given GPS coordinates."""
@@ -227,6 +283,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         map_widget.setFixedHeight(200)
         map_widget.set_center(lat, lon, zoom=14)
         map_widget.set_marker(lat, lon)
+        self._map_widget = map_widget
         return map_widget
 
     def _add_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
@@ -268,6 +325,82 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.scroll_area.setWidget(self.image_label)
 
         return self.scroll_area
+
+    def _update_navigation(self) -> None:
+        total = len(self._all_results)
+        has_nav = total > 0
+        self._prev_btn.setEnabled(has_nav and self._current_index > 0)
+        self._next_btn.setEnabled(has_nav and self._current_index < total - 1)
+        if total > 0:
+            self._nav_label.setText(f"{self._current_index + 1} / {total}")
+        else:
+            self._nav_label.setText("")
+
+    def _show_previous_image(self) -> None:
+        if self._current_index > 0:
+            self._current_index -= 1
+            self._load_image_by_index()
+
+    def _show_next_image(self) -> None:
+        if self._current_index < len(self._all_results) - 1:
+            self._current_index += 1
+            self._load_image_by_index()
+
+    def _load_image_by_index(self) -> None:
+        result = self._all_results[self._current_index]
+        with self._session_factory() as session:
+            stmt = (
+                select(DBImage)
+                .where(DBImage.id == result.image_id)
+                .options(
+                    joinedload(DBImage.faces).joinedload(Face.person),
+                    joinedload(DBImage.metadata_rel),
+                )
+            )
+            image = session.execute(stmt).unique().scalar_one_or_none()
+            if image:
+                self.image_data = image
+                self._resolved_names.clear()
+                self._load_image()
+                self._update_metadata_panel()
+        self._update_navigation()
+
+    def _update_metadata_panel(self) -> None:
+        """Update the metadata panel widgets with data from the current image."""
+        image = self.image_data
+
+        if id_widget := self._metadata_widgets.get("id"):
+            id_widget.setText(str(image.id))
+
+        if fp_widget := self._metadata_widgets.get("file_path"):
+            fp_widget.setText(f'<a href="#">{html.escape(image.file_path)}</a>')
+
+        if fs_widget := self._metadata_widgets.get("file_size"):
+            fs_widget.setText(self._format_file_size(image.file_size))
+
+        meta = image.metadata_rel
+        if meta:
+            if dim_widget := self._metadata_widgets.get("dimensions"):
+                if meta.width and meta.height:
+                    dim_widget.setText(f"{meta.width} x {meta.height}")
+
+            if ta_widget := self._metadata_widgets.get("taken_at"):
+                if meta.taken_at:
+                    ta_widget.setText(meta.taken_at.strftime("%Y-%m-%d %H:%M:%S"))
+
+            if cam_widget := self._metadata_widgets.get("camera"):
+                camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
+                cam_widget.setText(camera)
+
+            if (
+                self._map_widget
+                and meta.gps_lat is not None
+                and meta.gps_lon is not None
+            ):
+                self._map_widget.set_center(
+                    float(meta.gps_lat), float(meta.gps_lon), zoom=14
+                )
+                self._map_widget.set_marker(float(meta.gps_lat), float(meta.gps_lon))
 
     def _get_face_display_info(self, face: Face) -> tuple[QtCore.Qt.GlobalColor, str]:
         """Return (color, tooltip) for a single face based on its state."""
@@ -404,3 +537,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
         super().resizeEvent(event)
         # Re-scale image when dialog is resized
         QtCore.QTimer.singleShot(10, self._update_image_display)
+
+    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
+        if event.key() == QtCore.Qt.Key.Key_Left:
+            self._show_previous_image()
+        elif event.key() == QtCore.Qt.Key.Key_Right:
+            self._show_next_image()
+        else:
+            super().keyPressEvent(event)

@@ -334,11 +334,21 @@ class ThumbnailGrid(QtWidgets.QWidget):
             )
             image = session.execute(stmt).unique().scalar_one_or_none()
             if image:
+                current_index = next(
+                    (
+                        i
+                        for i, r in enumerate(self._all_results)
+                        if r.image_id == image_id
+                    ),
+                    0,
+                )
                 dialog = ImageDetailDialog(
                     image,
                     self._session_factory,
                     self._vector_store,
                     self._paths,
+                    current_index=current_index,
+                    all_results=list(self._all_results),
                     parent=self,
                 )
                 dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)

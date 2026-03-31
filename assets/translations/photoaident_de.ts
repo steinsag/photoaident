@@ -266,6 +266,14 @@ Beispiele: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</transla
         <translation>Bilddetails</translation>
     </message>
     <message>
+        <source>Previous</source>
+        <translation>Zurück</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Weiter</translation>
+    </message>
+    <message>
         <source>Metadata</source>
         <translation>Metadaten</translation>
     </message>
