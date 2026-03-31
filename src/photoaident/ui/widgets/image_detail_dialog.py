@@ -639,11 +639,3 @@ class ImageDetailDialog(QtWidgets.QDialog):
         super().resizeEvent(event)
         # Re-scale image when dialog is resized
         QtCore.QTimer.singleShot(10, self._update_image_display)
-
-    def keyPressEvent(self, event: QtGui.QKeyEvent) -> None:
-        if event.key() == QtCore.Qt.Key.Key_Left:
-            self._show_previous_image()
-        elif event.key() == QtCore.Qt.Key.Key_Right:
-            self._show_next_image()
-        else:
-            super().keyPressEvent(event)
