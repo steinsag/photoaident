@@ -237,7 +237,7 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Label button is disabled when the image has no unidentified faces."""
-    img_path, db_image = _make_test_image(tmp_path, "blue", 600)
+    _, db_image = _make_test_image(tmp_path, "blue", 600)
     db_image.faces = [
         Face(
             bbox_x=0,
@@ -261,7 +261,7 @@ def test_label_faces_button_emits_signal(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Clicking the label button emits navigate_to_labelling with the image id."""
-    img_path, db_image = _make_test_image(tmp_path, "green", 700)
+    _, db_image = _make_test_image(tmp_path, "green", 700)
     db_image.faces = [
         Face(
             bbox_x=0,
@@ -340,7 +340,7 @@ def test_show_in_file_manager_button_always_enabled(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Show in File Manager button is enabled regardless of face labelling state."""
-    img_path, db_image = _make_test_image(tmp_path, "cyan", 800)
+    _, db_image = _make_test_image(tmp_path, "cyan", 800)
     db_image.faces = [
         Face(
             bbox_x=0,
@@ -896,7 +896,7 @@ def test_map_shown_when_gps_available(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """A MapWidget is added to the metadata panel when GPS coordinates are present."""
-    img_path, db_image = _make_test_image(tmp_path, "green", 1001)
+    _, db_image = _make_test_image(tmp_path, "green", 1001)
     db_image.metadata_rel = ImageMetadata(
         width=100,
         height=100,
@@ -919,7 +919,7 @@ def test_map_not_shown_when_no_gps(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No MapWidget is added when metadata exists but has no GPS coordinates."""
-    img_path, db_image = _make_test_image(tmp_path, "red", 1002)
+    _, db_image = _make_test_image(tmp_path, "red", 1002)
     db_image.metadata_rel = ImageMetadata(
         width=100,
         height=100,
@@ -937,7 +937,7 @@ def test_map_not_shown_when_no_metadata(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """No MapWidget is added when metadata_rel is None."""
-    img_path, db_image = _make_test_image(tmp_path, "blue", 1003)
+    _, db_image = _make_test_image(tmp_path, "blue", 1003)
     db_image.faces = []
 
     dialog = _make_dialog(qtbot, db_image, session_factory, vector_store, tmp_app_paths)
@@ -1028,7 +1028,7 @@ def test_navigation_buttons_both_disabled_when_no_results(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """Both buttons are disabled when there are no results."""
-    img_path, db_image = _make_test_image(tmp_path, "yellow", 5000)
+    _, db_image = _make_test_image(tmp_path, "yellow", 5000)
     db_image.faces = []
 
     dialog = _make_dialog(
@@ -1094,7 +1094,7 @@ def test_navigation_label_empty_when_no_results(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
     """The navigation label is empty when there are no results."""
-    img_path, db_image = _make_test_image(tmp_path, "orange", 7000)
+    _, db_image = _make_test_image(tmp_path, "orange", 7000)
     db_image.faces = []
 
     dialog = _make_dialog(
@@ -1447,7 +1447,7 @@ def test_update_metadata_panel_updates_id_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the ID label text."""
-    img_path, db_image = _make_test_image(tmp_path, "red", 9600)
+    _, db_image = _make_test_image(tmp_path, "red", 9600)
     db_image.faces = []
 
     dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
@@ -1464,7 +1464,7 @@ def test_update_metadata_panel_updates_file_path_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the file path label text."""
-    img_path, db_image = _make_test_image(tmp_path, "blue", 9700)
+    _, db_image = _make_test_image(tmp_path, "blue", 9700)
     db_image.faces = []
 
     dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
@@ -1482,7 +1482,7 @@ def test_update_metadata_panel_updates_file_size_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the file size label with formatted value."""
-    img_path, db_image = _make_test_image(tmp_path, "green", 9800)
+    _, db_image = _make_test_image(tmp_path, "green", 9800)
     db_image.faces = []
 
     dialog = _make_dialog(qtbot, db_image, MagicMock(), vector_store, tmp_app_paths)
@@ -1499,7 +1499,7 @@ def test_update_metadata_panel_updates_dimensions_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the dimensions label from metadata_rel."""
-    img_path, db_image = _make_test_image(tmp_path, "yellow", 9900)
+    _, db_image = _make_test_image(tmp_path, "yellow", 9900)
     db_image.metadata_rel = ImageMetadata(width=200, height=150)
     db_image.faces = []
 
@@ -1518,7 +1518,7 @@ def test_update_metadata_panel_updates_taken_at_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the taken_at label from metadata_rel."""
-    img_path, db_image = _make_test_image(tmp_path, "cyan", 10000)
+    _, db_image = _make_test_image(tmp_path, "cyan", 10000)
     db_image.metadata_rel = ImageMetadata(taken_at=datetime(2020, 1, 1, 12, 0, 0))
     db_image.faces = []
 
@@ -1536,7 +1536,7 @@ def test_update_metadata_panel_updates_camera_label(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel updates the camera label from metadata_rel."""
-    img_path, db_image = _make_test_image(tmp_path, "magenta", 10100)
+    _, db_image = _make_test_image(tmp_path, "magenta", 10100)
     db_image.metadata_rel = ImageMetadata(camera_make="Canon", camera_model="EOS")
     db_image.faces = []
 
@@ -1556,7 +1556,7 @@ def test_update_metadata_panel_updates_map_widget(
     qtbot, tmp_path, vector_store, tmp_app_paths
 ):
     """_update_metadata_panel calls set_center and set_marker on the map widget."""
-    img_path, db_image = _make_test_image(tmp_path, "white", 10200)
+    _, db_image = _make_test_image(tmp_path, "white", 10200)
     db_image.metadata_rel = ImageMetadata(gps_lat=48.0, gps_lon=11.0)
     db_image.faces = []
 
