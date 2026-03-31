@@ -177,7 +177,7 @@ def test_prescale_no_op_for_small_image():
     scaled, scale = FaceEmbedder._prescale_for_detection(img, max_dim=1920)
 
     assert scaled is img
-    assert scale == 1.0
+    assert scale == pytest.approx(1.0, abs=1e-10)
 
 
 def test_prescale_no_op_at_threshold():
@@ -186,7 +186,7 @@ def test_prescale_no_op_at_threshold():
     scaled, scale = FaceEmbedder._prescale_for_detection(img, max_dim=1920)
 
     assert scaled is img
-    assert scale == 1.0
+    assert scale == pytest.approx(1.0, abs=1e-10)
 
 
 def test_process_image_scales_bbox_to_original_coords(tmp_path, face_embedder):
