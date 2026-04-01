@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import enum
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, select
+from sqlalchemy.orm import joinedload
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -31,6 +34,17 @@ if TYPE_CHECKING:
     from photoaident.db.vector_store import VectorStore
 
 
+class SortOrder(enum.Enum):
+    """Sort order options for search results displayed in ThumbnailGrid."""
+
+    RELEVANCE_DESC = "relevance_desc"
+    RELEVANCE_ASC = "relevance_asc"
+    TAKEN_AT_DESC = "taken_at_desc"
+    TAKEN_AT_ASC = "taken_at_asc"
+    FILENAME_DESC = "filename_desc"
+    FILENAME_ASC = "filename_asc"
+
+
 @dataclass
 class SearchResult:
     """A single search result referencing an image."""
@@ -38,6 +52,49 @@ class SearchResult:
     image_id: int
     file_path: str
     thumb_path: Path
+    score: float | None = None
+    taken_at: datetime | None = None
+
+
+def sort_results(results: list[SearchResult], order: SortOrder) -> list[SearchResult]:
+    """Return a new sorted list of SearchResult objects for the given order.
+
+    None scores are always placed last regardless of sort direction.
+    None taken_at values are always placed last regardless of sort direction.
+
+    Args:
+        results: The results to sort.
+        order: The desired sort order.
+
+    Returns:
+        A new sorted list (the original list is not modified).
+    """
+    if order == SortOrder.RELEVANCE_DESC:
+        return sorted(
+            results,
+            key=lambda r: (r.score is not None, r.score or 0.0),
+            reverse=True,
+        )
+    if order == SortOrder.RELEVANCE_ASC:
+        return sorted(
+            results,
+            key=lambda r: (r.score is None, r.score or 0.0),
+        )
+    if order == SortOrder.TAKEN_AT_DESC:
+        return sorted(
+            results,
+            key=lambda r: (r.taken_at is not None, r.taken_at or datetime.min),
+            reverse=True,
+        )
+    if order == SortOrder.TAKEN_AT_ASC:
+        return sorted(
+            results,
+            key=lambda r: (r.taken_at is None, r.taken_at or datetime.min),
+        )
+    if order == SortOrder.FILENAME_DESC:
+        return sorted(results, key=lambda r: r.file_path.lower(), reverse=True)
+    # FILENAME_ASC
+    return sorted(results, key=lambda r: r.file_path.lower())
 
 
 def search_images(
@@ -95,12 +152,14 @@ def search_images(
     per_person_scores = _collect_per_person_scores(
         session_factory, vector_store, person_ids, metadata_ids
     )
-    ordered_ids = _intersect_and_rank(per_person_scores)
-    if not ordered_ids:
+    ordered_pairs = _intersect_and_rank(per_person_scores)
+    if not ordered_pairs:
         return []
 
+    ordered_ids = [img_id for img_id, _ in ordered_pairs]
+    scores = dict(ordered_pairs)
     images = _fetch_ordered_images(session_factory, ordered_ids)
-    return _format_results(images, thumbs_dir)
+    return _format_results(images, thumbs_dir, scores)
 
 
 def _search_by_metadata_only(
@@ -127,7 +186,12 @@ def _search_by_metadata_only(
     if not conditions:
         return []
     with session_factory() as session:
-        stmt = select(Image).where(and_(*conditions)).order_by(Image.id)
+        stmt = (
+            select(Image)
+            .options(joinedload(Image.metadata_rel))
+            .where(and_(*conditions))
+            .order_by(Image.id)
+        )
         images: list[Image] = list(session.execute(stmt).unique().scalars().all())
     return _format_results(images, thumbs_dir)
 
@@ -142,7 +206,11 @@ def _fetch_ordered_images(
         for chunk_start in range(0, len(ordered_ids), _SQLITE_IN_LIMIT):
             chunk = ordered_ids[chunk_start : chunk_start + _SQLITE_IN_LIMIT]
             for img in (
-                session.execute(select(Image).where(Image.id.in_(chunk)))
+                session.execute(
+                    select(Image)
+                    .options(joinedload(Image.metadata_rel))
+                    .where(Image.id.in_(chunk))
+                )
                 .unique()
                 .scalars()
                 .all()
@@ -151,7 +219,11 @@ def _fetch_ordered_images(
     return [image_map[i] for i in ordered_ids if i in image_map]
 
 
-def _format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]:
+def _format_results(
+    images: list[Image],
+    thumbs_dir: Path,
+    scores: dict[int, float] | None = None,
+) -> list[SearchResult]:
     """Format Image objects into SearchResult objects for the UI."""
     return [
         SearchResult(
@@ -162,6 +234,8 @@ def _format_results(images: list[Image], thumbs_dir: Path) -> list[SearchResult]
                 if img.file_hash
                 else thumbs_dir / "unknown.jpg"
             ),
+            score=scores[img.id] if scores is not None else None,
+            taken_at=img.metadata_rel.taken_at if img.metadata_rel else None,
         )
         for img in images
     ]

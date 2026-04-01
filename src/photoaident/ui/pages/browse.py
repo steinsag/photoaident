@@ -6,7 +6,7 @@ from PySide6 import QtCore, QtWidgets
 from PySide6.QtGui import QKeyEvent
 from sqlalchemy import select
 
-from photoaident.core.search import SearchResult
+from photoaident.core.search import SearchResult, SortOrder
 from photoaident.db.database import Image
 from photoaident.ui.widgets.thumbnail_grid import ThumbnailGrid
 
@@ -75,6 +75,7 @@ class BrowsePage(QtWidgets.QWidget):
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
         self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
         self.grid.navigate_to_browse.connect(self.navigate_to_browse)
+        self.grid.set_sort_locked(SortOrder.FILENAME_ASC)
         splitter.addWidget(self.grid)
 
         splitter.setStretchFactor(0, 0)
@@ -298,10 +299,12 @@ class BrowsePage(QtWidgets.QWidget):
         """Query DB for images whose direct parent is folder, update grid."""
         prefix = str(folder) + os.sep
         with self.session_factory() as session:
-            stmt = select(Image).where(Image.file_path.like(f"{prefix}%"))
-            images = session.scalars(stmt).all()
-            direct = [img for img in images if Path(img.file_path).parent == folder]
-            self.grid.set_results(self._build_images_data(direct))
+            stmt = select(Image).where(
+                Image.file_path.like(f"{prefix}%"),
+                ~Image.file_path.like(f"{prefix}%{os.sep}%"),
+            )
+            images = session.execute(stmt).scalars().all()
+            self.grid.set_results(self._build_images_data(images))
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
         """Intercept arrow keys in column widgets for keyboard navigation."""

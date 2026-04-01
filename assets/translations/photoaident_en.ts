@@ -693,6 +693,38 @@ To get started, please select your photo collection folder.</translation>
 <context>
     <name>ThumbnailGrid</name>
     <message>
+        <source>Sort:</source>
+        <translation>Sort:</translation>
+    </message>
+    <message>
+        <source>Sort order for results</source>
+        <translation>Sort order for results</translation>
+    </message>
+    <message>
+        <source>Relevance (best first)</source>
+        <translation>Relevance (best first)</translation>
+    </message>
+    <message>
+        <source>Relevance (worst first)</source>
+        <translation>Relevance (worst first)</translation>
+    </message>
+    <message>
+        <source>Date taken (newest first)</source>
+        <translation>Date taken (newest first)</translation>
+    </message>
+    <message>
+        <source>Date taken (oldest first)</source>
+        <translation>Date taken (oldest first)</translation>
+    </message>
+    <message>
+        <source>Filename (A→Z)</source>
+        <translation>Filename (A→Z)</translation>
+    </message>
+    <message>
+        <source>Filename (Z→A)</source>
+        <translation>Filename (Z→A)</translation>
+    </message>
+    <message>
         <source>Scroll to load more… ({n} remaining)</source>
         <translation>Scroll to load more… ({n} remaining)</translation>
     </message>

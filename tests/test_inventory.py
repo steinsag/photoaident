@@ -144,7 +144,7 @@ def test_inventory_task_cancel_during_batch_loop(tmp_path, db_engine):
     def sf():
         return _SessionThatCancels()
 
-    task = InventoryTask(str(tmp_path), sf)  # type: ignore[arg-type]
+    task = InventoryTask(str(tmp_path), sf)  # type: ignore[arg-type]  # ty: ignore[invalid-argument-type]
     task_box.append(task)
     task.run()
 

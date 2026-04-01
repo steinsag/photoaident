@@ -44,26 +44,24 @@ class CorruptIndexError(Exception):
 
 
 def load_translations(app: QtWidgets.QApplication) -> None:
-    """Load translations for the current system locale."""
-    locale = QtCore.QLocale.system().name()  # e.g. "en_US", "de_DE"
+    """Load translations for the current locale (respects QLocale.setDefault)."""
+    # Use QLocale() so tests can override the locale via QLocale.setDefault without
+    # the OS system locale bleeding through.
+    locale = QtCore.QLocale().name()  # e.g. "en_US", "de_DE"
 
-    # We also check the base name (e.g. "de" for "de_DE")
+    # Also check the base name (e.g. "de" for "de_DE")
     short_locale = locale.split("_")[0]
 
     translator = QtCore.QTranslator(app)
 
-    # Search paths for translation files
-    # 1. assets/translations/photoaident_<locale>.qm
-    # 2. assets/translations/photoaident_<short_locale>.qm
-
-    search_locales = [locale, short_locale]
-    for loc in search_locales:
+    for loc in [locale, short_locale]:
         filename = f"photoaident_{loc}.qm"
         path = get_resource_path(os.path.join("assets", "translations", filename))
         if os.path.exists(path) and translator.load(path):
             app.installTranslator(translator)
-            # Keep a reference to prevent garbage collection
-            app._translator = translator  # type: ignore[attr-defined]
+            # Store on the app instance so callers can remove it and it won't be
+            # garbage-collected while the app is running.
+            setattr(app, "_translator", translator)
             # Align QLocale with the loaded UI language so that locale-aware
             # APIs (e.g. QLocale.standaloneMonthName) match the UI language.
             QtCore.QLocale.setDefault(QtCore.QLocale(loc))

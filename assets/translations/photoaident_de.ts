@@ -695,6 +695,38 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
 <context>
     <name>ThumbnailGrid</name>
     <message>
+        <source>Sort:</source>
+        <translation>Sortierung:</translation>
+    </message>
+    <message>
+        <source>Sort order for results</source>
+        <translation>Sortierreihenfolge der Ergebnisse</translation>
+    </message>
+    <message>
+        <source>Relevance (best first)</source>
+        <translation>Relevanz (beste zuerst)</translation>
+    </message>
+    <message>
+        <source>Relevance (worst first)</source>
+        <translation>Relevanz (schlechteste zuerst)</translation>
+    </message>
+    <message>
+        <source>Date taken (newest first)</source>
+        <translation>Aufnahmedatum (neueste zuerst)</translation>
+    </message>
+    <message>
+        <source>Date taken (oldest first)</source>
+        <translation>Aufnahmedatum (älteste zuerst)</translation>
+    </message>
+    <message>
+        <source>Filename (A→Z)</source>
+        <translation>Dateiname (A→Z)</translation>
+    </message>
+    <message>
+        <source>Filename (Z→A)</source>
+        <translation>Dateiname (Z→A)</translation>
+    </message>
+    <message>
         <source>Scroll to load more… ({n} remaining)</source>
         <translation>Scrollen zum Nachladen… ({n} verbleibend)</translation>
     </message>

@@ -152,8 +152,15 @@ def _collect_per_person_scores(
     return per_person_scores
 
 
-def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
-    """Return image IDs present in all per-person dicts, ranked by min score desc."""
+def _intersect_and_rank(
+    per_person_scores: list[dict[int, float]],
+) -> list[tuple[int, float]]:
+    """Return (image_id, score) pairs ranked by min score desc.
+
+    Only image IDs present in every per-person score dict are included.
+    The score is the minimum similarity across all requested persons
+    (i.e. the weakest match determines overall relevance).
+    """
     if not per_person_scores:
         return []
 
@@ -164,13 +171,11 @@ def _intersect_and_rank(per_person_scores: list[dict[int, float]]) -> list[int]:
     if not common_ids:
         return []
 
-    # Weakest match across persons determines relevance
-    ranked = sorted(
-        common_ids,
-        key=lambda img_id: min(s[img_id] for s in per_person_scores),
-        reverse=True,
-    )
-    return ranked
+    min_scores = {
+        img_id: min(s[img_id] for s in per_person_scores) for img_id in common_ids
+    }
+    ranked = sorted(common_ids, key=lambda img_id: min_scores[img_id], reverse=True)
+    return [(img_id, min_scores[img_id]) for img_id in ranked]
 
 
 def _load_person_cluster_means(

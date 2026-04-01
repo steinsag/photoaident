@@ -13,7 +13,7 @@ from photoaident.utils.resource_path import icon_path as _icon_path
 logger = logging.getLogger(__name__)
 
 
-def _apply_initial_bbox(root_obj: object, bbox: GpsBoundingBox) -> None:
+def _apply_initial_bbox(root_obj: QtCore.QObject, bbox: GpsBoundingBox) -> None:
     """Seed the QML map with an initial bounding box.
 
     Pre-populates extraction properties (south/west/north/east) so that
@@ -30,12 +30,12 @@ def _apply_initial_bbox(root_obj: object, bbox: GpsBoundingBox) -> None:
         ("pendingBboxNorth", bbox.north),
         ("pendingBboxEast", bbox.east),
     ):
-        root_obj.setProperty(name, value)  # type: ignore[attr-defined]
+        root_obj.setProperty(name, value)
     # Toggle pendingBbox false→true so onPendingBboxChanged fires even when a
     # previous call left it true (Qt property change signals only fire on a
     # value change, so setting true while already true is a no-op).
-    root_obj.setProperty("pendingBbox", False)  # type: ignore[attr-defined]
-    root_obj.setProperty("pendingBbox", True)  # type: ignore[attr-defined]
+    root_obj.setProperty("pendingBbox", False)
+    root_obj.setProperty("pendingBbox", True)
 
 
 def _build_bbox(south: Any, west: Any, north: Any, east: Any) -> GpsBoundingBox | None:
@@ -148,7 +148,7 @@ class MapWidget(QtWidgets.QWidget):
                 op()
             self._pending_ops.clear()
 
-    def _root_object(self) -> object | None:
+    def _root_object(self) -> QtCore.QObject | None:
         return self._quick_widget.rootObject()
 
     def _apply_or_buffer(self, op: Callable[[], None]) -> None:
@@ -171,9 +171,9 @@ class MapWidget(QtWidgets.QWidget):
         def _apply() -> None:
             root = self._root_object()
             if root:
-                root.setProperty("initialLat", lat)  # type: ignore[attr-defined]
-                root.setProperty("initialLon", lon)  # type: ignore[attr-defined]
-                root.setProperty("initialZoom", zoom)  # type: ignore[attr-defined]
+                root.setProperty("initialLat", lat)
+                root.setProperty("initialLon", lon)
+                root.setProperty("initialZoom", zoom)
 
         self._apply_or_buffer(_apply)
 
@@ -186,9 +186,9 @@ class MapWidget(QtWidgets.QWidget):
         def _apply() -> None:
             root = self._root_object()
             if root:
-                root.setProperty("markerLat", lat)  # type: ignore[attr-defined]
-                root.setProperty("markerLon", lon)  # type: ignore[attr-defined]
-                root.setProperty("showMarker", True)  # type: ignore[attr-defined]
+                root.setProperty("markerLat", lat)
+                root.setProperty("markerLon", lon)
+                root.setProperty("showMarker", True)
 
         self._apply_or_buffer(_apply)
 
@@ -211,18 +211,18 @@ class MapWidget(QtWidgets.QWidget):
         if not root:
             return None
         return _build_bbox(
-            root.property("south"),  # type: ignore[attr-defined]
-            root.property("west"),  # type: ignore[attr-defined]
-            root.property("north"),  # type: ignore[attr-defined]
-            root.property("east"),  # type: ignore[attr-defined]
+            root.property("south"),
+            root.property("west"),
+            root.property("north"),
+            root.property("east"),
         )
 
     def _on_zoom_in(self) -> None:
         root = self._root_object()
         if root:
-            root.setProperty("pendingZoomDelta", 1)  # type: ignore[attr-defined]
+            root.setProperty("pendingZoomDelta", 1)
 
     def _on_zoom_out(self) -> None:
         root = self._root_object()
         if root:
-            root.setProperty("pendingZoomDelta", -1)  # type: ignore[attr-defined]
+            root.setProperty("pendingZoomDelta", -1)

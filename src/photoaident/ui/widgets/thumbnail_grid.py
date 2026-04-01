@@ -1,14 +1,15 @@
 import logging
 from collections.abc import Iterable
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import shiboken6
 from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6.QtGui import QStandardItemModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import joinedload
 
-from photoaident.core.search import SearchResult
+from photoaident.core.search import SearchResult, SortOrder, sort_results
 from photoaident.db.database import Face, FaceState, Image
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.utils.file_manager import reveal_in_file_manager
@@ -263,6 +264,34 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.main_layout = QtWidgets.QVBoxLayout(self)
         self.main_layout.setContentsMargins(0, 0, 0, 0)
 
+        # Toolbar row with right-aligned sort combo
+        toolbar = QtWidgets.QWidget()
+        toolbar_layout = QtWidgets.QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(4, 2, 4, 2)
+        toolbar_layout.addStretch()
+
+        sort_label = QtWidgets.QLabel(self.tr("Sort:"))
+        toolbar_layout.addWidget(sort_label)
+
+        self._sort_combo = QtWidgets.QComboBox()
+        self._sort_combo.setToolTip(self.tr("Sort order for results"))
+        _sort_options: list[tuple[SortOrder, str]] = [
+            (SortOrder.RELEVANCE_DESC, self.tr("Relevance (best first)")),
+            (SortOrder.RELEVANCE_ASC, self.tr("Relevance (worst first)")),
+            (SortOrder.TAKEN_AT_DESC, self.tr("Date taken (newest first)")),
+            (SortOrder.TAKEN_AT_ASC, self.tr("Date taken (oldest first)")),
+            (SortOrder.FILENAME_ASC, self.tr("Filename (A\u2192Z)")),
+            (SortOrder.FILENAME_DESC, self.tr("Filename (Z\u2192A)")),
+        ]
+        self._sort_entries: list[SortOrder] = [order for order, _ in _sort_options]
+        for _, label in _sort_options:
+            self._sort_combo.addItem(label)
+        toolbar_layout.addWidget(self._sort_combo)
+        self.main_layout.addWidget(toolbar)
+
+        self._current_sort: SortOrder = SortOrder.RELEVANCE_DESC
+        self._sort_combo.currentIndexChanged.connect(self._on_sort_changed)
+
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.main_layout.addWidget(self.scroll_area)
@@ -316,21 +345,21 @@ class ThumbnailGrid(QtWidgets.QWidget):
                 dialog.navigate_to_browse.connect(self.navigate_to_browse.emit)
                 dialog.exec()
 
-    def clear(self):
-        self._hint_label.hide()
-        self._all_results = []
-        self._loaded_count = 0
-
-        # Clear thumbnails list before deleting widgets to avoid stale references
+    def _clear_display(self) -> None:
+        """Remove all displayed thumbnail widgets and reset pagination counter."""
         self.thumbnails = []
-
-        # Remove all widgets from the grid layout properly
         while self.grid_layout.count():
             item = self.grid_layout.takeAt(0)
             if item:
                 widget = item.widget()
                 if widget:
                     widget.deleteLater()
+        self._loaded_count = 0
+
+    def clear(self) -> None:
+        self._hint_label.hide()
+        self._all_results = []
+        self._clear_display()
 
     def add_thumbnail(
         self,
@@ -349,10 +378,57 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.grid_layout.addWidget(thumb, row, col)
         self.thumbnails.append(thumb)
 
-    def set_results(self, results: Iterable[SearchResult]) -> None:
-        self.clear()
-        self._all_results = list(results)
+    def set_relevance_available(self, available: bool) -> None:
+        """Enable or disable the two relevance sort items in the combo box.
+
+        If relevance was the active sort and it becomes unavailable, switches to
+        TAKEN_AT_DESC without triggering a re-render (caller will call set_results).
+        """
+        relevance_orders = {SortOrder.RELEVANCE_DESC, SortOrder.RELEVANCE_ASC}
+        model: QStandardItemModel = cast(QStandardItemModel, self._sort_combo.model())
+        for i, order in enumerate(self._sort_entries):
+            if order in relevance_orders:
+                std_item = model.item(i)
+                if std_item is None:
+                    continue
+                item_flags = std_item.flags()
+                if available:
+                    std_item.setFlags(item_flags | QtCore.Qt.ItemFlag.ItemIsEnabled)
+                else:
+                    std_item.setFlags(item_flags & ~QtCore.Qt.ItemFlag.ItemIsEnabled)
+        if not available and self._current_sort in relevance_orders:
+            self._sort_combo.blockSignals(True)
+            self._sort_combo.setCurrentIndex(
+                self._sort_entries.index(SortOrder.TAKEN_AT_DESC)
+            )
+            self._sort_combo.blockSignals(False)
+            self._current_sort = SortOrder.TAKEN_AT_DESC
+
+    def set_sort_locked(self, order: SortOrder) -> None:
+        """Lock the sort combo to *order* and disable it entirely (e.g. for BrowsePage)."""  # noqa: E501
+        self._sort_combo.blockSignals(True)
+        if order in self._sort_entries:
+            self._sort_combo.setCurrentIndex(self._sort_entries.index(order))
+            self._current_sort = order
+        self._sort_combo.setEnabled(False)
+        self._sort_combo.blockSignals(False)
+
+    def _on_sort_changed(self, index: int) -> None:
+        """Slot for combo box index changes."""
+        if 0 <= index < len(self._sort_entries):
+            self._current_sort = self._sort_entries[index]
+            self._apply_sort()
+
+    def _apply_sort(self) -> None:
+        """Sort _all_results by _current_sort, reset display, and reload first page."""
+        self._all_results = sort_results(self._all_results, self._current_sort)
+        self._clear_display()
         self._load_next_page()
+
+    def set_results(self, results: Iterable[SearchResult]) -> None:
+        self._hint_label.hide()
+        self._all_results = list(results)
+        self._apply_sort()
         self.results_changed.emit(len(self._all_results))
 
     def _load_next_page(self):
