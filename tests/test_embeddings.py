@@ -153,3 +153,66 @@ def test_extract_face_crop_clamps_to_image_bounds(tmp_path):
     assert crop.size[0] <= 50
     assert crop.size[1] <= 50
     assert crop.mode == "RGB"
+
+
+# ===========================================================================
+# _prescale_for_detection
+# ===========================================================================
+
+
+def test_prescale_downscales_large_image():
+    """A 4608×3456 image is scaled so its longest side equals max_dim=1920."""
+    img = np.zeros((3456, 4608, 3), dtype=np.uint8)
+    scaled, scale = FaceEmbedder._prescale_for_detection(img, max_dim=1920)
+
+    assert max(scaled.shape[:2]) == 1920
+    assert scale == pytest.approx(1920 / 4608, rel=1e-6)
+    # Aspect ratio preserved
+    assert scaled.shape[1] / scaled.shape[0] == pytest.approx(4608 / 3456, rel=0.01)
+
+
+def test_prescale_no_op_for_small_image():
+    """An image smaller than max_dim is returned unchanged (same object)."""
+    img = np.zeros((480, 640, 3), dtype=np.uint8)
+    scaled, scale = FaceEmbedder._prescale_for_detection(img, max_dim=1920)
+
+    assert scaled is img
+    assert scale == pytest.approx(1.0, abs=1e-10)
+
+
+def test_prescale_no_op_at_threshold():
+    """An image with longest side exactly equal to max_dim is not rescaled."""
+    img = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    scaled, scale = FaceEmbedder._prescale_for_detection(img, max_dim=1920)
+
+    assert scaled is img
+    assert scale == pytest.approx(1.0, abs=1e-10)
+
+
+def test_process_image_scales_bbox_to_original_coords(tmp_path, face_embedder):
+    """Bboxes returned by process_image are in original-image coordinates.
+
+    When the image exceeds _MAX_DETECTION_DIM the detector sees a prescaled
+    copy.  The bbox it returns must be mapped back to the original-image space
+    by dividing by the scale factor.
+    """
+    # Image wider than _MAX_DETECTION_DIM so prescaling kicks in
+    max_dim = FaceEmbedder._MAX_DETECTION_DIM
+    img_w, img_h = max_dim + 480, max_dim - 100  # e.g. 2400 × 1820
+    img_path = tmp_path / "large.jpg"
+    Image.new("RGB", (img_w, img_h)).save(img_path)
+
+    # Expected scale that _prescale_for_detection will apply
+    expected_scale = max_dim / img_w
+
+    # Bbox in prescaled coordinates that the mock detector will "return"
+    scaled_bbox = np.array([100.0, 200.0, 300.0, 400.0])
+    mock_face = _make_mock_face()
+    mock_face.bbox = scaled_bbox
+
+    with patch.object(face_embedder.app, "get", return_value=[mock_face]):
+        result = face_embedder.process_image(img_path)
+
+    assert len(result) == 1
+    expected_bbox = (scaled_bbox / expected_scale).astype(int).tolist()
+    assert result[0]["bbox"] == expected_bbox

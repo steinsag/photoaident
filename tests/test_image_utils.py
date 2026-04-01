@@ -8,6 +8,9 @@ from PIL import Image as PILImage
 
 from photoaident.utils.image_utils import generate_thumbnail, open_image
 
+# EXIF tag number for Orientation
+_EXIF_ORIENTATION_TAG = 274
+
 # ===========================================================================
 # Helpers
 # ===========================================================================
@@ -113,6 +116,29 @@ def test_open_image_exif_transpose_returns_same_object_does_not_close_original(
 
     assert result is mock_original
     mock_original.close.assert_not_called()
+
+
+def test_open_image_applies_exif_rotation(tmp_path):
+    """open_image applies EXIF orientation so the returned image has visual dimensions.
+
+    A 80×160 JPEG saved with orientation 6 (90° CW) should be returned as
+    160×80 after exif_transpose corrects it.  This catches regressions if
+    open_image() is modified to skip exif_transpose().
+    """
+    src = tmp_path / "rotated.jpg"
+
+    # Create a portrait image (80 wide, 160 tall) and embed orientation=6 (90° CW).
+    # Viewers and PIL would display it as landscape (160 wide, 80 tall).
+    img = PILImage.new("RGB", (80, 160), color=(255, 0, 0))
+    exif = img.getexif()
+    exif[_EXIF_ORIENTATION_TAG] = 6
+    img.save(src, "JPEG", exif=exif.tobytes())
+
+    with open_image(src) as result:
+        assert result.size == (
+            160,
+            80,
+        ), f"Expected (160, 80) after EXIF transpose, got {result.size}"
 
 
 # ===========================================================================
