@@ -3,7 +3,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
+from photoaident.core.search import SearchResult
 from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import Face, FaceState, Image as DBImage
 from photoaident.ui.widgets.map_widget import MapWidget
@@ -83,17 +86,21 @@ class _FaceOverlayLabel(QtWidgets.QLabel):
 
 
 class ImageDetailDialog(QtWidgets.QDialog):
-    """
-    A modal dialog that displays a full-size image with its metadata and
-    face bounding boxes.
+    """A modal dialog that displays a full-size image with metadata and face boxes.
+
+    Accepts a list of search results and a starting index so the user can
+    navigate between images with Previous / Next buttons or arrow keys.
     """
 
     navigate_to_labelling = QtCore.Signal(int)  # image_id
     navigate_to_browse = QtCore.Signal(str)  # file_path
 
+    _RESIZE_DEBOUNCE_MS = 50
+
     def __init__(
         self,
-        image: DBImage,
+        results: list[SearchResult],
+        current_index: int,
         session_factory: "sessionmaker",
         vector_store: "VectorStore",
         paths: "AppPaths",
@@ -102,23 +109,56 @@ class ImageDetailDialog(QtWidgets.QDialog):
         super().__init__(parent)
         self.setWindowTitle(self.tr("Image Details"))
         self.setMinimumSize(800, 600)
-        self.image_data = image
+
+        self._results = results
+        self._current_index = current_index
         self._session_factory = session_factory
         self._vector_store = vector_store
         self._paths = paths
+
+        self._image_data: DBImage | None = None
+        self._original_pixmap: QtGui.QPixmap | None = None
         self._resolved_names: dict[int, tuple[str, float] | None] = {}
 
-        self._setup_ui()
-        restore_widget_geometry(self, self._paths.window_state_file)
-        self._load_image()
+        # Created here (before the dialog's native window exists) so that
+        # QQuickWidget's OpenGL initialisation is included in the initial
+        # window creation. If it were created later — while the dialog is
+        # already visible — Qt would have to recreate the native window
+        # handle, causing the dialog to briefly disappear.
+        self._map_widget = MapWidget(self._paths, show_overlay=False)
+        self._map_widget.setFixedHeight(200)
+        self._map_widget.hide()
 
-    def _format_file_size(self, size_bytes: int) -> str:
-        """Format file size in bytes to a human-readable string."""
-        if size_bytes < 1024:
-            return f"{size_bytes} B"
-        if size_bytes < 1024 * 1024:
-            return f"{size_bytes / 1024:.1f} KB"
-        return f"{size_bytes / (1024 * 1024):.1f} MB"
+        self._resize_timer = QtCore.QTimer(self)
+        self._resize_timer.setSingleShot(True)
+        self._resize_timer.setInterval(self._RESIZE_DEBOUNCE_MS)
+        self._resize_timer.timeout.connect(self._update_image_display)
+
+        self._setup_ui()
+        self._setup_shortcuts()
+        restore_widget_geometry(self, self._paths.window_state_file)
+        self._show_current_image()
+
+    # ------------------------------------------------------------------
+    # DB loading
+    # ------------------------------------------------------------------
+
+    def _load_image_data(self, image_id: int) -> DBImage | None:
+        """Load a fully-populated Image from the DB (faces, persons, metadata)."""
+        with self._session_factory() as session:
+            stmt = (
+                select(DBImage)
+                .where(DBImage.id == image_id)
+                .options(
+                    joinedload(DBImage.faces).joinedload(Face.person),
+                    joinedload(DBImage.metadata_rel),
+                )
+            )
+            return session.execute(stmt).unique().scalar_one_or_none()
+
+    # ------------------------------------------------------------------
+    # UI setup (called once)
+    # ------------------------------------------------------------------
 
     def _setup_ui(self) -> None:
         main_layout = QtWidgets.QHBoxLayout(self)
@@ -126,36 +166,67 @@ class ImageDetailDialog(QtWidgets.QDialog):
         main_layout.addWidget(self._create_image_area(), 1)
 
     def _create_metadata_panel(self) -> QtWidgets.QFrame:
-        """Build and return the left metadata panel."""
+        """Build and return the left metadata panel with a dynamic content area."""
         panel = QtWidgets.QFrame()
         panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         panel.setFixedWidth(250)
+
         layout = QtWidgets.QVBoxLayout(panel)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         layout.addWidget(QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>"))
-        self._add_image_metadata_rows(layout)
+
+        # Dynamic container — cleared and rebuilt on each image switch
+        self._metadata_container = QtWidgets.QWidget()
+        self._metadata_layout = QtWidgets.QVBoxLayout(self._metadata_container)
+        self._metadata_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self._metadata_container)
+        layout.addWidget(self._map_widget)
         layout.addStretch()
         self._add_action_buttons(layout)
 
         return panel
 
+    def _rebuild_metadata_content(self) -> None:
+        """Clear and re-populate the dynamic metadata rows and optional map."""
+        self._map_widget.hide()
+        self._clear_layout(self._metadata_layout)
+
+        if self._image_data is None:
+            return
+
+        self._add_image_metadata_rows(self._metadata_layout)
+
+    @staticmethod
+    def _clear_layout(layout: QtWidgets.QLayout) -> None:
+        """Recursively remove and delete all items from a layout."""
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget() if item else None
+            child_layout = item.layout() if item else None
+            if widget is not None:
+                widget.deleteLater()
+            elif child_layout is not None:
+                ImageDetailDialog._clear_layout(child_layout)
+
     def _add_image_metadata_rows(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Populate layout with metadata rows and optional map widget."""
-        self._add_meta_row(layout, self.tr("ID"), self.image_data.id)
+        assert self._image_data is not None
+
+        self._add_meta_row(layout, self.tr("ID"), self._image_data.id)
         self._add_clickable_meta_row(
-            layout, self.tr("File Path"), self.image_data.file_path
+            layout, self.tr("File Path"), self._image_data.file_path
         )
         self._add_meta_row(
             layout,
             self.tr("File Size"),
-            self._format_file_size(self.image_data.file_size),
+            self._format_file_size(self._image_data.file_size),
         )
 
-        if not self.image_data.metadata_rel:
+        if not self._image_data.metadata_rel:
             return
 
-        meta = self.image_data.metadata_rel
+        meta = self._image_data.metadata_rel
         if meta.width and meta.height:
             self._add_meta_row(
                 layout, self.tr("Dimensions"), f"{meta.width} x {meta.height}"
@@ -170,10 +241,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
             camera = f"{meta.camera_make or ''} {meta.camera_model or ''}".strip()
             self._add_meta_row(layout, self.tr("Camera"), camera)
         if meta.gps_lat is not None and meta.gps_lon is not None:
-            map_widget = self._create_map_widget(
-                float(meta.gps_lat), float(meta.gps_lon)
-            )
-            layout.addWidget(map_widget)
+            lat, lon = float(meta.gps_lat), float(meta.gps_lon)
+            self._map_widget.set_center(lat, lon, zoom=14)
+            self._map_widget.set_marker(lat, lon)
+            self._map_widget.show()
 
     def _add_meta_row(
         self,
@@ -184,7 +255,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         """Add a two-column label/value row to *layout*. No-ops when value is None."""
         if value_text is None:
             return
-        row_layout = QtWidgets.QHBoxLayout()
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
         label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
         label.setFixedWidth(80)
         value = QtWidgets.QLabel(str(value_text))
@@ -194,7 +267,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         )
         row_layout.addWidget(label)
         row_layout.addWidget(value)
-        layout.addLayout(row_layout)
+        layout.addWidget(row)
 
     def _add_clickable_meta_row(
         self,
@@ -203,7 +276,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         value_text: str,
     ) -> None:
         """Add a two-column label/link row; clicking emits navigate_to_browse."""
-        row_layout = QtWidgets.QHBoxLayout()
+        row = QtWidgets.QWidget()
+        row_layout = QtWidgets.QHBoxLayout(row)
+        row_layout.setContentsMargins(0, 0, 0, 0)
         label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
         label.setFixedWidth(80)
         escaped = html.escape(value_text)
@@ -219,15 +294,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         value.linkActivated.connect(lambda _: self._on_browse_photo_folder_clicked())
         row_layout.addWidget(label)
         row_layout.addWidget(value)
-        layout.addLayout(row_layout)
-
-    def _create_map_widget(self, lat: float, lon: float) -> MapWidget:
-        """Create a MapWidget centred on the given GPS coordinates."""
-        map_widget = MapWidget(self._paths, show_overlay=False)
-        map_widget.setFixedHeight(200)
-        map_widget.set_center(lat, lon, zoom=14)
-        map_widget.set_marker(lat, lon)
-        return map_widget
+        layout.addWidget(row)
 
     def _add_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Append action buttons to the layout."""
@@ -236,16 +303,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
         browse_btn.clicked.connect(self._on_browse_photo_folder_clicked)
         layout.addWidget(browse_btn)
 
-        has_unidentified = any(
-            f.state == FaceState.UNIDENTIFIED and f.deleted_at is None
-            for f in self.image_data.faces
-        )
-
-        label_btn = QtWidgets.QPushButton(self.tr("Label Faces"))
-        label_btn.setAutoDefault(False)
-        label_btn.setEnabled(has_unidentified)
-        label_btn.clicked.connect(self._on_label_faces_clicked)
-        layout.addWidget(label_btn)
+        self._label_btn = QtWidgets.QPushButton(self.tr("Label Faces"))
+        self._label_btn.setAutoDefault(False)
+        self._label_btn.clicked.connect(self._on_label_faces_clicked)
+        layout.addWidget(self._label_btn)
 
         show_btn = QtWidgets.QPushButton(self.tr("Show in File Manager"))
         show_btn.setAutoDefault(False)
@@ -257,8 +318,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         close_button.clicked.connect(self.accept)
         layout.addWidget(close_button)
 
-    def _create_image_area(self) -> QtWidgets.QScrollArea:
-        """Build and return the right-panel scroll area containing the image label."""
+    def _create_image_area(self) -> QtWidgets.QWidget:
+        """Build the right panel: scroll area for the image + navigation buttons."""
+        container = QtWidgets.QWidget()
+        container_layout = QtWidgets.QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+
         self.scroll_area = QtWidgets.QScrollArea()
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
@@ -266,8 +331,110 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.image_label = _FaceOverlayLabel()
         self.image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.scroll_area.setWidget(self.image_label)
+        container_layout.addWidget(self.scroll_area, 1)
 
-        return self.scroll_area
+        # Navigation buttons
+        nav_layout = QtWidgets.QHBoxLayout()
+        nav_layout.addStretch()
+
+        self._prev_btn = QtWidgets.QPushButton(self.tr("Previous"))
+        self._prev_btn.setAutoDefault(False)
+        self._prev_btn.clicked.connect(self._navigate_previous)
+        nav_layout.addWidget(self._prev_btn)
+
+        self._next_btn = QtWidgets.QPushButton(self.tr("Next"))
+        self._next_btn.setAutoDefault(False)
+        self._next_btn.clicked.connect(self._navigate_next)
+        nav_layout.addWidget(self._next_btn)
+
+        nav_layout.addStretch()
+        container_layout.addLayout(nav_layout)
+
+        return container
+
+    # ------------------------------------------------------------------
+    # Image switching (core of the refactoring)
+    # ------------------------------------------------------------------
+
+    def _show_current_image(self) -> None:
+        """Load and display the image at _current_index."""
+        result = self._results[self._current_index]
+        self._image_data = self._load_image_data(result.image_id)
+        self._resolved_names.clear()
+        self._update_navigation_state()
+
+        if self._image_data is None:
+            self.image_label.setText(
+                self.tr("Image not found in database (ID {id})").format(
+                    id=result.image_id
+                )
+            )
+            self._rebuild_metadata_content()
+            return
+
+        self._rebuild_metadata_content()
+        self._update_label_button()
+        self._load_image()
+
+    def _update_navigation_state(self) -> None:
+        """Enable/disable Previous and Next buttons based on position in list."""
+        self._prev_btn.setEnabled(self._current_index > 0)
+        self._next_btn.setEnabled(self._current_index < len(self._results) - 1)
+
+    def _update_label_button(self) -> None:
+        """Enable the Label Faces button only when there are unidentified faces."""
+        if self._image_data is None:
+            self._label_btn.setEnabled(False)
+            return
+        has_unidentified = any(
+            f.state == FaceState.UNIDENTIFIED and f.deleted_at is None
+            for f in self._image_data.faces
+        )
+        self._label_btn.setEnabled(has_unidentified)
+
+    def _setup_shortcuts(self) -> None:
+        """Register Left/Right arrow key shortcuts for image navigation."""
+        self._shortcut_prev = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Left), self
+        )
+        self._shortcut_prev.activated.connect(self._navigate_previous)
+        self._shortcut_next = QtGui.QShortcut(
+            QtGui.QKeySequence(QtCore.Qt.Key.Key_Right), self
+        )
+        self._shortcut_next.activated.connect(self._navigate_next)
+
+    # ------------------------------------------------------------------
+    # Navigation
+    # ------------------------------------------------------------------
+
+    def _navigate_previous(self) -> None:
+        """Show the previous image in the results list."""
+        if self._current_index > 0:
+            self._current_index -= 1
+            self._show_current_image()
+
+    def _navigate_next(self) -> None:
+        """Show the next image in the results list."""
+        if self._current_index < len(self._results) - 1:
+            self._current_index += 1
+            self._show_current_image()
+
+    # ------------------------------------------------------------------
+    # File size formatting
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _format_file_size(size_bytes: int) -> str:
+        """Format file size in bytes to a human-readable string."""
+        if size_bytes < 1024:
+            return f"{size_bytes} B"
+        if size_bytes < 1024 * 1024:
+            return f"{size_bytes / 1024:.1f} KB"
+        return f"{size_bytes / (1024 * 1024):.1f} MB"
+
+    # ------------------------------------------------------------------
+    # Face display info
+    # ------------------------------------------------------------------
 
     def _get_face_display_info(self, face: Face) -> tuple[QtCore.Qt.GlobalColor, str]:
         """Return (color, tooltip) for a single face based on its state."""
@@ -291,15 +458,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
     def _build_face_display_info(
         self,
     ) -> list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]]:
-        """Return (rect, color, tooltip) for every non-deleted face.
+        """Return (rect, color, tooltip) for every non-deleted face."""
+        if self._image_data is None:
+            return []
 
-        Color is green for identified/anonymous/matched-unidentified faces and
-        red only for truly unknown (unidentified with no FAISS match) faces.
-        """
-        # Pre-resolve unidentified faces in one batch to avoid per-face (N+1) queries
+        # Pre-resolve unidentified faces in one batch
         unidentified_ids = [
             f.id
-            for f in self.image_data.faces
+            for f in self._image_data.faces
             if f.state == FaceState.UNIDENTIFIED
             and f.deleted_at is None
             and f.id is not None
@@ -313,7 +479,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             self._resolved_names.update(resolved)
 
         result: list[tuple[QtCore.QRectF, QtCore.Qt.GlobalColor, str]] = []
-        for face in self.image_data.faces:
+        for face in self._image_data.faces:
             if face.deleted_at is not None:
                 continue
 
@@ -323,17 +489,23 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         return result
 
-    def _load_image(self):
-        file_path = Path(self.image_data.file_path)
+    # ------------------------------------------------------------------
+    # Image loading and display
+    # ------------------------------------------------------------------
+
+    def _load_image(self) -> None:
+        """Load the current image file, draw face boxes, and display it."""
+        if self._image_data is None:
+            return
+
+        file_path = Path(self._image_data.file_path)
         if not file_path.exists():
             self.image_label.setText(
                 self.tr("Image file not found: {path}").format(path=file_path)
             )
+            self._original_pixmap = None
             return
 
-        # Load with EXIF orientation applied. Bounding boxes stored in the DB
-        # are also in this EXIF-corrected coordinate space (process_image uses
-        # open_image which calls ImageOps.exif_transpose before detection).
         reader = QtGui.QImageReader(str(file_path))
         reader.setAutoTransform(True)
         qimage = reader.read()
@@ -344,11 +516,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
                     error=reader.errorString()
                 )
             )
+            self._original_pixmap = None
             return
 
         pixmap = QtGui.QPixmap.fromImage(qimage)
 
-        # Build display info first so colors reflect FAISS match results
         face_display = self._build_face_display_info()
 
         if face_display:
@@ -361,7 +533,6 @@ class ImageDetailDialog(QtWidgets.QDialog):
                 painter.drawRect(rect.toRect())
             painter.end()
 
-        # Bboxes and pixmap are both in EXIF-corrected space — no post-transform needed.
         tooltip_regions = [(rect, tooltip) for rect, _, tooltip in face_display]
 
         self.image_label.set_face_regions(
@@ -371,11 +542,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._original_pixmap = pixmap
         self._update_image_display()
 
-    def _update_image_display(self):
-        if not hasattr(self, "_original_pixmap"):
+    def _update_image_display(self) -> None:
+        """Scale the original pixmap to fit the scroll area viewport."""
+        if self._original_pixmap is None:
             return
 
-        # Scaling logic to fit nicely in the dialog but keep it readable
         available_size = self.scroll_area.viewport().size()
         scaled_pixmap = self._original_pixmap.scaled(
             available_size,
@@ -384,23 +555,34 @@ class ImageDetailDialog(QtWidgets.QDialog):
         )
         self.image_label.setPixmap(scaled_pixmap)
 
+    # ------------------------------------------------------------------
+    # Button handlers
+    # ------------------------------------------------------------------
+
     def _on_browse_photo_folder_clicked(self) -> None:
-        self.accept()
-        self.navigate_to_browse.emit(str(self.image_data.file_path))
+        if self._image_data is not None:
+            self.accept()
+            self.navigate_to_browse.emit(str(self._image_data.file_path))
 
     def _on_label_faces_clicked(self) -> None:
-        self.accept()
-        self.navigate_to_labelling.emit(self.image_data.id)
+        if self._image_data is not None:
+            self.accept()
+            self.navigate_to_labelling.emit(self._image_data.id)
 
     def _on_show_in_file_manager_clicked(self) -> None:
-        reveal_in_file_manager(self.image_data.file_path)
+        if self._image_data is not None:
+            reveal_in_file_manager(self._image_data.file_path)
+
+    # ------------------------------------------------------------------
+    # Geometry persistence and resize
+    # ------------------------------------------------------------------
 
     def done(self, result: int) -> None:
         """Save geometry before closing."""
+        self._map_widget.cleanup()
         save_widget_geometry(self, self._paths.window_state_file)
         super().done(result)
 
-    def resizeEvent(self, event: QtGui.QResizeEvent):
+    def resizeEvent(self, event: QtGui.QResizeEvent) -> None:
         super().resizeEvent(event)
-        # Re-scale image when dialog is resized
-        QtCore.QTimer.singleShot(10, self._update_image_display)
+        self._resize_timer.start()

@@ -226,3 +226,14 @@ class MapWidget(QtWidgets.QWidget):
         root = self._root_object()
         if root:
             root.setProperty("pendingZoomDelta", -1)
+
+    def cleanup(self) -> None:
+        """Unload QML to release the render loop and any event grabs.
+
+        Must be called before the widget is destroyed (e.g. when its parent
+        dialog closes), otherwise QQuickWidget can retain a mouse/keyboard grab
+        that prevents the main window from receiving input events.
+        """
+        self._ready = False
+        self._pending_ops.clear()
+        self._quick_widget.setSource(QtCore.QUrl())

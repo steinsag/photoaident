@@ -715,6 +715,15 @@ def test_on_image_selected_opens_dialog(qtbot, tmp_app_paths, mock_vector_store)
     grid = ThumbnailGrid(session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
+    # Populate _all_results so _on_image_selected can find the image
+    grid._all_results = [
+        SearchResult(
+            image_id=img_id,
+            file_path=str(tmp_app_paths.thumbs_dir / "img.jpg"),
+            thumb_path=tmp_app_paths.thumbs_dir / "thumb.jpg",
+        )
+    ]
+
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
         MockDlg.return_value.exec.return_value = None
         grid._on_image_selected(img_id)
@@ -767,6 +776,15 @@ def test_navigate_to_labelling_signal_forwarded(
 
     grid = ThumbnailGrid(session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
+
+    # Populate _all_results so _on_image_selected can find the image
+    grid._all_results = [
+        SearchResult(
+            image_id=img_id,
+            file_path=str(tmp_app_paths.thumbs_dir / "nav.jpg"),
+            thumb_path=tmp_app_paths.thumbs_dir / "thumb.jpg",
+        )
+    ]
 
     received: list[int] = []
     grid.navigate_to_labelling.connect(received.append)
