@@ -56,7 +56,8 @@ class MapLocationDialog(QtWidgets.QDialog):
         layout.addWidget(button_box)
 
     def done(self, result: int) -> None:
-        """Save geometry before closing."""
+        """Clean up QML and save geometry before closing."""
+        self._map_widget.cleanup()
         save_widget_geometry(self, self._paths.window_state_file)
         super().done(result)
 

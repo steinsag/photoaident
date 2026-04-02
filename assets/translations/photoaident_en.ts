@@ -310,6 +310,18 @@ Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translat
         <translation>Close</translation>
     </message>
     <message>
+        <source>Previous</source>
+        <translation>Previous</translation>
+    </message>
+    <message>
+        <source>Next</source>
+        <translation>Next</translation>
+    </message>
+    <message>
+        <source>Image not found in database (ID {id})</source>
+        <translation>Image not found in database (ID {id})</translation>
+    </message>
+    <message>
         <source>Unknown</source>
         <translation>Unknown</translation>
     </message>

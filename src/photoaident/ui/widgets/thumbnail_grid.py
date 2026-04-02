@@ -7,10 +7,9 @@ import shiboken6
 from PySide6 import QtCore, QtGui, QtWidgets
 from PySide6.QtGui import QStandardItemModel
 from sqlalchemy import func, select
-from sqlalchemy.orm import joinedload
 
 from photoaident.core.search import SearchResult, SortOrder, sort_results
-from photoaident.db.database import Face, FaceState, Image
+from photoaident.db.database import Face, FaceState
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
 from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import generate_thumbnail
@@ -323,27 +322,25 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.image_selected.connect(self._on_image_selected)
 
     def _on_image_selected(self, image_id: int) -> None:
-        with self._session_factory() as session:
-            stmt = (
-                select(Image)
-                .where(Image.id == image_id)
-                .options(
-                    joinedload(Image.faces).joinedload(Face.person),
-                    joinedload(Image.metadata_rel),
-                )
-            )
-            image = session.execute(stmt).unique().scalar_one_or_none()
-            if image:
-                dialog = ImageDetailDialog(
-                    image,
-                    self._session_factory,
-                    self._vector_store,
-                    self._paths,
-                    parent=self,
-                )
-                dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
-                dialog.navigate_to_browse.connect(self.navigate_to_browse.emit)
-                dialog.exec()
+        # Find the index of the clicked image in the current results list
+        index = next(
+            (i for i, r in enumerate(self._all_results) if r.image_id == image_id),
+            None,
+        )
+        if index is None:
+            return
+
+        dialog = ImageDetailDialog(
+            results=self._all_results,
+            current_index=index,
+            session_factory=self._session_factory,
+            vector_store=self._vector_store,
+            paths=self._paths,
+            parent=self,
+        )
+        dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
+        dialog.navigate_to_browse.connect(self.navigate_to_browse.emit)
+        dialog.exec()
 
     def _clear_display(self) -> None:
         """Remove all displayed thumbnail widgets and reset pagination counter."""
