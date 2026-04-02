@@ -130,9 +130,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._original_pixmap: QtGui.QPixmap | None = None
         self._resolved_names: dict[int, tuple[str, float] | None] = {}
 
-        self._zoom_factor: float = (
-            -1.0
-        )  # -1.0 = fit to viewport, 1.0 = 100%, >1 = zoomed in
+        self._zoom_factor: float | None = (
+            None  # None = fit to viewport, 1.0 = 100%, >1 = zoomed in
+        )
         self._min_zoom: float = 0.1
         self._max_zoom: float = 10.0
         self._fit_factor: float = 1.0  # zoom factor that fits image in viewport
@@ -519,7 +519,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         if center is None:
             center = self._get_visible_center()
         old_factor = self._zoom_factor
-        if self._zoom_factor <= 0:
+        if self._zoom_factor is None:
             self._zoom_factor = self._fit_factor * 1.25
         else:
             self._zoom_factor = min(self._max_zoom, self._zoom_factor * 1.25)
@@ -532,10 +532,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
         if center is None:
             center = self._get_visible_center()
         old_factor = self._zoom_factor
-        if self._zoom_factor <= 0:
-            self._zoom_factor = -1.0
+        if self._zoom_factor is None:
+            self._zoom_factor = self._min_zoom
         elif self._zoom_factor <= self._fit_factor:
-            self._zoom_factor = -1.0
+            self._zoom_factor = None
         else:
             self._zoom_factor = max(self._min_zoom, self._zoom_factor / 1.25)
         if old_factor != self._zoom_factor:
@@ -550,7 +550,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     def _zoom_to_fit(self) -> None:
         """Reset zoom to fit the image in the viewport."""
-        self._zoom_factor = -1.0
+        self._zoom_factor = None
         self._last_zoom_center = None
         self._update_image_display()
 
@@ -703,7 +703,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         self._original_pixmap = pixmap
         self._original_image_size = pixmap.size()
-        self._zoom_factor = -1.0
+        self._zoom_factor = None
         self._update_image_display()
 
     def _update_image_display(self) -> None:
@@ -722,13 +722,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
         fit_height = viewport_size.height() / original_size.height()
         self._fit_factor = min(fit_width, fit_height)
 
-        if self._zoom_factor < 0:
+        if self._zoom_factor is None:
             display_size = original_size.scaled(
                 viewport_size,
                 QtCore.Qt.AspectRatioMode.KeepAspectRatio,
             )
-        elif self._zoom_factor == 1.0:
-            display_size = original_size
         else:
             display_size = QtCore.QSize(
                 int(original_size.width() * self._zoom_factor),
