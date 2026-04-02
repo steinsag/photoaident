@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
+from sqlalchemy import create_engine
 
 from photoaident.core.search import SearchResult
 from photoaident.db.database import (
@@ -14,6 +15,7 @@ from photoaident.db.database import (
     ImageMetadata,
     Person,
     TakenAtSource,
+    get_session_factory,
 )
 from photoaident.ui.widgets.image_detail_dialog import (
     ImageDetailDialog,
@@ -1554,3 +1556,322 @@ def test_get_visible_center_with_scrolled_image(
         center = dialog._get_visible_center()
         assert center.x() > 0
         assert center.y() > 0
+
+
+def test_constructor_rejects_empty_results():
+    """ImageDetailDialog raises ValueError when results list is empty."""
+    from photoaident.paths import AppPaths
+
+    paths = AppPaths()
+    engine = create_engine(f"sqlite:///{paths.db_path}")
+    session_factory = get_session_factory(engine)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        ImageDetailDialog(
+            results=[],
+            current_index=0,
+            session_factory=session_factory,
+            vector_store=MagicMock(),
+            paths=paths,
+        )
+
+
+def test_constructor_rejects_invalid_current_index():
+    """ImageDetailDialog raises ValueError when current_index is out of range."""
+    from photoaident.paths import AppPaths
+
+    paths = AppPaths()
+    engine = create_engine(f"sqlite:///{paths.db_path}")
+    session_factory = get_session_factory(engine)
+    results = [SearchResult(image_id=1, file_path="/test.jpg", thumb_path=Path("/t"))]
+
+    with pytest.raises(ValueError, match="out of range"):
+        ImageDetailDialog(
+            results=results,
+            current_index=5,
+            session_factory=session_factory,
+            vector_store=MagicMock(),
+            paths=paths,
+        )
+
+
+def test_clear_layout_removes_nested_widgets(
+    qtbot, session_factory, vector_store, tmp_app_paths
+):
+    """_clear_layout recursively removes nested widgets."""
+    dialog = _create_dialog(
+        Image(id=999, file_path="/nonexistent.jpg", file_size=0),
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    nested_widget = QtWidgets.QWidget()
+    nested_layout = QtWidgets.QHBoxLayout(nested_widget)
+    inner_label = QtWidgets.QLabel("test")
+    nested_layout.addWidget(inner_label)
+
+    dialog._clear_layout(nested_layout)
+    assert nested_layout.count() == 0
+
+
+def test_clear_layout_recursive(qtbot, session_factory, vector_store, tmp_app_paths):
+    """_clear_layout recursively removes nested layouts."""
+    dialog = _create_dialog(
+        Image(id=999, file_path="/nonexistent.jpg", file_size=0),
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    outer_layout = QtWidgets.QVBoxLayout()
+    inner_layout = QtWidgets.QHBoxLayout()
+    inner_label = QtWidgets.QLabel("test")
+    inner_layout.addWidget(inner_label)
+    outer_layout.addLayout(inner_layout)
+
+    dialog._clear_layout(outer_layout)
+    assert outer_layout.count() == 0
+
+
+def test_add_meta_row_skips_none_value(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """_add_meta_row does not add a row when value is None."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red")
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    layout = QtWidgets.QVBoxLayout()
+    initial_count = layout.count()
+
+    dialog._add_meta_row(layout, "TestLabel", None)
+    assert layout.count() == initial_count
+
+
+def test_get_visible_center_returns_origin_when_no_pixmap():
+    """_get_visible_center returns (0, 0) when _original_pixmap is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._original_pixmap = None
+    dialog.scroll_area = MagicMock()
+
+    result = dialog._get_visible_center()
+    assert result.x() == 0 and result.y() == 0
+
+
+def test_get_visible_center_returns_origin_when_display_pixmap_null(
+    qtbot, session_factory, vector_store, tmp_app_paths
+):
+    """_get_visible_center returns (0, 0) when display pixmap is null."""
+    db_image = Image(id=1, file_path="/nonexistent.jpg", file_size=0)
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._original_pixmap = QtGui.QPixmap(100, 100)
+
+    with patch.object(
+        dialog.scroll_area,
+        "viewport",
+        return_value=MagicMock(size=MagicMock(return_value=QtCore.QSize(800, 600))),
+    ):
+        with patch.object(dialog.image_label, "pixmap", return_value=QtGui.QPixmap()):
+            result = dialog._get_visible_center()
+            assert result.x() == 0 and result.y() == 0
+
+
+def test_get_visible_center_returns_origin_when_display_size_invalid(
+    qtbot, session_factory, vector_store, tmp_app_paths
+):
+    """_get_visible_center returns (0, 0) when display size is invalid."""
+    db_image = Image(id=1, file_path="/nonexistent.jpg", file_size=0)
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._original_pixmap = QtGui.QPixmap(100, 100)
+
+    mock_display_pixmap = MagicMock()
+    mock_display_pixmap.isNull.return_value = False
+    mock_display_pixmap.size.return_value = QtCore.QSize(0, 0)
+
+    with patch.object(
+        dialog.scroll_area,
+        "viewport",
+        return_value=MagicMock(size=MagicMock(return_value=QtCore.QSize(800, 600))),
+    ):
+        with patch.object(
+            dialog.image_label, "pixmap", return_value=mock_display_pixmap
+        ):
+            result = dialog._get_visible_center()
+            assert result.x() == 0 and result.y() == 0
+
+
+def test_get_image_center_returns_origin_when_no_pixmap():
+    """_get_image_center returns (0, 0) when _original_pixmap is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._original_pixmap = None
+
+    result = dialog._get_image_center()
+    assert result.x() == 0 and result.y() == 0
+
+
+def test_zoom_out_does_nothing_when_already_at_fit(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom out does nothing when already at fit-to-viewport."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = None
+    dialog._min_zoom = 0.5
+    dialog._fit_factor = 0.5
+
+    dialog._zoom_out()
+
+    assert dialog._zoom_factor is None
+
+
+def test_apply_zoom_clamps_to_max(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_apply_zoom clamps to max zoom when factor exceeds max."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._min_zoom = 0.5
+    dialog._max_zoom = 10.0
+
+    dialog._apply_zoom(20.0)
+
+    assert dialog._zoom_factor == 10.0
+
+
+def test_apply_zoom_sets_to_fit_when_below_min(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_apply_zoom sets to fit when factor is below min zoom."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._min_zoom = 0.5
+    dialog._max_zoom = 10.0
+
+    dialog._apply_zoom(0.2)
+
+    assert dialog._zoom_factor is None
+
+
+def test_apply_zoom_sets_clamped_value(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_apply_zoom uses clamped value when factor != clamped but >= min."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._min_zoom = 0.5
+    dialog._max_zoom = 10.0
+
+    dialog._apply_zoom(5.0)
+
+    assert dialog._zoom_factor == 5.0
+
+
+def test_event_filter_wheel_zoom_in(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter handles wheel zoom in (delta > 0)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport = dialog.scroll_area.viewport()
+
+    initial = dialog._zoom_factor
+    wheel_event = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, 120),
+        QtCore.QPoint(0, 120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    dialog.eventFilter(viewport, wheel_event)
+
+    assert dialog._zoom_factor != initial
+
+
+def test_event_filter_wheel_zoom_out(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter handles wheel zoom out (delta < 0)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.5
+
+    viewport = dialog.scroll_area.viewport()
+    wheel_event = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, -120),
+        QtCore.QPoint(0, -120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    dialog.eventFilter(viewport, wheel_event)
+
+    assert dialog._zoom_factor < 1.5
+
+
+def test_build_face_display_info_returns_empty_when_no_image_data():
+    """_build_face_display_info returns [] when _image_data is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._image_data = None
+
+    result = dialog._build_face_display_info()
+    assert result == []
+
+
+def test_load_image_returns_early_when_no_image_data():
+    """_load_image returns early when _image_data is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._image_data = None
+
+    dialog._load_image()
