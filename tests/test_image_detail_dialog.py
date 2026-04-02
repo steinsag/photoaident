@@ -20,12 +20,12 @@ from photoaident.ui.widgets.image_detail_dialog import (
 from photoaident.ui.widgets.map_widget import MapWidget
 
 
-def _make_result(db_image: Image, thumb_path: Path | None = None) -> SearchResult:
+def _make_result(db_image: Image, thumb_path: Path) -> SearchResult:
     """Build a SearchResult from a DB Image object."""
     return SearchResult(
         image_id=db_image.id,
         file_path=db_image.file_path,
-        thumb_path=thumb_path or Path("/tmp/fake_thumb.jpg"),
+        thumb_path=thumb_path,
     )
 
 
@@ -52,7 +52,7 @@ def _create_dialog(
 ) -> ImageDetailDialog:
     """Persist db_image to the test DB and create an ImageDetailDialog for it."""
     if results is None:
-        results = [_make_result(db_image)]
+        results = [_make_result(db_image, paths.thumbs_dir / "fake_thumb.jpg")]
     _persist_image(session_factory, db_image)
     return ImageDetailDialog(
         results=results,
