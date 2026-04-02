@@ -1,4 +1,5 @@
 import html
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -177,17 +178,17 @@ class ImageDetailDialog(QtWidgets.QDialog):
         """Build and return the left metadata panel with a dynamic content area."""
         panel = QtWidgets.QFrame()
         panel.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
-        panel.setFixedWidth(250)
+        panel.setFixedWidth(300)
 
         layout = QtWidgets.QVBoxLayout(panel)
-        layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         layout.addWidget(QtWidgets.QLabel("<b>" + self.tr("Metadata") + "</b>"))
 
-        # Dynamic container — cleared and rebuilt on each image switch
         self._metadata_container = QtWidgets.QWidget()
         self._metadata_layout = QtWidgets.QVBoxLayout(self._metadata_container)
         self._metadata_layout.setContentsMargins(0, 0, 0, 0)
+        self._metadata_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
         layout.addWidget(self._metadata_container)
         layout.addWidget(self._map_widget)
         layout.addStretch()
@@ -223,11 +224,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         self._add_meta_row(layout, self.tr("ID"), self._image_data.id)
         self._add_clickable_meta_row(
-            layout, self.tr("File Path"), self._image_data.file_path
+            layout, self.tr("Path"), self._image_data.file_path
         )
         self._add_meta_row(
             layout,
-            self.tr("File Size"),
+            self.tr("Size"),
             self._format_file_size(self._image_data.file_size),
         )
 
@@ -237,7 +238,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         meta = self._image_data.metadata_rel
         if meta.width and meta.height:
             self._add_meta_row(
-                layout, self.tr("Dimensions"), f"{meta.width} x {meta.height}"
+                layout, self.tr("Resolution"), f"{meta.width} x {meta.height}"
             )
         if meta.taken_at:
             self._add_meta_row(
@@ -290,14 +291,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
         label.setFixedWidth(80)
         escaped = html.escape(value_text)
+        escaped = escaped.replace(os.sep, "/<wbr>")
         value = QtWidgets.QLabel(f'<a href="#">{escaped}</a>')
         value.setWordWrap(True)
-        value.setTextInteractionFlags(
-            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
-            | QtCore.Qt.TextInteractionFlag.TextSelectableByKeyboard
-            | QtCore.Qt.TextInteractionFlag.LinksAccessibleByMouse
-            | QtCore.Qt.TextInteractionFlag.LinksAccessibleByKeyboard
-        )
         value.setOpenExternalLinks(False)
         value.linkActivated.connect(lambda _: self._on_browse_photo_folder_clicked())
         row_layout.addWidget(label)

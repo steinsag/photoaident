@@ -274,20 +274,20 @@ Beispiele: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</transla
         <translation>ID</translation>
     </message>
     <message>
-        <source>File Path</source>
-        <translation>Dateipfad</translation>
+        <source>Path</source>
+        <translation>Pfad</translation>
     </message>
     <message>
-        <source>File Size</source>
-        <translation>Dateigröße</translation>
+        <source>Size</source>
+        <translation>Größe</translation>
     </message>
     <message>
-        <source>Dimensions</source>
-        <translation>Abmessungen</translation>
+        <source>Resolution</source>
+        <translation>Auflösung</translation>
     </message>
     <message>
         <source>Taken At</source>
-        <translation>Aufgenommen am</translation>
+        <translation>Bilddatum</translation>
     </message>
     <message>
         <source>Camera</source>
