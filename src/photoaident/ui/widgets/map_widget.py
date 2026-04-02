@@ -230,10 +230,12 @@ class MapWidget(QtWidgets.QWidget):
     def cleanup(self) -> None:
         """Unload QML to release the render loop and any event grabs.
 
-        Must be called before the widget is destroyed (e.g. when its parent
-        dialog closes), otherwise QQuickWidget can retain a mouse/keyboard grab
-        that prevents the main window from receiving input events.
+        Must be called before the widget is destroyed (e.g. from the parent
+        dialog's done() override), otherwise QQuickWidget can retain a
+        mouse/keyboard grab that prevents the main window from receiving input.
         """
+        if not self._ready:
+            return
         self._ready = False
         self._pending_ops.clear()
         self._quick_widget.setSource(QtCore.QUrl())
