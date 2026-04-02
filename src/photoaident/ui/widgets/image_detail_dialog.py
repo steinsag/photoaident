@@ -134,6 +134,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._resize_timer.setInterval(self._RESIZE_DEBOUNCE_MS)
         self._resize_timer.timeout.connect(self._update_image_display)
 
+        if not results:
+            raise ValueError("results must not be empty")
+        if not (0 <= current_index < len(results)):
+            raise ValueError(
+                f"current_index {current_index} is out of range "
+                f"for results of length {len(results)}"
+            )
+
         self._setup_ui()
         self._setup_shortcuts()
         restore_widget_geometry(self, self._paths.window_state_file)
@@ -356,6 +364,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
     # Image switching (core of the refactoring)
     # ------------------------------------------------------------------
 
+    def _clear_image_label(self) -> None:
+        """Clear any previously displayed pixmap and face overlay regions."""
+        self.image_label.set_face_regions(pixmap_regions=[], pixmap_size=QtCore.QSize())
+        self.image_label.setPixmap(QtGui.QPixmap())
+        self._original_pixmap = None
+
     def _show_current_image(self) -> None:
         """Load and display the image at _current_index."""
         result = self._results[self._current_index]
@@ -364,12 +378,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._update_navigation_state()
 
         if self._image_data is None:
+            self._clear_image_label()
             self.image_label.setText(
                 self.tr("Image not found in database (ID {id})").format(
                     id=result.image_id
                 )
             )
             self._rebuild_metadata_content()
+            self._update_label_button()
             return
 
         self._rebuild_metadata_content()
@@ -500,10 +516,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         file_path = Path(self._image_data.file_path)
         if not file_path.exists():
+            self._clear_image_label()
             self.image_label.setText(
                 self.tr("Image file not found: {path}").format(path=file_path)
             )
-            self._original_pixmap = None
             return
 
         reader = QtGui.QImageReader(str(file_path))
@@ -511,12 +527,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         qimage = reader.read()
 
         if qimage.isNull():
+            self._clear_image_label()
             self.image_label.setText(
                 self.tr("Failed to load image: {error}").format(
                     error=reader.errorString()
                 )
             )
-            self._original_pixmap = None
             return
 
         pixmap = QtGui.QPixmap.fromImage(qimage)
