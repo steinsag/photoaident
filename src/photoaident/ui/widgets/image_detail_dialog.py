@@ -1,4 +1,5 @@
 import html
+import os
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -290,7 +291,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         label = QtWidgets.QLabel(f"<b>{label_text}:</b>")
         label.setFixedWidth(80)
         escaped = html.escape(value_text)
-        escaped = escaped.replace("/", "/<wbr>")
+        escaped = escaped.replace(os.sep, "/<wbr>")
         value = QtWidgets.QLabel(f'<a href="#">{escaped}</a>')
         value.setWordWrap(True)
         value.setOpenExternalLinks(False)
