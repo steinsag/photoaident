@@ -223,11 +223,11 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
         self._add_meta_row(layout, self.tr("ID"), self._image_data.id)
         self._add_clickable_meta_row(
-            layout, self.tr("File Path"), self._image_data.file_path
+            layout, self.tr("Path"), self._image_data.file_path
         )
         self._add_meta_row(
             layout,
-            self.tr("File Size"),
+            self.tr("Size"),
             self._format_file_size(self._image_data.file_size),
         )
 
@@ -237,7 +237,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         meta = self._image_data.metadata_rel
         if meta.width and meta.height:
             self._add_meta_row(
-                layout, self.tr("Dimensions"), f"{meta.width} x {meta.height}"
+                layout, self.tr("Resolution"), f"{meta.width} x {meta.height}"
             )
         if meta.taken_at:
             self._add_meta_row(
