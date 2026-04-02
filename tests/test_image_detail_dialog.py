@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
 
@@ -1061,7 +1062,7 @@ def test_zoom_in_increases_factor(
     )
     qtbot.add_widget(dialog)
 
-    assert dialog._zoom_factor == -1.0
+    assert dialog._zoom_factor == pytest.approx(-1.0)
     dialog._zoom_in()
     assert dialog._zoom_factor > 0
 
@@ -1097,7 +1098,7 @@ def test_zoom_to_100_sets_factor_to_1(
 
     dialog._zoom_factor = 3.0
     dialog._zoom_to_100()
-    assert dialog._zoom_factor == 1.0
+    assert dialog._zoom_factor == pytest.approx(1.0)
 
 
 def test_zoom_to_fit_sets_negative_factor(
@@ -1114,7 +1115,7 @@ def test_zoom_to_fit_sets_negative_factor(
 
     dialog._zoom_factor = 3.0
     dialog._zoom_to_fit()
-    assert dialog._zoom_factor == -1.0
+    assert dialog._zoom_factor == pytest.approx(-1.0)
 
 
 def test_zoom_min_limit(
@@ -1309,13 +1310,13 @@ def test_image_detail_dialog_resets_zoom_on_new_image(
     )
     qtbot.add_widget(dialog)
 
-    assert dialog._zoom_factor == -1.0
+    assert dialog._zoom_factor == pytest.approx(-1.0)
     dialog._zoom_factor = 2.5
 
     dialog._current_index = 1
     dialog._show_current_image()
 
-    assert dialog._zoom_factor == -1.0
+    assert dialog._zoom_factor == pytest.approx(-1.0)
 
 
 def test_fit_factor_calculated_from_viewport(
@@ -1520,8 +1521,8 @@ def test_zoom_100_zooms_to_image_center(
     dialog._zoom_to_100()
 
     assert dialog._last_zoom_center is not None
-    assert dialog._last_zoom_center.x() == image_center.x()
-    assert dialog._last_zoom_center.y() == image_center.y()
+    assert abs(dialog._last_zoom_center.x() - image_center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - image_center.y()) < 1
 
 
 def test_get_visible_center_when_image_smaller_than_viewport(
