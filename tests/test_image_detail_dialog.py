@@ -1233,7 +1233,7 @@ def test_zoom_center_tracks_mouse_position(
 def test_zoom_to_100_clears_zoom_center(
     qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
 ):
-    """Zoom to 100% clears the zoom center."""
+    """Zoom to 100% sets zoom center to the original image center."""
     dialog = _create_dialog(
         sample_image_with_metadata,
         session_factory,
@@ -1245,7 +1245,10 @@ def test_zoom_to_100_clears_zoom_center(
     dialog._last_zoom_center = QtCore.QPointF(100, 100)
     dialog._zoom_to_100()
 
-    assert dialog._last_zoom_center is None
+    assert dialog._last_zoom_center is not None
+    expected = dialog._get_image_center()
+    assert dialog._last_zoom_center.x() == expected.x()
+    assert dialog._last_zoom_center.y() == expected.y()
 
 
 def test_zoom_to_fit_clears_zoom_center(
@@ -1396,3 +1399,173 @@ def test_zoom_in_above_fit_shows_larger_image(
     label_pixmap = dialog.image_label.pixmap()
     assert label_pixmap.width() > 1000
     assert label_pixmap.height() > 800
+
+
+def test_zoom_in_zooms_to_visible_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom In button zooms to center of the currently visible portion of the image."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    initial_scroll_x = viewport_size.width() // 4
+    initial_scroll_y = viewport_size.height() // 4
+    dialog.scroll_area.horizontalScrollBar().setValue(initial_scroll_x)
+    dialog.scroll_area.verticalScrollBar().setValue(initial_scroll_y)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_in()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_out_zooms_to_visible_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom Out button zooms to center of the currently visible portion of the image."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    initial_scroll_x = viewport_size.width() // 4
+    initial_scroll_y = viewport_size.height() // 4
+    dialog.scroll_area.horizontalScrollBar().setValue(initial_scroll_x)
+    dialog.scroll_area.verticalScrollBar().setValue(initial_scroll_y)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_out()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_in_smaller_image_zooms_to_center_of_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom In on an image smaller than viewport zooms to center of the image."""
+    db_image = _make_db_image(tmp_path, 1, "small.jpg", "red", size=(100, 100))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_in()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_out_smaller_image_zooms_to_center_of_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom Out on an image smaller than viewport zooms to center of the image."""
+    db_image = _make_db_image(tmp_path, 1, "small.jpg", "red", size=(100, 100))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_out()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_100_zooms_to_image_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom 100% button zooms to center of the original image."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    dialog.scroll_area.horizontalScrollBar().setValue(viewport_size.width() // 4)
+    dialog.scroll_area.verticalScrollBar().setValue(viewport_size.height() // 4)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    image_center = dialog._get_image_center()
+    dialog._zoom_to_100()
+
+    assert dialog._last_zoom_center is not None
+    assert dialog._last_zoom_center.x() == image_center.x()
+    assert dialog._last_zoom_center.y() == image_center.y()
+
+
+def test_get_visible_center_when_image_smaller_than_viewport(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """When image is smaller than viewport, _get_visible_center returns image center."""
+    db_image = _make_db_image(tmp_path, 1, "tiny.jpg", "blue", size=(50, 50))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+
+    assert abs(center.x() - 25) < 1
+    assert abs(center.y() - 25) < 1
+
+
+def test_get_visible_center_with_scrolled_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """_get_visible_center returns visible center when image is larger than viewport."""
+    db_image = _make_db_image(tmp_path, 1, "large.jpg", "green", size=(1000, 1000))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    display_pixmap = dialog.image_label.pixmap()
+    viewport_size = dialog.scroll_area.viewport().size()
+
+    if display_pixmap.width() > viewport_size.width():
+        scroll_x = dialog.scroll_area.horizontalScrollBar().maximum() // 2
+        scroll_y = dialog.scroll_area.verticalScrollBar().maximum() // 2
+        dialog.scroll_area.horizontalScrollBar().setValue(scroll_x)
+        dialog.scroll_area.verticalScrollBar().setValue(scroll_y)
+
+        center = dialog._get_visible_center()
+
+        assert center.x() > 0
+        assert center.y() > 0
+    else:
+        center = dialog._get_visible_center()
+        assert center.x() > 0
+        assert center.y() > 0

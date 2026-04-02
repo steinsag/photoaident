@@ -474,8 +474,50 @@ class ImageDetailDialog(QtWidgets.QDialog):
     # Zoom
     # ------------------------------------------------------------------
 
+    def _get_visible_center(self) -> QtCore.QPointF:
+        """Calculate the center of the currently visible portion of the image."""
+        if self._original_pixmap is None:
+            return QtCore.QPointF(0, 0)
+
+        viewport_size = self.scroll_area.viewport().size()
+        display_pixmap = self.image_label.pixmap()
+        if display_pixmap is None or display_pixmap.isNull():
+            return QtCore.QPointF(0, 0)
+
+        display_size = display_pixmap.size()
+        if display_size.width() <= 0 or display_size.height() <= 0:
+            return QtCore.QPointF(0, 0)
+
+        offset_x = (viewport_size.width() - display_size.width()) / 2
+        offset_y = (viewport_size.height() - display_size.height()) / 2
+
+        scroll_x = self.scroll_area.horizontalScrollBar().value()
+        scroll_y = self.scroll_area.verticalScrollBar().value()
+
+        image_x = scroll_x - offset_x
+        image_y = scroll_y - offset_y
+
+        if display_size.width() <= viewport_size.width():
+            image_x = (display_size.width() - viewport_size.width()) / 2
+        if display_size.height() <= viewport_size.height():
+            image_y = (display_size.height() - viewport_size.height()) / 2
+
+        visible_center_x = image_x + viewport_size.width() / 2
+        visible_center_y = image_y + viewport_size.height() / 2
+
+        return QtCore.QPointF(visible_center_x, visible_center_y)
+
+    def _get_image_center(self) -> QtCore.QPointF:
+        """Calculate the center of the original image."""
+        if self._original_pixmap is None:
+            return QtCore.QPointF(0, 0)
+        size = self._original_pixmap.size()
+        return QtCore.QPointF(size.width() / 2, size.height() / 2)
+
     def _zoom_in(self, center: QtCore.QPointF | None = None) -> None:
         """Increase zoom factor, clamped to max zoom."""
+        if center is None:
+            center = self._get_visible_center()
         old_factor = self._zoom_factor
         if self._zoom_factor <= 0:
             self._zoom_factor = self._fit_factor * 1.25
@@ -487,6 +529,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     def _zoom_out(self, center: QtCore.QPointF | None = None) -> None:
         """Decrease zoom factor, clamped to min zoom."""
+        if center is None:
+            center = self._get_visible_center()
         old_factor = self._zoom_factor
         if self._zoom_factor <= 0:
             self._zoom_factor = -1.0
@@ -501,7 +545,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
     def _zoom_to_100(self) -> None:
         """Reset zoom to 100% (original image size)."""
         self._zoom_factor = 1.0
-        self._last_zoom_center = None
+        self._last_zoom_center = self._get_image_center()
         self._update_image_display()
 
     def _zoom_to_fit(self) -> None:
