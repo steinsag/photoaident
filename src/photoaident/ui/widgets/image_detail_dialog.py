@@ -106,6 +106,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
         paths: "AppPaths",
         parent=None,
     ):
+        if not results:
+            raise ValueError("results must not be empty")
+        if not (0 <= current_index < len(results)):
+            raise ValueError(
+                f"current_index {current_index} is out of range "
+                f"for results of length {len(results)}"
+            )
+
         super().__init__(parent)
         self.setWindowTitle(self.tr("Image Details"))
         self.setMinimumSize(800, 600)
@@ -133,14 +141,6 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._resize_timer.setSingleShot(True)
         self._resize_timer.setInterval(self._RESIZE_DEBOUNCE_MS)
         self._resize_timer.timeout.connect(self._update_image_display)
-
-        if not results:
-            raise ValueError("results must not be empty")
-        if not (0 <= current_index < len(results)):
-            raise ValueError(
-                f"current_index {current_index} is out of range "
-                f"for results of length {len(results)}"
-            )
 
         self._setup_ui()
         self._setup_shortcuts()
