@@ -318,6 +318,26 @@ Examples: {YYYY}-{MM}-{DD}  ·  {DD}.{M}.{YYYY}  ·  PXL{YYYY}{MM}{DD}</translat
         <translation>Next</translation>
     </message>
     <message>
+        <source>Zoom Out</source>
+        <translation>Zoom Out</translation>
+    </message>
+    <message>
+        <source>Zoom In</source>
+        <translation>Zoom In</translation>
+    </message>
+    <message>
+        <source>Zoom 100%</source>
+        <translation>Zoom 100%</translation>
+    </message>
+    <message>
+        <source>Reset Zoom</source>
+        <translation>Reset Zoom</translation>
+    </message>
+    <message>
+        <source>Zoom to Fit</source>
+        <translation>Zoom to Fit</translation>
+    </message>
+    <message>
         <source>Image not found in database (ID {id})</source>
         <translation>Image not found in database (ID {id})</translation>
     </message>

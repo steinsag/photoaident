@@ -1024,3 +1024,375 @@ def test_arrow_keys_navigate(
 
     dialog._shortcut_prev.activated.emit()
     assert dialog._current_index == 1
+
+
+# ===========================================================================
+# Zoom functionality tests
+# ===========================================================================
+
+
+def test_zoom_buttons_present(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom buttons are present in the dialog."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_in_btn is not None
+    assert dialog._zoom_out_btn is not None
+    assert dialog._zoom_100_btn is not None
+    assert dialog._zoom_fit_btn is not None
+
+
+def test_zoom_in_increases_factor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom In button increases the zoom factor."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_factor == -1.0
+    dialog._zoom_in()
+    assert dialog._zoom_factor > 0
+
+
+def test_zoom_out_decreases_factor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom Out button decreases the zoom factor."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._zoom_out()
+    assert dialog._zoom_factor < 2.0
+
+
+def test_zoom_to_100_sets_factor_to_1(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom 100% button sets zoom factor to 1.0 (original size)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 3.0
+    dialog._zoom_to_100()
+    assert dialog._zoom_factor == 1.0
+
+
+def test_zoom_to_fit_sets_negative_factor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Reset Zoom button sets zoom factor to -1.0 (fit to viewport)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 3.0
+    dialog._zoom_to_fit()
+    assert dialog._zoom_factor == -1.0
+
+
+def test_zoom_min_limit(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom does not go below minimum (0.1) when zoomed in."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._zoom_out()
+    assert dialog._zoom_factor >= dialog._min_zoom
+
+
+def test_zoom_max_limit(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom does not exceed maximum (10.0) when zoomed in."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 9.0
+    dialog._zoom_in()
+    assert dialog._zoom_factor <= dialog._max_zoom
+
+
+def test_wheel_zoom_triggers_zoom(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Mouse wheel event triggers zoom in/out."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport = dialog.scroll_area.viewport()
+    initial_factor = dialog._zoom_factor
+
+    wheel_event_up = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, 120),
+        QtCore.QPoint(0, 120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    dialog.eventFilter(viewport, wheel_event_up)
+
+    assert dialog._zoom_factor != initial_factor
+
+
+def test_wheel_zoom_with_ctrl_modifier_does_not_zoom(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Mouse wheel with Ctrl modifier does not trigger zoom (allows scroll)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    initial_factor = dialog._zoom_factor
+
+    wheel_event = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, 120),
+        QtCore.QPoint(0, 120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.ControlModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    viewport = dialog.scroll_area.viewport()
+    result = dialog.eventFilter(viewport, wheel_event)
+
+    assert result is False
+    assert dialog._zoom_factor == initial_factor
+
+
+def test_zoom_center_tracks_mouse_position(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zooming updates _last_zoom_center to the mouse position."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    center = QtCore.QPointF(150, 200)
+    dialog._zoom_in(center)
+
+    assert dialog._last_zoom_center == center
+
+
+def test_zoom_to_100_clears_zoom_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom to 100% clears the zoom center."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._last_zoom_center = QtCore.QPointF(100, 100)
+    dialog._zoom_to_100()
+
+    assert dialog._last_zoom_center is None
+
+
+def test_zoom_to_fit_clears_zoom_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Reset Zoom clears the zoom center."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._last_zoom_center = QtCore.QPointF(100, 100)
+    dialog._zoom_to_fit()
+
+    assert dialog._last_zoom_center is None
+
+
+def test_zoom_buttons_have_correct_labels(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom buttons have expected translated text."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_in_btn.text() == dialog.tr("Zoom In")
+    assert dialog._zoom_out_btn.text() == dialog.tr("Zoom Out")
+    assert dialog._zoom_100_btn.text() == dialog.tr("Zoom 100%")
+    assert dialog._zoom_fit_btn.text() == dialog.tr("Reset Zoom")
+
+
+def test_image_detail_dialog_resets_zoom_on_new_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Loading a new image resets zoom factor to 1.0."""
+    db_image1 = _make_db_image(tmp_path, 1, "img1.jpg", "red")
+    db_image2 = _make_db_image(tmp_path, 2, "img2.jpg", "blue")
+    results = [
+        SearchResult(image_id=1, file_path=db_image1.file_path, thumb_path=Path("/t1")),
+        SearchResult(image_id=2, file_path=db_image2.file_path, thumb_path=Path("/t2")),
+    ]
+    _persist_image(session_factory, db_image1)
+    _persist_image(session_factory, db_image2)
+
+    dialog = ImageDetailDialog(
+        results=results,
+        current_index=0,
+        session_factory=session_factory,
+        vector_store=vector_store,
+        paths=tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_factor == -1.0
+    dialog._zoom_factor = 2.5
+
+    dialog._current_index = 1
+    dialog._show_current_image()
+
+    assert dialog._zoom_factor == -1.0
+
+
+def test_fit_factor_calculated_from_viewport(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_fit_factor is calculated based on viewport size vs original image size."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._fit_factor > 0
+    assert dialog._fit_factor <= 1.0
+
+
+def test_zoom_100_means_original_size(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom factor 1.0 means display at original image size (not fit to viewport)."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() == 1000
+    assert label_pixmap.height() == 800
+
+
+def test_zoom_to_fit_uses_fit_factor(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom to fit displays image scaled to fit viewport."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+
+    dialog._zoom_factor = -1.0
+    dialog._update_image_display()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() <= viewport_size.width()
+    assert label_pixmap.height() <= viewport_size.height()
+
+
+def test_zoom_out_below_fit_shows_smaller_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom out with factor < fit_factor shows image smaller than viewport fit."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    fit_size = dialog._fit_factor
+    dialog._zoom_factor = fit_size * 0.5
+    dialog._update_image_display()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() < 1000
+    assert label_pixmap.height() < 800
+
+
+def test_zoom_in_above_fit_shows_larger_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom in with factor > fit_factor shows image larger than original."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() > 1000
+    assert label_pixmap.height() > 800

@@ -1,5 +1,6 @@
 import html
 import os
+import typing
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -128,6 +129,16 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._image_data: DBImage | None = None
         self._original_pixmap: QtGui.QPixmap | None = None
         self._resolved_names: dict[int, tuple[str, float] | None] = {}
+
+        self._zoom_factor: float = (
+            -1.0
+        )  # -1.0 = fit to viewport, 1.0 = 100%, >1 = zoomed in
+        self._min_zoom: float = 0.1
+        self._max_zoom: float = 10.0
+        self._fit_factor: float = 1.0  # zoom factor that fits image in viewport
+        self._original_image_size: QtCore.QSize = QtCore.QSize()
+        self._face_regions: list[tuple[QtCore.QRectF, str]] = []
+        self._last_zoom_center: QtCore.QPointF | None = None
 
         # Created here (before the dialog's native window exists) so that
         # QQuickWidget's OpenGL initialisation is included in the initial
@@ -337,22 +348,47 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.scroll_area.setWidget(self.image_label)
         container_layout.addWidget(self.scroll_area, 1)
 
-        # Navigation buttons
-        nav_layout = QtWidgets.QHBoxLayout()
-        nav_layout.addStretch()
+        # Navigation and zoom buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        button_layout.addStretch()
 
         self._prev_btn = QtWidgets.QPushButton(self.tr("Previous"))
         self._prev_btn.setAutoDefault(False)
         self._prev_btn.clicked.connect(self._navigate_previous)
-        nav_layout.addWidget(self._prev_btn)
+        button_layout.addWidget(self._prev_btn)
 
         self._next_btn = QtWidgets.QPushButton(self.tr("Next"))
         self._next_btn.setAutoDefault(False)
         self._next_btn.clicked.connect(self._navigate_next)
-        nav_layout.addWidget(self._next_btn)
+        button_layout.addWidget(self._next_btn)
 
-        nav_layout.addStretch()
-        container_layout.addLayout(nav_layout)
+        button_layout.addSpacing(20)
+
+        self._zoom_out_btn = QtWidgets.QPushButton(self.tr("Zoom Out"))
+        self._zoom_out_btn.setAutoDefault(False)
+        self._zoom_out_btn.clicked.connect(self._zoom_out)
+        button_layout.addWidget(self._zoom_out_btn)
+
+        self._zoom_in_btn = QtWidgets.QPushButton(self.tr("Zoom In"))
+        self._zoom_in_btn.setAutoDefault(False)
+        self._zoom_in_btn.clicked.connect(self._zoom_in)
+        button_layout.addWidget(self._zoom_in_btn)
+
+        self._zoom_100_btn = QtWidgets.QPushButton(self.tr("Zoom 100%"))
+        self._zoom_100_btn.setAutoDefault(False)
+        self._zoom_100_btn.clicked.connect(self._zoom_to_100)
+        button_layout.addWidget(self._zoom_100_btn)
+
+        self._zoom_fit_btn = QtWidgets.QPushButton(self.tr("Reset Zoom"))
+        self._zoom_fit_btn.setToolTip(self.tr("Zoom to Fit"))
+        self._zoom_fit_btn.setAutoDefault(False)
+        self._zoom_fit_btn.clicked.connect(self._zoom_to_fit)
+        button_layout.addWidget(self._zoom_fit_btn)
+
+        button_layout.addStretch()
+        container_layout.addLayout(button_layout)
+
+        self.scroll_area.viewport().installEventFilter(self)
 
         return container
 
@@ -365,6 +401,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self.image_label.set_face_regions(pixmap_regions=[], pixmap_size=QtCore.QSize())
         self.image_label.setPixmap(QtGui.QPixmap())
         self._original_pixmap = None
+        self._original_image_size = QtCore.QSize()
+        self._face_regions = []
+        self._fit_factor = 1.0
 
     def _show_current_image(self) -> None:
         """Load and display the image at _current_index."""
@@ -430,6 +469,72 @@ class ImageDetailDialog(QtWidgets.QDialog):
         if self._current_index < len(self._results) - 1:
             self._current_index += 1
             self._show_current_image()
+
+    # ------------------------------------------------------------------
+    # Zoom
+    # ------------------------------------------------------------------
+
+    def _zoom_in(self, center: QtCore.QPointF | None = None) -> None:
+        """Increase zoom factor, clamped to max zoom."""
+        old_factor = self._zoom_factor
+        if self._zoom_factor <= 0:
+            self._zoom_factor = self._fit_factor * 1.25
+        else:
+            self._zoom_factor = min(self._max_zoom, self._zoom_factor * 1.25)
+        if old_factor != self._zoom_factor:
+            self._last_zoom_center = center
+            self._update_image_display()
+
+    def _zoom_out(self, center: QtCore.QPointF | None = None) -> None:
+        """Decrease zoom factor, clamped to min zoom."""
+        old_factor = self._zoom_factor
+        if self._zoom_factor <= 0:
+            self._zoom_factor = -1.0
+        elif self._zoom_factor <= self._fit_factor:
+            self._zoom_factor = -1.0
+        else:
+            self._zoom_factor = max(self._min_zoom, self._zoom_factor / 1.25)
+        if old_factor != self._zoom_factor:
+            self._last_zoom_center = center
+            self._update_image_display()
+
+    def _zoom_to_100(self) -> None:
+        """Reset zoom to 100% (original image size)."""
+        self._zoom_factor = 1.0
+        self._last_zoom_center = None
+        self._update_image_display()
+
+    def _zoom_to_fit(self) -> None:
+        """Reset zoom to fit the image in the viewport."""
+        self._zoom_factor = -1.0
+        self._last_zoom_center = None
+        self._update_image_display()
+
+    def _apply_zoom(self, factor: float, center: QtCore.QPointF | None = None) -> None:
+        """Apply a zoom factor, clamped to min/max range."""
+        old_factor = self._zoom_factor
+        self._zoom_factor = max(self._min_zoom, min(self._max_zoom, factor))
+        if old_factor != self._zoom_factor:
+            self._last_zoom_center = center
+            self._update_image_display()
+
+    def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
+        """Handle wheel events for zooming."""
+        if (
+            obj == self.scroll_area.viewport()
+            and event.type() == QtCore.QEvent.Type.Wheel
+        ):
+            wheel_event = typing.cast(QtGui.QWheelEvent, event)
+            if wheel_event.modifiers() == QtCore.Qt.KeyboardModifier.NoModifier:
+                delta = wheel_event.angleDelta().y()
+                pos = wheel_event.position()
+                center = QtCore.QPointF(pos.x(), pos.y())
+                if delta > 0:
+                    self._zoom_in(center)
+                elif delta < 0:
+                    self._zoom_out(center)
+                return True
+        return super().eventFilter(obj, event)
 
     # ------------------------------------------------------------------
     # File size formatting
@@ -546,26 +651,121 @@ class ImageDetailDialog(QtWidgets.QDialog):
             painter.end()
 
         tooltip_regions = [(rect, tooltip) for rect, _, tooltip in face_display]
+        self._face_regions = tooltip_regions
 
         self.image_label.set_face_regions(
             pixmap_regions=tooltip_regions, pixmap_size=pixmap.size()
         )
 
         self._original_pixmap = pixmap
+        self._original_image_size = pixmap.size()
+        self._zoom_factor = -1.0
         self._update_image_display()
 
     def _update_image_display(self) -> None:
-        """Scale the original pixmap to fit the scroll area viewport."""
+        """Scale the original pixmap based on zoom factor (1.0 = original size)."""
         if self._original_pixmap is None:
             return
 
-        available_size = self.scroll_area.viewport().size()
+        viewport_size = self.scroll_area.viewport().size()
+        old_displayed_pixmap = self.image_label.pixmap()
+        old_display_size = (
+            old_displayed_pixmap.size() if old_displayed_pixmap else QtCore.QSize()
+        )
+
+        original_size = self._original_pixmap.size()
+        fit_width = viewport_size.width() / original_size.width()
+        fit_height = viewport_size.height() / original_size.height()
+        self._fit_factor = min(fit_width, fit_height)
+
+        if self._zoom_factor < 0:
+            display_size = original_size.scaled(
+                viewport_size,
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            )
+        elif self._zoom_factor == 1.0:
+            display_size = original_size
+        else:
+            display_size = QtCore.QSize(
+                int(original_size.width() * self._zoom_factor),
+                int(original_size.height() * self._zoom_factor),
+            )
+
         scaled_pixmap = self._original_pixmap.scaled(
-            available_size,
+            display_size,
             QtCore.Qt.AspectRatioMode.KeepAspectRatio,
             QtCore.Qt.TransformationMode.SmoothTransformation,
         )
-        self.image_label.setPixmap(scaled_pixmap)
+
+        new_display_size = scaled_pixmap.size()
+
+        if (
+            old_display_size.isValid()
+            and self._last_zoom_center is not None
+            and isinstance(self._last_zoom_center, QtCore.QPointF)
+        ):
+            old_center = self._last_zoom_center
+
+            old_offset_x = (viewport_size.width() - old_display_size.width()) / 2
+            old_offset_y = (viewport_size.height() - old_display_size.height()) / 2
+
+            point_x = old_center.x() - old_offset_x
+            point_y = old_center.y() - old_offset_y
+
+            if (
+                point_x >= 0
+                and point_y >= 0
+                and point_x <= old_display_size.width()
+                and point_y <= old_display_size.height()
+            ):
+                scale_x = new_display_size.width() / old_display_size.width()
+                scale_y = new_display_size.height() / old_display_size.height()
+
+                new_offset_x = (viewport_size.width() - new_display_size.width()) / 2
+                new_offset_y = (viewport_size.height() - new_display_size.height()) / 2
+
+                new_scroll_x = new_offset_x + (point_x - old_offset_x) * scale_x
+                new_scroll_y = new_offset_y + (point_y - old_offset_y) * scale_y
+
+                new_scroll_x = max(
+                    0,
+                    min(new_scroll_x, new_display_size.width() - viewport_size.width()),
+                )
+                new_scroll_y = max(
+                    0,
+                    min(
+                        new_scroll_y, new_display_size.height() - viewport_size.height()
+                    ),
+                )
+
+                self.image_label.setPixmap(scaled_pixmap)
+                self.scroll_area.horizontalScrollBar().setValue(int(new_scroll_x))
+                self.scroll_area.verticalScrollBar().setValue(int(new_scroll_y))
+            else:
+                self.image_label.setPixmap(scaled_pixmap)
+        else:
+            self.image_label.setPixmap(scaled_pixmap)
+
+        if self._original_image_size.isValid() and self._face_regions:
+            display_size = scaled_pixmap.size()
+            scale_x = display_size.width() / self._original_image_size.width()
+            scale_y = display_size.height() / self._original_image_size.height()
+            self._scaled_face_regions = [
+                (
+                    QtCore.QRectF(
+                        rect.x() * scale_x,
+                        rect.y() * scale_y,
+                        rect.width() * scale_x,
+                        rect.height() * scale_y,
+                    ),
+                    tooltip,
+                )
+                for rect, tooltip in self._face_regions
+            ]
+            self.image_label.set_face_regions(
+                pixmap_regions=self._scaled_face_regions,
+                pixmap_size=display_size,
+            )
 
     # ------------------------------------------------------------------
     # Button handlers
