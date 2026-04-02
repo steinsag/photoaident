@@ -1122,7 +1122,7 @@ def test_zoom_to_fit_sets_negative_factor(
 def test_zoom_min_limit(
     qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
 ):
-    """Zoom does not go below minimum (0.1) when zoomed in."""
+    """Zoom does not go below fit-to-viewport when zoomed in."""
     dialog = _create_dialog(
         sample_image_with_metadata,
         session_factory,
@@ -1368,23 +1368,6 @@ def test_zoom_to_fit_uses_fit_factor(
     label_pixmap = dialog.image_label.pixmap()
     assert label_pixmap.width() <= viewport_size.width()
     assert label_pixmap.height() <= viewport_size.height()
-
-
-def test_zoom_out_below_fit_shows_smaller_image(
-    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
-):
-    """Zoom out with factor < fit_factor shows image smaller than viewport fit."""
-    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
-    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
-
-    fit_size = dialog._fit_factor
-    dialog._zoom_factor = fit_size * 0.5
-    dialog._update_image_display()
-
-    label_pixmap = dialog.image_label.pixmap()
-    assert label_pixmap.width() < 1000
-    assert label_pixmap.height() < 800
 
 
 def test_zoom_in_above_fit_shows_larger_image(

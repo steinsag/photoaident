@@ -133,9 +133,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._zoom_factor: float | None = (
             None  # None = fit to viewport, 1.0 = 100%, >1 = zoomed in
         )
-        self._min_zoom: float = 0.1
         self._max_zoom: float = 10.0
         self._fit_factor: float = 1.0  # zoom factor that fits image in viewport
+        self._min_zoom: float = 1.0  # set in _update_image_display based on _fit_factor
         self._original_image_size: QtCore.QSize = QtCore.QSize()
         self._face_regions: list[tuple[QtCore.QRectF, str]] = []
         self._last_zoom_center: QtCore.QPointF | None = None
@@ -528,14 +528,14 @@ class ImageDetailDialog(QtWidgets.QDialog):
             self._update_image_display()
 
     def _zoom_out(self, center: QtCore.QPointF | None = None) -> None:
-        """Decrease zoom factor, clamped to min zoom."""
+        """Decrease zoom factor, clamped to min zoom (fit to viewport)."""
         if center is None:
             center = self._get_visible_center()
         old_factor = self._zoom_factor
         if self._zoom_factor is None:
-            self._zoom_factor = self._min_zoom
+            pass  # Already at fit-to-viewport, do nothing
         elif self._zoom_factor <= self._fit_factor:
-            self._zoom_factor = None
+            self._zoom_factor = None  # Zoom out from 100% goes back to fit
         else:
             self._zoom_factor = max(self._min_zoom, self._zoom_factor / 1.25)
         if old_factor != self._zoom_factor:
@@ -555,9 +555,15 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._update_image_display()
 
     def _apply_zoom(self, factor: float, center: QtCore.QPointF | None = None) -> None:
-        """Apply a zoom factor, clamped to min/max range."""
+        """Apply a zoom factor, clamped to min (fit to viewport) / max range."""
         old_factor = self._zoom_factor
-        self._zoom_factor = max(self._min_zoom, min(self._max_zoom, factor))
+        clamped = max(self._min_zoom, min(self._max_zoom, factor))
+        if factor != clamped and factor >= self._min_zoom:
+            self._zoom_factor = clamped
+        elif factor < self._min_zoom:
+            self._zoom_factor = None  # Zoom out below fit goes to fit
+        else:
+            self._zoom_factor = clamped
         if old_factor != self._zoom_factor:
             self._last_zoom_center = center
             self._update_image_display()
@@ -721,6 +727,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         fit_width = viewport_size.width() / original_size.width()
         fit_height = viewport_size.height() / original_size.height()
         self._fit_factor = min(fit_width, fit_height)
+        self._min_zoom = self._fit_factor
 
         if self._zoom_factor is None:
             display_size = original_size.scaled(
