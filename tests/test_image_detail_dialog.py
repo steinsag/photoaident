@@ -1293,7 +1293,7 @@ def test_zoom_buttons_have_correct_labels(
 def test_image_detail_dialog_resets_zoom_on_new_image(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
-    """Loading a new image resets zoom factor to 1.0."""
+    """Loading a new image resets zoom factor to None."""
     db_image1 = _make_db_image(tmp_path, 1, "img1.jpg", "red")
     db_image2 = _make_db_image(tmp_path, 2, "img2.jpg", "blue")
     results = [
