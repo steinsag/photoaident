@@ -771,11 +771,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._fit_factor = min(
             viewport_size.width() / original_size.width(),
             viewport_size.height() / original_size.height(),
+            1.0,  # never upscale in fit-to-viewport mode
         )
         self._min_zoom = self._fit_factor
 
         scaled_pixmap = self._original_pixmap.scaled(
-            self._compute_display_size(original_size, viewport_size),
+            self._compute_display_size(original_size),
             QtCore.Qt.AspectRatioMode.KeepAspectRatio,
             QtCore.Qt.TransformationMode.SmoothTransformation,
         )
@@ -791,13 +792,12 @@ class ImageDetailDialog(QtWidgets.QDialog):
         # Defer cursor update so Qt has processed the new scroll bar ranges.
         QtCore.QTimer.singleShot(0, self._update_pan_cursor)
 
-    def _compute_display_size(
-        self, original_size: QtCore.QSize, viewport_size: QtCore.QSize
-    ) -> QtCore.QSize:
+    def _compute_display_size(self, original_size: QtCore.QSize) -> QtCore.QSize:
         """Return the target display size for the current zoom level."""
         if self._zoom_factor is None:
-            return original_size.scaled(
-                viewport_size, QtCore.Qt.AspectRatioMode.KeepAspectRatio
+            return QtCore.QSize(
+                int(original_size.width() * self._fit_factor),
+                int(original_size.height() * self._fit_factor),
             )
         return QtCore.QSize(
             int(original_size.width() * self._zoom_factor),
