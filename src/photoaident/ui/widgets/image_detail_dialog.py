@@ -409,6 +409,8 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._original_image_size = QtCore.QSize()
         self._face_regions = []
         self._fit_factor = 1.0
+        self._zoom_factor = None
+        self._last_zoom_center = None
 
     def _show_current_image(self) -> None:
         """Load and display the image at _current_index."""
