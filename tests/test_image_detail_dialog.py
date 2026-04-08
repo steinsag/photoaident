@@ -1834,3 +1834,415 @@ def test_load_image_returns_early_when_no_image_data():
     dialog._image_data = None
 
     dialog._load_image()
+
+
+# ===========================================================================
+# _is_pannable
+# ===========================================================================
+
+
+def test_is_pannable_returns_false_when_no_scrollbar_overflow(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_is_pannable returns False when both scrollbars have maximum of 0."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.scroll_area.horizontalScrollBar().setMaximum(0)
+    dialog.scroll_area.verticalScrollBar().setMaximum(0)
+
+    assert dialog._is_pannable() is False
+
+
+def test_is_pannable_returns_true_when_horizontal_scrollbar_overflows(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_is_pannable returns True when horizontal scrollbar maximum > 0."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.scroll_area.horizontalScrollBar().setMaximum(100)
+    dialog.scroll_area.verticalScrollBar().setMaximum(0)
+
+    assert dialog._is_pannable() is True
+
+
+def test_is_pannable_returns_true_when_vertical_scrollbar_overflows(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_is_pannable returns True when vertical scrollbar maximum > 0."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.scroll_area.horizontalScrollBar().setMaximum(0)
+    dialog.scroll_area.verticalScrollBar().setMaximum(50)
+
+    assert dialog._is_pannable() is True
+
+
+# ===========================================================================
+# _update_pan_cursor
+# ===========================================================================
+
+
+def test_update_pan_cursor_sets_open_hand_when_pannable(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_update_pan_cursor sets OpenHandCursor when image overflows the viewport."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+
+    with patch.object(dialog, "_is_pannable", return_value=True):
+        dialog._update_pan_cursor()
+
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.OpenHandCursor
+
+
+def test_update_pan_cursor_unsets_cursor_when_not_pannable(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_update_pan_cursor unsets cursor when image fits in the viewport."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+    # Pre-set a cursor so we can verify it gets removed.
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+
+    with patch.object(dialog, "_is_pannable", return_value=False):
+        dialog._update_pan_cursor()
+
+    # After unsetCursor the shape falls back to the inherited/default cursor.
+    assert dialog.image_label.cursor().shape() != QtCore.Qt.CursorShape.OpenHandCursor
+
+
+def test_update_pan_cursor_skips_update_during_active_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_update_pan_cursor does not change cursor while panning is active."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+
+    with patch.object(dialog, "_is_pannable", return_value=True) as mock_pannable:
+        dialog._update_pan_cursor()
+        mock_pannable.assert_not_called()
+
+    # Cursor must remain ClosedHandCursor (unchanged).
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.ClosedHandCursor
+
+
+# ===========================================================================
+# _stop_panning
+# ===========================================================================
+
+
+def test_stop_panning_clears_panning_flag(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_stop_panning sets _panning to False when panning was active."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+
+    dialog._stop_panning()
+
+    assert dialog._panning is False
+
+
+def test_stop_panning_unsets_cursor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_stop_panning removes the closed-hand cursor after stopping."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+
+    dialog._stop_panning()
+
+    assert dialog.image_label.cursor().shape() != QtCore.Qt.CursorShape.ClosedHandCursor
+
+
+def test_stop_panning_does_nothing_when_not_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_stop_panning is a no-op when _panning is already False."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+
+    dialog._stop_panning()
+
+    # _panning stays False and the cursor is untouched.
+    assert dialog._panning is False
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.OpenHandCursor
+
+
+# ===========================================================================
+# eventFilter — mouse panning
+# ===========================================================================
+
+
+def _make_mouse_press_event(
+    x: float,
+    y: float,
+    button: QtCore.Qt.MouseButton = QtCore.Qt.MouseButton.LeftButton,
+    global_x: float | None = None,
+    global_y: float | None = None,
+) -> QtGui.QMouseEvent:
+    """Build a MouseButtonPress event at the given local position."""
+    gx = global_x if global_x is not None else x
+    gy = global_y if global_y is not None else y
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseButtonPress,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(gx, gy),
+        button,
+        button,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _make_mouse_release_event(
+    x: float,
+    y: float,
+    button: QtCore.Qt.MouseButton = QtCore.Qt.MouseButton.LeftButton,
+    global_x: float | None = None,
+    global_y: float | None = None,
+) -> QtGui.QMouseEvent:
+    """Build a MouseButtonRelease event at the given local position."""
+    gx = global_x if global_x is not None else x
+    gy = global_y if global_y is not None else y
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseButtonRelease,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(gx, gy),
+        button,
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _make_mouse_move_event_with_global(
+    x: float,
+    y: float,
+    global_x: float | None = None,
+    global_y: float | None = None,
+) -> QtGui.QMouseEvent:
+    """Build a MouseMove event with distinct global position."""
+    gx = global_x if global_x is not None else x
+    gy = global_y if global_y is not None else y
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseMove,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(gx, gy),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.MouseButton.LeftButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def test_event_filter_press_pannable_starts_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-press on pannable image starts panning and returns True."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog.scroll_area.horizontalScrollBar().setMaximum(200)
+
+    press = _make_mouse_press_event(50, 50, global_x=300.0, global_y=400.0)
+    result = dialog.eventFilter(dialog.image_label, press)
+
+    assert result is True
+    assert dialog._panning is True
+    assert dialog._pan_start == QtCore.QPoint(300, 400)
+    assert dialog._pan_scroll_start == (
+        dialog.scroll_area.horizontalScrollBar().value(),
+        dialog.scroll_area.verticalScrollBar().value(),
+    )
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.ClosedHandCursor
+
+
+def test_event_filter_press_not_pannable_does_not_start_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-press on non-pannable image does not start panning."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog.scroll_area.horizontalScrollBar().setMaximum(0)
+    dialog.scroll_area.verticalScrollBar().setMaximum(0)
+
+    press = _make_mouse_press_event(50, 50)
+    result = dialog.eventFilter(dialog.image_label, press)
+
+    assert result is False
+    assert dialog._panning is False
+
+
+def test_event_filter_press_right_button_does_not_start_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter right-press never starts panning even if image is pannable."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog.scroll_area.horizontalScrollBar().setMaximum(200)
+
+    press = _make_mouse_press_event(50, 50, button=QtCore.Qt.MouseButton.RightButton)
+    result = dialog.eventFilter(dialog.image_label, press)
+
+    assert result is False
+    assert dialog._panning is False
+
+
+def test_event_filter_mouse_move_while_panning_adjusts_scrollbars(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter MouseMove while panning shifts scrollbars by the drag delta."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    # Set up scrollbar ranges so values can actually change.
+    dialog.scroll_area.horizontalScrollBar().setRange(0, 500)
+    dialog.scroll_area.verticalScrollBar().setRange(0, 500)
+    dialog.scroll_area.horizontalScrollBar().setValue(100)
+    dialog.scroll_area.verticalScrollBar().setValue(100)
+
+    dialog._panning = True
+    dialog._pan_start = QtCore.QPoint(200, 300)
+    dialog._pan_scroll_start = (100, 100)
+
+    # Move 10px right and 20px down → scrollbars decrease by those amounts.
+    move = _make_mouse_move_event_with_global(60, 70, global_x=210.0, global_y=320.0)
+    result = dialog.eventFilter(dialog.image_label, move)
+
+    assert result is True
+    assert dialog.scroll_area.horizontalScrollBar().value() == 100 - 10
+    assert dialog.scroll_area.verticalScrollBar().value() == 100 - 20
+
+
+def test_event_filter_mouse_move_not_panning_falls_through(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter MouseMove while not panning returns False."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+
+    move = _make_mouse_move_event_with_global(60, 70)
+    result = dialog.eventFilter(dialog.image_label, move)
+
+    assert result is False
+
+
+def test_event_filter_release_while_panning_stops_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-release while panning stops the pan and returns True."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+    dialog._pan_start = QtCore.QPoint(100, 100)
+    dialog._pan_scroll_start = (0, 0)
+
+    release = _make_mouse_release_event(50, 50)
+    result = dialog.eventFilter(dialog.image_label, release)
+
+    assert result is True
+    assert dialog._panning is False
+
+
+def test_event_filter_release_not_panning_falls_through(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-release when not panning returns False."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+
+    release = _make_mouse_release_event(50, 50)
+    result = dialog.eventFilter(dialog.image_label, release)
+
+    assert result is False

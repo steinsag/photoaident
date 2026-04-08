@@ -140,6 +140,10 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._face_regions: list[tuple[QtCore.QRectF, str]] = []
         self._last_zoom_center: QtCore.QPointF | None = None
 
+        self._panning: bool = False
+        self._pan_start: QtCore.QPoint = QtCore.QPoint()
+        self._pan_scroll_start: tuple[int, int] = (0, 0)
+
         # Created here (before the dialog's native window exists) so that
         # QQuickWidget's OpenGL initialisation is included in the initial
         # window creation. If it were created later — while the dialog is
@@ -389,6 +393,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
         container_layout.addLayout(button_layout)
 
         self.scroll_area.viewport().installEventFilter(self)
+        self.image_label.installEventFilter(self)
 
         return container
 
@@ -407,6 +412,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
 
     def _show_current_image(self) -> None:
         """Load and display the image at _current_index."""
+        self._stop_panning()
         result = self._results[self._current_index]
         self._image_data = self._load_image_data(result.image_id)
         self._resolved_names.clear()
@@ -530,6 +536,28 @@ class ImageDetailDialog(QtWidgets.QDialog):
         self._last_zoom_center = None
         self._update_image_display()
 
+    def _is_pannable(self) -> bool:
+        """Return True if the image overflows the viewport (scrollbars are active)."""
+        return (
+            self.scroll_area.horizontalScrollBar().maximum() > 0
+            or self.scroll_area.verticalScrollBar().maximum() > 0
+        )
+
+    def _update_pan_cursor(self) -> None:
+        """Update the image label cursor to reflect current pannability."""
+        if self._panning:
+            return
+        if self._is_pannable():
+            self.image_label.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+        else:
+            self.image_label.unsetCursor()
+
+    def _stop_panning(self) -> None:
+        """Cancel any active panning operation and restore the cursor."""
+        if self._panning:
+            self._panning = False
+            self.image_label.unsetCursor()
+
     def _apply_zoom(self, factor: float, center: QtCore.QPointF | None = None) -> None:
         """Apply a zoom factor, clamped to min (fit to viewport) / max range."""
         old_factor = self._zoom_factor
@@ -545,7 +573,7 @@ class ImageDetailDialog(QtWidgets.QDialog):
             self._update_image_display()
 
     def eventFilter(self, obj: QtCore.QObject, event: QtCore.QEvent) -> bool:
-        """Handle wheel events for zooming."""
+        """Handle wheel events for zooming and mouse events for panning."""
         if (
             obj == self.scroll_area.viewport()
             and event.type() == QtCore.QEvent.Type.Wheel
@@ -560,6 +588,52 @@ class ImageDetailDialog(QtWidgets.QDialog):
                 elif delta < 0:
                     self._zoom_out(center)
                 return True
+
+        if obj == self.image_label:
+            event_type = event.type()
+
+            if event_type == QtCore.QEvent.Type.MouseButtonPress:
+                mouse_event = typing.cast(QtGui.QMouseEvent, event)
+                if (
+                    mouse_event.button() == QtCore.Qt.MouseButton.LeftButton
+                    and self._is_pannable()
+                ):
+                    self._panning = True
+                    self._pan_start = mouse_event.globalPosition().toPoint()
+                    self._pan_scroll_start = (
+                        self.scroll_area.horizontalScrollBar().value(),
+                        self.scroll_area.verticalScrollBar().value(),
+                    )
+                    self.image_label.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+                    return True
+
+            elif event_type == QtCore.QEvent.Type.MouseMove:
+                mouse_event = typing.cast(QtGui.QMouseEvent, event)
+                if self._panning:
+                    # Cancel if the button was released outside the window.
+                    if not (mouse_event.buttons() & QtCore.Qt.MouseButton.LeftButton):
+                        self._panning = False
+                        self._update_pan_cursor()
+                        return False
+                    delta = mouse_event.globalPosition().toPoint() - self._pan_start
+                    self.scroll_area.horizontalScrollBar().setValue(
+                        self._pan_scroll_start[0] - delta.x()
+                    )
+                    self.scroll_area.verticalScrollBar().setValue(
+                        self._pan_scroll_start[1] - delta.y()
+                    )
+                    return True
+
+            elif event_type == QtCore.QEvent.Type.MouseButtonRelease:
+                mouse_event = typing.cast(QtGui.QMouseEvent, event)
+                if (
+                    mouse_event.button() == QtCore.Qt.MouseButton.LeftButton
+                    and self._panning
+                ):
+                    self._panning = False
+                    self._update_pan_cursor()
+                    return True
+
         return super().eventFilter(obj, event)
 
     # ------------------------------------------------------------------
@@ -800,6 +874,9 @@ class ImageDetailDialog(QtWidgets.QDialog):
                 pixmap_regions=self._scaled_face_regions,
                 pixmap_size=display_size,
             )
+
+        # Defer cursor update so Qt has processed the new scroll bar ranges.
+        QtCore.QTimer.singleShot(0, self._update_pan_cursor)
 
     # ------------------------------------------------------------------
     # Button handlers
