@@ -1104,10 +1104,10 @@ def test_zoom_to_100_sets_factor_to_1(
     assert dialog._zoom_factor == pytest.approx(1.0)
 
 
-def test_zoom_to_fit_sets_negative_factor(
+def test_zoom_to_fit_sets_none_factor(
     qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
 ):
-    """Reset Zoom button sets zoom factor to -1.0 (fit to viewport)."""
+    """Reset Zoom button sets zoom factor to None (fit to viewport)."""
     dialog = _create_dialog(
         sample_image_with_metadata,
         session_factory,
@@ -1364,8 +1364,7 @@ def test_zoom_to_fit_uses_fit_factor(
 
     viewport_size = dialog.scroll_area.viewport().size()
 
-    dialog._zoom_factor = -1.0
-    dialog._update_image_display()
+    dialog._zoom_to_fit()
 
     label_pixmap = dialog.image_label.pixmap()
     assert label_pixmap.width() <= viewport_size.width()
