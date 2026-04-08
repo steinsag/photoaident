@@ -1696,69 +1696,6 @@ def test_zoom_out_does_nothing_when_already_at_fit(
     assert dialog._zoom_factor is None
 
 
-def test_apply_zoom_clamps_to_max(
-    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
-):
-    """_apply_zoom clamps to max zoom when factor exceeds max."""
-    dialog = _create_dialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-    )
-    qtbot.add_widget(dialog)
-
-    dialog._zoom_factor = 1.0
-    dialog._min_zoom = 0.5
-    dialog._max_zoom = 10.0
-
-    dialog._apply_zoom(20.0)
-
-    assert dialog._zoom_factor == pytest.approx(10.0)
-
-
-def test_apply_zoom_sets_to_fit_when_below_min(
-    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
-):
-    """_apply_zoom sets to fit when factor is below min zoom."""
-    dialog = _create_dialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-    )
-    qtbot.add_widget(dialog)
-
-    dialog._zoom_factor = 2.0
-    dialog._min_zoom = 0.5
-    dialog._max_zoom = 10.0
-
-    dialog._apply_zoom(0.2)
-
-    assert dialog._zoom_factor is None
-
-
-def test_apply_zoom_sets_clamped_value(
-    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
-):
-    """_apply_zoom uses clamped value when factor != clamped but >= min."""
-    dialog = _create_dialog(
-        sample_image_with_metadata,
-        session_factory,
-        vector_store,
-        tmp_app_paths,
-    )
-    qtbot.add_widget(dialog)
-
-    dialog._zoom_factor = 1.0
-    dialog._min_zoom = 0.5
-    dialog._max_zoom = 10.0
-
-    dialog._apply_zoom(5.0)
-
-    assert dialog._zoom_factor == pytest.approx(5.0)
-
-
 def test_event_filter_wheel_zoom_in(
     qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
 ):
