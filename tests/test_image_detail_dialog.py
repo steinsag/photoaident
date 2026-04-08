@@ -5,7 +5,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
-from sqlalchemy import create_engine
 
 from photoaident.core.search import SearchResult
 from photoaident.db.database import (
@@ -1558,13 +1557,9 @@ def test_get_visible_center_with_scrolled_image(
         assert center.y() > 0
 
 
-def test_constructor_rejects_empty_results():
+def test_constructor_rejects_empty_results(tmp_app_paths, db_engine):
     """ImageDetailDialog raises ValueError when results list is empty."""
-    from photoaident.paths import AppPaths
-
-    paths = AppPaths()
-    engine = create_engine(f"sqlite:///{paths.db_path}")
-    session_factory = get_session_factory(engine)
+    session_factory = get_session_factory(db_engine)
 
     with pytest.raises(ValueError, match="must not be empty"):
         ImageDetailDialog(
@@ -1572,17 +1567,13 @@ def test_constructor_rejects_empty_results():
             current_index=0,
             session_factory=session_factory,
             vector_store=MagicMock(),
-            paths=paths,
+            paths=tmp_app_paths,
         )
 
 
-def test_constructor_rejects_invalid_current_index():
+def test_constructor_rejects_invalid_current_index(tmp_app_paths, db_engine):
     """ImageDetailDialog raises ValueError when current_index is out of range."""
-    from photoaident.paths import AppPaths
-
-    paths = AppPaths()
-    engine = create_engine(f"sqlite:///{paths.db_path}")
-    session_factory = get_session_factory(engine)
+    session_factory = get_session_factory(db_engine)
     results = [SearchResult(image_id=1, file_path="/test.jpg", thumb_path=Path("/t"))]
 
     with pytest.raises(ValueError, match="out of range"):
@@ -1591,7 +1582,7 @@ def test_constructor_rejects_invalid_current_index():
             current_index=5,
             session_factory=session_factory,
             vector_store=MagicMock(),
-            paths=paths,
+            paths=tmp_app_paths,
         )
 
 
