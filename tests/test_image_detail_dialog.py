@@ -2,6 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
 from PIL import Image as PILImage
 from PySide6 import QtCore, QtGui, QtQuickWidgets, QtWidgets
 
@@ -13,6 +14,7 @@ from photoaident.db.database import (
     ImageMetadata,
     Person,
     TakenAtSource,
+    get_session_factory,
 )
 from photoaident.ui.widgets.image_detail_dialog import (
     ImageDetailDialog,
@@ -1024,3 +1026,1150 @@ def test_arrow_keys_navigate(
 
     dialog._shortcut_prev.activated.emit()
     assert dialog._current_index == 1
+
+
+# ===========================================================================
+# Zoom functionality tests
+# ===========================================================================
+
+
+def test_zoom_buttons_present(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom buttons are present in the dialog."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_in_btn is not None
+    assert dialog._zoom_out_btn is not None
+    assert dialog._zoom_100_btn is not None
+    assert dialog._zoom_fit_btn is not None
+
+
+def test_zoom_in_increases_factor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom In button increases the zoom factor."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_factor is None
+    dialog._zoom_in()
+    assert dialog._zoom_factor is not None
+    assert dialog._zoom_factor > 0
+
+
+def test_zoom_out_decreases_factor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom Out button decreases the zoom factor."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._zoom_out()
+    assert dialog._zoom_factor < 2.0
+
+
+def test_zoom_to_100_sets_factor_to_1(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom 100% button sets zoom factor to 1.0 (original size)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 3.0
+    dialog._zoom_to_100()
+    assert dialog._zoom_factor == pytest.approx(1.0)
+
+
+def test_zoom_to_fit_sets_none_factor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Reset Zoom button sets zoom factor to None (fit to viewport)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 3.0
+    dialog._zoom_to_fit()
+    assert dialog._zoom_factor is None
+
+
+def test_zoom_min_limit(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom does not go below fit-to-viewport when zoomed in."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._zoom_out()
+    assert dialog._zoom_factor >= dialog._min_zoom
+
+
+def test_zoom_max_limit(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom does not exceed maximum (10.0) when zoomed in."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 9.0
+    dialog._zoom_in()
+    assert dialog._zoom_factor <= dialog._max_zoom
+
+
+def test_wheel_zoom_triggers_zoom(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Mouse wheel event triggers zoom in/out."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport = dialog.scroll_area.viewport()
+    initial_factor = dialog._zoom_factor
+
+    wheel_event_up = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, 120),
+        QtCore.QPoint(0, 120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    dialog.eventFilter(viewport, wheel_event_up)
+
+    assert dialog._zoom_factor != initial_factor
+
+
+def test_wheel_zoom_with_ctrl_modifier_does_not_zoom(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Mouse wheel with Ctrl modifier does not trigger zoom (allows scroll)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    initial_factor = dialog._zoom_factor
+
+    wheel_event = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, 120),
+        QtCore.QPoint(0, 120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.ControlModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    viewport = dialog.scroll_area.viewport()
+    result = dialog.eventFilter(viewport, wheel_event)
+
+    assert result is False
+    assert dialog._zoom_factor == initial_factor
+
+
+def test_zoom_center_tracks_mouse_position(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zooming updates _last_zoom_center to the mouse position."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    center = QtCore.QPointF(150, 200)
+    dialog._zoom_in(center)
+
+    assert dialog._last_zoom_center == center
+
+
+def test_zoom_to_100_clears_zoom_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom to 100% sets zoom center to the original image center."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._last_zoom_center = QtCore.QPointF(100, 100)
+    dialog._zoom_to_100()
+
+    assert dialog._last_zoom_center is not None
+    expected = dialog._get_image_center()
+    assert dialog._last_zoom_center.x() == expected.x()
+    assert dialog._last_zoom_center.y() == expected.y()
+
+
+def test_zoom_to_fit_clears_zoom_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Reset Zoom clears the zoom center."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._last_zoom_center = QtCore.QPointF(100, 100)
+    dialog._zoom_to_fit()
+
+    assert dialog._last_zoom_center is None
+
+
+def test_zoom_buttons_have_correct_labels(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom buttons have expected translated text."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_in_btn.text() == dialog.tr("Zoom In")
+    assert dialog._zoom_out_btn.text() == dialog.tr("Zoom Out")
+    assert dialog._zoom_100_btn.text() == dialog.tr("Zoom 100%")
+    assert dialog._zoom_fit_btn.text() == dialog.tr("Reset Zoom")
+
+
+def test_image_detail_dialog_resets_zoom_on_new_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Loading a new image resets zoom factor to None."""
+    db_image1 = _make_db_image(tmp_path, 1, "img1.jpg", "red")
+    db_image2 = _make_db_image(tmp_path, 2, "img2.jpg", "blue")
+    results = [
+        SearchResult(image_id=1, file_path=db_image1.file_path, thumb_path=Path("/t1")),
+        SearchResult(image_id=2, file_path=db_image2.file_path, thumb_path=Path("/t2")),
+    ]
+    _persist_image(session_factory, db_image1)
+    _persist_image(session_factory, db_image2)
+
+    dialog = ImageDetailDialog(
+        results=results,
+        current_index=0,
+        session_factory=session_factory,
+        vector_store=vector_store,
+        paths=tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._zoom_factor is None
+    dialog._zoom_factor = 2.5
+
+    dialog._current_index = 1
+    dialog._show_current_image()
+
+    assert dialog._zoom_factor is None
+
+
+def test_fit_factor_calculated_from_viewport(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_fit_factor is calculated based on viewport size vs original image size."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    assert dialog._fit_factor > 0
+    assert dialog._fit_factor <= 1.0
+
+
+def test_zoom_100_means_original_size(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom factor 1.0 means display at original image size (not fit to viewport)."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() == 1000
+    assert label_pixmap.height() == 800
+
+
+def test_zoom_to_fit_uses_fit_factor(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom to fit displays image scaled to fit viewport."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+
+    dialog._zoom_to_fit()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() <= viewport_size.width()
+    assert label_pixmap.height() <= viewport_size.height()
+
+
+def test_zoom_in_above_fit_shows_larger_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom in with factor > fit_factor shows image larger than original."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red", size=(1000, 800))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    label_pixmap = dialog.image_label.pixmap()
+    assert label_pixmap.width() > 1000
+    assert label_pixmap.height() > 800
+
+
+def test_zoom_in_zooms_to_visible_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom In button zooms to center of the currently visible portion of the image."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    initial_scroll_x = viewport_size.width() // 4
+    initial_scroll_y = viewport_size.height() // 4
+    dialog.scroll_area.horizontalScrollBar().setValue(initial_scroll_x)
+    dialog.scroll_area.verticalScrollBar().setValue(initial_scroll_y)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_in()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_out_zooms_to_visible_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom Out button zooms to center of the currently visible portion of the image."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    initial_scroll_x = viewport_size.width() // 4
+    initial_scroll_y = viewport_size.height() // 4
+    dialog.scroll_area.horizontalScrollBar().setValue(initial_scroll_x)
+    dialog.scroll_area.verticalScrollBar().setValue(initial_scroll_y)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_out()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_in_smaller_image_zooms_to_center_of_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom In on an image smaller than viewport zooms to center of the viewport."""
+    db_image = _make_db_image(tmp_path, 1, "small.jpg", "red", size=(100, 100))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_in()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_out_smaller_image_zooms_to_center_of_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom Out on an image smaller than viewport zooms to center of the viewport."""
+    db_image = _make_db_image(tmp_path, 1, "small.jpg", "red", size=(100, 100))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    center = dialog._get_visible_center()
+    dialog._zoom_out()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - center.y()) < 1
+
+
+def test_zoom_100_zooms_to_image_center(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom 100% button zooms to center of the original image."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    dialog.scroll_area.horizontalScrollBar().setValue(viewport_size.width() // 4)
+    dialog.scroll_area.verticalScrollBar().setValue(viewport_size.height() // 4)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    image_center = dialog._get_image_center()
+    dialog._zoom_to_100()
+
+    assert dialog._last_zoom_center is not None
+    assert abs(dialog._last_zoom_center.x() - image_center.x()) < 1
+    assert abs(dialog._last_zoom_center.y() - image_center.y()) < 1
+
+
+def test_get_visible_center_when_image_smaller_than_viewport(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """_get_visible_center returns viewport center regardless of image size."""
+    db_image = _make_db_image(tmp_path, 1, "tiny.jpg", "blue", size=(50, 50))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.0
+    dialog._update_image_display()
+
+    viewport_size = dialog.scroll_area.viewport().size()
+    center = dialog._get_visible_center()
+
+    assert abs(center.x() - viewport_size.width() / 2) < 1
+    assert abs(center.y() - viewport_size.height() / 2) < 1
+
+
+def test_get_visible_center_with_scrolled_image(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """_get_visible_center returns visible center when image is larger than viewport."""
+    db_image = _make_db_image(tmp_path, 1, "large.jpg", "green", size=(1000, 1000))
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 2.0
+    dialog._update_image_display()
+
+    display_pixmap = dialog.image_label.pixmap()
+    viewport_size = dialog.scroll_area.viewport().size()
+
+    if display_pixmap.width() > viewport_size.width():
+        scroll_x = dialog.scroll_area.horizontalScrollBar().maximum() // 2
+        scroll_y = dialog.scroll_area.verticalScrollBar().maximum() // 2
+        dialog.scroll_area.horizontalScrollBar().setValue(scroll_x)
+        dialog.scroll_area.verticalScrollBar().setValue(scroll_y)
+
+        center = dialog._get_visible_center()
+
+        assert center.x() > 0
+        assert center.y() > 0
+    else:
+        center = dialog._get_visible_center()
+        assert center.x() > 0
+        assert center.y() > 0
+
+
+def test_constructor_rejects_empty_results(tmp_app_paths, db_engine):
+    """ImageDetailDialog raises ValueError when results list is empty."""
+    session_factory = get_session_factory(db_engine)
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        ImageDetailDialog(
+            results=[],
+            current_index=0,
+            session_factory=session_factory,
+            vector_store=MagicMock(),
+            paths=tmp_app_paths,
+        )
+
+
+def test_constructor_rejects_invalid_current_index(tmp_app_paths, db_engine):
+    """ImageDetailDialog raises ValueError when current_index is out of range."""
+    session_factory = get_session_factory(db_engine)
+    results = [SearchResult(image_id=1, file_path="/test.jpg", thumb_path=Path("/t"))]
+
+    with pytest.raises(ValueError, match="out of range"):
+        ImageDetailDialog(
+            results=results,
+            current_index=5,
+            session_factory=session_factory,
+            vector_store=MagicMock(),
+            paths=tmp_app_paths,
+        )
+
+
+def test_clear_layout_removes_nested_widgets(
+    qtbot, session_factory, vector_store, tmp_app_paths
+):
+    """_clear_layout recursively removes nested widgets."""
+    dialog = _create_dialog(
+        Image(id=999, file_path="/nonexistent.jpg", file_size=0),
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    nested_widget = QtWidgets.QWidget()
+    nested_layout = QtWidgets.QHBoxLayout(nested_widget)
+    inner_label = QtWidgets.QLabel("test")
+    nested_layout.addWidget(inner_label)
+
+    dialog._clear_layout(nested_layout)
+    assert nested_layout.count() == 0
+
+
+def test_clear_layout_recursive(qtbot, session_factory, vector_store, tmp_app_paths):
+    """_clear_layout recursively removes nested layouts."""
+    dialog = _create_dialog(
+        Image(id=999, file_path="/nonexistent.jpg", file_size=0),
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    outer_layout = QtWidgets.QVBoxLayout()
+    inner_layout = QtWidgets.QHBoxLayout()
+    inner_label = QtWidgets.QLabel("test")
+    inner_layout.addWidget(inner_label)
+    outer_layout.addLayout(inner_layout)
+
+    dialog._clear_layout(outer_layout)
+    assert outer_layout.count() == 0
+
+
+def test_add_meta_row_skips_none_value(
+    qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
+):
+    """_add_meta_row does not add a row when value is None."""
+    db_image = _make_db_image(tmp_path, 1, "test.jpg", "red")
+    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
+    qtbot.add_widget(dialog)
+
+    layout = QtWidgets.QVBoxLayout()
+    initial_count = layout.count()
+
+    dialog._add_meta_row(layout, "TestLabel", None)
+    assert layout.count() == initial_count
+
+
+def test_get_visible_center_returns_viewport_center():
+    """_get_visible_center always returns the geometric center of the viewport."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    mock_viewport = MagicMock()
+    mock_viewport.size.return_value = QtCore.QSize(800, 600)
+    dialog.scroll_area = MagicMock()
+    dialog.scroll_area.viewport.return_value = mock_viewport
+
+    result = dialog._get_visible_center()
+
+    assert result.x() == 400
+    assert result.y() == 300
+
+
+def test_get_image_center_returns_origin_when_no_pixmap():
+    """_get_image_center returns (0, 0) when _original_pixmap is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._original_pixmap = None
+
+    result = dialog._get_image_center()
+    assert result.x() == 0 and result.y() == 0
+
+
+def test_zoom_out_does_nothing_when_already_at_fit(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """Zoom out does nothing when already at fit-to-viewport."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = None
+    dialog._min_zoom = 0.5
+    dialog._fit_factor = 0.5
+
+    dialog._zoom_out()
+
+    assert dialog._zoom_factor is None
+
+
+def test_event_filter_wheel_zoom_in(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter handles wheel zoom in (delta > 0)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    viewport = dialog.scroll_area.viewport()
+
+    initial = dialog._zoom_factor
+    wheel_event = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, 120),
+        QtCore.QPoint(0, 120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    dialog.eventFilter(viewport, wheel_event)
+
+    assert dialog._zoom_factor != initial
+
+
+def test_event_filter_wheel_zoom_out(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter handles wheel zoom out (delta < 0)."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog._zoom_factor = 1.5
+
+    viewport = dialog.scroll_area.viewport()
+    wheel_event = QtGui.QWheelEvent(
+        QtCore.QPointF(100, 100),
+        QtCore.QPointF(100, 100),
+        QtCore.QPoint(0, -120),
+        QtCore.QPoint(0, -120),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+        QtCore.Qt.ScrollPhase.NoScrollPhase,
+        False,
+    )
+    dialog.eventFilter(viewport, wheel_event)
+
+    assert dialog._zoom_factor < 1.5
+
+
+def test_build_face_display_info_returns_empty_when_no_image_data():
+    """_build_face_display_info returns [] when _image_data is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._image_data = None
+
+    result = dialog._build_face_display_info()
+    assert result == []
+
+
+def test_load_image_returns_early_when_no_image_data():
+    """_load_image returns early when _image_data is None."""
+    dialog = ImageDetailDialog.__new__(ImageDetailDialog)
+    dialog._image_data = None
+
+    dialog._load_image()
+
+
+# ===========================================================================
+# _is_pannable
+# ===========================================================================
+
+
+def test_is_pannable_returns_false_when_no_scrollbar_overflow(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_is_pannable returns False when both scrollbars have maximum of 0."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.scroll_area.horizontalScrollBar().setMaximum(0)
+    dialog.scroll_area.verticalScrollBar().setMaximum(0)
+
+    assert dialog._is_pannable() is False
+
+
+def test_is_pannable_returns_true_when_horizontal_scrollbar_overflows(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_is_pannable returns True when horizontal scrollbar maximum > 0."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.scroll_area.horizontalScrollBar().setMaximum(100)
+    dialog.scroll_area.verticalScrollBar().setMaximum(0)
+
+    assert dialog._is_pannable() is True
+
+
+def test_is_pannable_returns_true_when_vertical_scrollbar_overflows(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_is_pannable returns True when vertical scrollbar maximum > 0."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    dialog.scroll_area.horizontalScrollBar().setMaximum(0)
+    dialog.scroll_area.verticalScrollBar().setMaximum(50)
+
+    assert dialog._is_pannable() is True
+
+
+# ===========================================================================
+# _update_pan_cursor
+# ===========================================================================
+
+
+def test_update_pan_cursor_sets_open_hand_when_pannable(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_update_pan_cursor sets OpenHandCursor when image overflows the viewport."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+
+    with patch.object(dialog, "_is_pannable", return_value=True):
+        dialog._update_pan_cursor()
+
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.OpenHandCursor
+
+
+def test_update_pan_cursor_unsets_cursor_when_not_pannable(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_update_pan_cursor unsets cursor when image fits in the viewport."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+    # Pre-set a cursor so we can verify it gets removed.
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+
+    with patch.object(dialog, "_is_pannable", return_value=False):
+        dialog._update_pan_cursor()
+
+    # After unsetCursor the shape falls back to the inherited/default cursor.
+    assert dialog.image_label.cursor().shape() != QtCore.Qt.CursorShape.OpenHandCursor
+
+
+def test_update_pan_cursor_skips_update_during_active_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_update_pan_cursor does not change cursor while panning is active."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+
+    with patch.object(dialog, "_is_pannable", return_value=True) as mock_pannable:
+        dialog._update_pan_cursor()
+        mock_pannable.assert_not_called()
+
+    # Cursor must remain ClosedHandCursor (unchanged).
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.ClosedHandCursor
+
+
+# ===========================================================================
+# _stop_panning
+# ===========================================================================
+
+
+def test_stop_panning_clears_panning_flag(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_stop_panning sets _panning to False when panning was active."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+
+    dialog._stop_panning()
+
+    assert dialog._panning is False
+
+
+def test_stop_panning_unsets_cursor(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_stop_panning removes the closed-hand cursor after stopping."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.ClosedHandCursor)
+
+    dialog._stop_panning()
+
+    assert dialog.image_label.cursor().shape() != QtCore.Qt.CursorShape.ClosedHandCursor
+
+
+def test_stop_panning_does_nothing_when_not_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """_stop_panning is a no-op when _panning is already False."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+    dialog.image_label.setCursor(QtCore.Qt.CursorShape.OpenHandCursor)
+
+    dialog._stop_panning()
+
+    # _panning stays False and the cursor is untouched.
+    assert dialog._panning is False
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.OpenHandCursor
+
+
+# ===========================================================================
+# eventFilter — mouse panning
+# ===========================================================================
+
+
+def _make_mouse_press_event(
+    x: float,
+    y: float,
+    button: QtCore.Qt.MouseButton = QtCore.Qt.MouseButton.LeftButton,
+    global_x: float | None = None,
+    global_y: float | None = None,
+) -> QtGui.QMouseEvent:
+    """Build a MouseButtonPress event at the given local position."""
+    gx = global_x if global_x is not None else x
+    gy = global_y if global_y is not None else y
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseButtonPress,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(gx, gy),
+        button,
+        button,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _make_mouse_release_event(
+    x: float,
+    y: float,
+    button: QtCore.Qt.MouseButton = QtCore.Qt.MouseButton.LeftButton,
+    global_x: float | None = None,
+    global_y: float | None = None,
+) -> QtGui.QMouseEvent:
+    """Build a MouseButtonRelease event at the given local position."""
+    gx = global_x if global_x is not None else x
+    gy = global_y if global_y is not None else y
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseButtonRelease,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(gx, gy),
+        button,
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def _make_mouse_move_event_with_global(
+    x: float,
+    y: float,
+    global_x: float | None = None,
+    global_y: float | None = None,
+) -> QtGui.QMouseEvent:
+    """Build a MouseMove event with distinct global position."""
+    gx = global_x if global_x is not None else x
+    gy = global_y if global_y is not None else y
+    return QtGui.QMouseEvent(
+        QtCore.QEvent.Type.MouseMove,
+        QtCore.QPointF(x, y),
+        QtCore.QPointF(gx, gy),
+        QtCore.Qt.MouseButton.NoButton,
+        QtCore.Qt.MouseButton.LeftButton,
+        QtCore.Qt.KeyboardModifier.NoModifier,
+    )
+
+
+def test_event_filter_press_pannable_starts_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-press on pannable image starts panning and returns True."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog.scroll_area.horizontalScrollBar().setMaximum(200)
+
+    press = _make_mouse_press_event(50, 50, global_x=300.0, global_y=400.0)
+    result = dialog.eventFilter(dialog.image_label, press)
+
+    assert result is True
+    assert dialog._panning is True
+    assert dialog._pan_start == QtCore.QPoint(300, 400)
+    assert dialog._pan_scroll_start == (
+        dialog.scroll_area.horizontalScrollBar().value(),
+        dialog.scroll_area.verticalScrollBar().value(),
+    )
+    assert dialog.image_label.cursor().shape() == QtCore.Qt.CursorShape.ClosedHandCursor
+
+
+def test_event_filter_press_not_pannable_does_not_start_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-press on non-pannable image does not start panning."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog.scroll_area.horizontalScrollBar().setMaximum(0)
+    dialog.scroll_area.verticalScrollBar().setMaximum(0)
+
+    press = _make_mouse_press_event(50, 50)
+    result = dialog.eventFilter(dialog.image_label, press)
+
+    assert result is False
+    assert dialog._panning is False
+
+
+def test_event_filter_press_right_button_does_not_start_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter right-press never starts panning even if image is pannable."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog.scroll_area.horizontalScrollBar().setMaximum(200)
+
+    press = _make_mouse_press_event(50, 50, button=QtCore.Qt.MouseButton.RightButton)
+    result = dialog.eventFilter(dialog.image_label, press)
+
+    assert result is False
+    assert dialog._panning is False
+
+
+def test_event_filter_mouse_move_while_panning_adjusts_scrollbars(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter MouseMove while panning shifts scrollbars by the drag delta."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+
+    # Set up scrollbar ranges so values can actually change.
+    dialog.scroll_area.horizontalScrollBar().setRange(0, 500)
+    dialog.scroll_area.verticalScrollBar().setRange(0, 500)
+    dialog.scroll_area.horizontalScrollBar().setValue(100)
+    dialog.scroll_area.verticalScrollBar().setValue(100)
+
+    dialog._panning = True
+    dialog._pan_start = QtCore.QPoint(200, 300)
+    dialog._pan_scroll_start = (100, 100)
+
+    # Move 10px right and 20px down → scrollbars decrease by those amounts.
+    move = _make_mouse_move_event_with_global(60, 70, global_x=210.0, global_y=320.0)
+    result = dialog.eventFilter(dialog.image_label, move)
+
+    assert result is True
+    assert dialog.scroll_area.horizontalScrollBar().value() == 100 - 10
+    assert dialog.scroll_area.verticalScrollBar().value() == 100 - 20
+
+
+def test_event_filter_mouse_move_not_panning_falls_through(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter MouseMove while not panning returns False."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+
+    move = _make_mouse_move_event_with_global(60, 70)
+    result = dialog.eventFilter(dialog.image_label, move)
+
+    assert result is False
+
+
+def test_event_filter_release_while_panning_stops_panning(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-release while panning stops the pan and returns True."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = True
+    dialog._pan_start = QtCore.QPoint(100, 100)
+    dialog._pan_scroll_start = (0, 0)
+
+    release = _make_mouse_release_event(50, 50)
+    result = dialog.eventFilter(dialog.image_label, release)
+
+    assert result is True
+    assert dialog._panning is False
+
+
+def test_event_filter_release_not_panning_falls_through(
+    qtbot, sample_image_with_metadata, session_factory, vector_store, tmp_app_paths
+):
+    """eventFilter left-release when not panning returns False."""
+    dialog = _create_dialog(
+        sample_image_with_metadata,
+        session_factory,
+        vector_store,
+        tmp_app_paths,
+    )
+    qtbot.add_widget(dialog)
+    dialog._panning = False
+
+    release = _make_mouse_release_event(50, 50)
+    result = dialog.eventFilter(dialog.image_label, release)
+
+    assert result is False
