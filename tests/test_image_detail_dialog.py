@@ -1714,7 +1714,7 @@ def test_apply_zoom_clamps_to_max(
 
     dialog._apply_zoom(20.0)
 
-    assert dialog._zoom_factor == 10.0
+    assert dialog._zoom_factor == pytest.approx(10.0)
 
 
 def test_apply_zoom_sets_to_fit_when_below_min(
@@ -1756,7 +1756,7 @@ def test_apply_zoom_sets_clamped_value(
 
     dialog._apply_zoom(5.0)
 
-    assert dialog._zoom_factor == 5.0
+    assert dialog._zoom_factor == pytest.approx(5.0)
 
 
 def test_event_filter_wheel_zoom_in(
