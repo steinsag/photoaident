@@ -475,37 +475,13 @@ class ImageDetailDialog(QtWidgets.QDialog):
     # ------------------------------------------------------------------
 
     def _get_visible_center(self) -> QtCore.QPointF:
-        """Calculate the center of the currently visible portion of the image."""
-        if self._original_pixmap is None:
-            return QtCore.QPointF(0, 0)
+        """Return the center of the viewport in viewport coordinates.
 
+        This matches the coordinate system used by wheel-zoom events so that
+        button-triggered zooms keep the viewport center fixed.
+        """
         viewport_size = self.scroll_area.viewport().size()
-        display_pixmap = self.image_label.pixmap()
-        if display_pixmap is None or display_pixmap.isNull():
-            return QtCore.QPointF(0, 0)
-
-        display_size = display_pixmap.size()
-        if display_size.width() <= 0 or display_size.height() <= 0:
-            return QtCore.QPointF(0, 0)
-
-        offset_x = (viewport_size.width() - display_size.width()) / 2
-        offset_y = (viewport_size.height() - display_size.height()) / 2
-
-        scroll_x = self.scroll_area.horizontalScrollBar().value()
-        scroll_y = self.scroll_area.verticalScrollBar().value()
-
-        image_x = scroll_x - offset_x
-        image_y = scroll_y - offset_y
-
-        if display_size.width() <= viewport_size.width():
-            image_x = (display_size.width() - viewport_size.width()) / 2
-        if display_size.height() <= viewport_size.height():
-            image_y = (display_size.height() - viewport_size.height()) / 2
-
-        visible_center_x = image_x + viewport_size.width() / 2
-        visible_center_y = image_y + viewport_size.height() / 2
-
-        return QtCore.QPointF(visible_center_x, visible_center_y)
+        return QtCore.QPointF(viewport_size.width() / 2, viewport_size.height() / 2)
 
     def _get_image_center(self) -> QtCore.QPointF:
         """Calculate the center of the original image."""
@@ -755,39 +731,48 @@ class ImageDetailDialog(QtWidgets.QDialog):
         ):
             old_center = self._last_zoom_center
 
+            # When the image fits the viewport the label is expanded to fill it and
+            # the pixmap is drawn centred at (old_offset_x, old_offset_y) inside the
+            # label.  When the image overflows the label equals the pixmap size and
+            # the pixmap starts at the label origin (offset = 0).
             old_offset_x = (viewport_size.width() - old_display_size.width()) / 2
             old_offset_y = (viewport_size.height() - old_display_size.height()) / 2
+            actual_old_offset_x = max(0.0, old_offset_x)
+            actual_old_offset_y = max(0.0, old_offset_y)
 
-            point_x = old_center.x() - old_offset_x
-            point_y = old_center.y() - old_offset_y
+            scroll_old_x = float(self.scroll_area.horizontalScrollBar().value())
+            scroll_old_y = float(self.scroll_area.verticalScrollBar().value())
+
+            # Coordinate of the zoom-centre point within the old pixmap.
+            pixmap_center_x = scroll_old_x + old_center.x() - actual_old_offset_x
+            pixmap_center_y = scroll_old_y + old_center.y() - actual_old_offset_y
 
             if (
-                point_x >= 0
-                and point_y >= 0
-                and point_x <= old_display_size.width()
-                and point_y <= old_display_size.height()
+                0 <= pixmap_center_x <= old_display_size.width()
+                and 0 <= pixmap_center_y <= old_display_size.height()
             ):
                 scale_x = new_display_size.width() / old_display_size.width()
                 scale_y = new_display_size.height() / old_display_size.height()
 
-                new_offset_x = (viewport_size.width() - new_display_size.width()) / 2
-                new_offset_y = (viewport_size.height() - new_display_size.height()) / 2
+                # Keep the same pixmap pixel at the zoom-centre viewport position.
+                new_scroll_x = pixmap_center_x * scale_x - old_center.x()
+                new_scroll_y = pixmap_center_y * scale_y - old_center.y()
 
-                new_scroll_x = new_offset_x + (point_x - old_offset_x) * scale_x
-                new_scroll_y = new_offset_y + (point_y - old_offset_y) * scale_y
+                max_scroll_x = max(0, new_display_size.width() - viewport_size.width())
+                max_scroll_y = max(
+                    0, new_display_size.height() - viewport_size.height()
+                )
 
-                new_scroll_x = max(
-                    0,
-                    min(new_scroll_x, new_display_size.width() - viewport_size.width()),
-                )
-                new_scroll_y = max(
-                    0,
-                    min(
-                        new_scroll_y, new_display_size.height() - viewport_size.height()
-                    ),
-                )
+                new_scroll_x = max(0.0, min(new_scroll_x, max_scroll_x))
+                new_scroll_y = max(0.0, min(new_scroll_y, max_scroll_y))
 
                 self.image_label.setPixmap(scaled_pixmap)
+                # Pre-set the scroll bar ranges before calling setValue so the
+                # value is not clamped to the pre-resize range of [0, 0].  Qt
+                # will recompute the same ranges asynchronously when it processes
+                # the layout request posted by setPixmap.
+                self.scroll_area.horizontalScrollBar().setRange(0, max_scroll_x)
+                self.scroll_area.verticalScrollBar().setRange(0, max_scroll_y)
                 self.scroll_area.horizontalScrollBar().setValue(int(new_scroll_x))
                 self.scroll_area.verticalScrollBar().setValue(int(new_scroll_y))
             else:

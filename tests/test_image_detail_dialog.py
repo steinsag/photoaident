@@ -1449,7 +1449,7 @@ def test_zoom_out_zooms_to_visible_center(
 def test_zoom_in_smaller_image_zooms_to_center_of_image(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
-    """Zoom In on an image smaller than viewport zooms to center of the image."""
+    """Zoom In on an image smaller than viewport zooms to center of the viewport."""
     db_image = _make_db_image(tmp_path, 1, "small.jpg", "red", size=(100, 100))
     dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
@@ -1468,7 +1468,7 @@ def test_zoom_in_smaller_image_zooms_to_center_of_image(
 def test_zoom_out_smaller_image_zooms_to_center_of_image(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
-    """Zoom Out on an image smaller than viewport zooms to center of the image."""
+    """Zoom Out on an image smaller than viewport zooms to center of the viewport."""
     db_image = _make_db_image(tmp_path, 1, "small.jpg", "red", size=(100, 100))
     dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
@@ -1514,7 +1514,7 @@ def test_zoom_100_zooms_to_image_center(
 def test_get_visible_center_when_image_smaller_than_viewport(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
-    """When image is smaller than viewport, _get_visible_center returns image center."""
+    """_get_visible_center returns viewport center regardless of image size."""
     db_image = _make_db_image(tmp_path, 1, "tiny.jpg", "blue", size=(50, 50))
     dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
@@ -1522,10 +1522,11 @@ def test_get_visible_center_when_image_smaller_than_viewport(
     dialog._zoom_factor = 1.0
     dialog._update_image_display()
 
+    viewport_size = dialog.scroll_area.viewport().size()
     center = dialog._get_visible_center()
 
-    assert abs(center.x() - 25) < 1
-    assert abs(center.y() - 25) < 1
+    assert abs(center.x() - viewport_size.width() / 2) < 1
+    assert abs(center.y() - viewport_size.height() / 2) < 1
 
 
 def test_get_visible_center_with_scrolled_image(
@@ -1651,60 +1652,18 @@ def test_add_meta_row_skips_none_value(
     assert layout.count() == initial_count
 
 
-def test_get_visible_center_returns_origin_when_no_pixmap():
-    """_get_visible_center returns (0, 0) when _original_pixmap is None."""
+def test_get_visible_center_returns_viewport_center():
+    """_get_visible_center always returns the geometric center of the viewport."""
     dialog = ImageDetailDialog.__new__(ImageDetailDialog)
-    dialog._original_pixmap = None
+    mock_viewport = MagicMock()
+    mock_viewport.size.return_value = QtCore.QSize(800, 600)
     dialog.scroll_area = MagicMock()
+    dialog.scroll_area.viewport.return_value = mock_viewport
 
     result = dialog._get_visible_center()
-    assert result.x() == 0 and result.y() == 0
 
-
-def test_get_visible_center_returns_origin_when_display_pixmap_null(
-    qtbot, session_factory, vector_store, tmp_app_paths
-):
-    """_get_visible_center returns (0, 0) when display pixmap is null."""
-    db_image = Image(id=1, file_path="/nonexistent.jpg", file_size=0)
-    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
-
-    dialog._original_pixmap = QtGui.QPixmap(100, 100)
-
-    with patch.object(
-        dialog.scroll_area,
-        "viewport",
-        return_value=MagicMock(size=MagicMock(return_value=QtCore.QSize(800, 600))),
-    ):
-        with patch.object(dialog.image_label, "pixmap", return_value=QtGui.QPixmap()):
-            result = dialog._get_visible_center()
-            assert result.x() == 0 and result.y() == 0
-
-
-def test_get_visible_center_returns_origin_when_display_size_invalid(
-    qtbot, session_factory, vector_store, tmp_app_paths
-):
-    """_get_visible_center returns (0, 0) when display size is invalid."""
-    db_image = Image(id=1, file_path="/nonexistent.jpg", file_size=0)
-    dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
-    qtbot.add_widget(dialog)
-
-    dialog._original_pixmap = QtGui.QPixmap(100, 100)
-
-    mock_display_pixmap = MagicMock()
-    mock_display_pixmap.isNull.return_value = False
-    mock_display_pixmap.size.return_value = QtCore.QSize(0, 0)
-
-    with patch.object(
-        dialog.scroll_area,
-        "viewport",
-        return_value=MagicMock(size=MagicMock(return_value=QtCore.QSize(800, 600))),
-    ):
-        with patch.object(
-            dialog.image_label, "pixmap", return_value=mock_display_pixmap
-        ):
-            result = dialog._get_visible_center()
-            assert result.x() == 0 and result.y() == 0
+    assert result.x() == 400
+    assert result.y() == 300
 
 
 def test_get_image_center_returns_origin_when_no_pixmap():
