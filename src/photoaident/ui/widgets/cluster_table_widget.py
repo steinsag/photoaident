@@ -84,7 +84,7 @@ class ClusterTableWidget(QtWidgets.QWidget):
             name_item.setData(QtCore.Qt.ItemDataRole.UserRole, cluster)
             if age_key in scores:
                 score = scores[age_key]
-                score_item.setText(f"{score:.3f}")
+                score_item.setText(f"{score:.0%}")
                 if score > best_score:
                     best_score = score
                     best_row = row

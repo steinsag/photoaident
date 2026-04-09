@@ -2,6 +2,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
+import re
+
 import pytest
 from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import select
@@ -402,8 +404,9 @@ def test_on_person_selected_with_embedding_shows_scores(
     score_item = page._cluster_table.item(adult_row, 1)
     assert score_item is not None
     text = score_item.text()
-    assert text != "\u2014"
-    float(text)  # must be parseable as float
+    assert re.fullmatch(
+        r"-?\d+%", text
+    ), f"Expected numeric score ending with '%', got {text!r}"
 
 
 def test_on_person_selected_preselects_best_cluster(
