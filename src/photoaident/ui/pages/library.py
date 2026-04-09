@@ -46,7 +46,6 @@ class LibraryPage(QtWidgets.QWidget):
             self.tr("Search by file name or path")
         )
         self.search_button = QtWidgets.QPushButton(self.tr("Search"))
-        self.search_button.setDefault(True)
         self.search_button.setEnabled(False)
         self.filepath_search_edit.textChanged.connect(
             lambda text: self.search_button.setEnabled(bool(text.strip()))
