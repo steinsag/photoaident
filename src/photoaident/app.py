@@ -95,15 +95,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 raise CorruptIndexError(self._paths.faiss_path) from exc
         if faiss_loaded:
             if self._vector_store.needs_migration():
-                logger.warning("Migrating FAISS index to database-driven IDs...")
+                logger.info("Migrating FAISS index to database-driven IDs...")
                 self._vector_store = rebuild_faiss_with_face_ids(
                     self._vector_store,
                     self._session_factory,
                 )
                 self._vector_store.save(self._paths.faiss_path)
-                logger.warning("FAISS index migration finished.")
+                logger.info("FAISS index migration finished.")
             else:
-                logger.warning("FAISS index already migrated, no migration needed.")
+                logger.debug("FAISS index already migrated, no migration needed.")
             backfill_cluster_means(self._session_factory, self._vector_store)
 
         self.setWindowTitle(self.tr("PhotoAIdent"))

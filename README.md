@@ -63,6 +63,12 @@ The status bar at the bottom of the window confirms which provider is active.
 
     uv run photoaident
 
+To increase logging verbosity (e.g. for debugging):
+
+    uv run photoaident --log-level DEBUG
+
+Available levels: `DEBUG`, `INFO`, `WARNING` (default), `ERROR`, `CRITICAL`.
+
 ## Verify (format, lint, type-check, tests)
 
 One command to auto-fix formatting/lints, run type checks, and tests:
