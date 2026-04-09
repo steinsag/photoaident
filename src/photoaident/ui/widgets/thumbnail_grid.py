@@ -315,9 +315,9 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self._all_results: list[SearchResult] = []
         self._loaded_count: int = 0
 
-        self.scroll_area.verticalScrollBar().valueChanged.connect(
-            self._on_scroll_changed
-        )
+        vbar = self.scroll_area.verticalScrollBar()
+        vbar.valueChanged.connect(self._on_scroll_changed)
+        vbar.rangeChanged.connect(self._on_scroll_range_changed)
 
         self.image_selected.connect(self._on_image_selected)
 
@@ -463,6 +463,10 @@ class ThumbnailGrid(QtWidgets.QWidget):
             and self._loaded_count < len(self._all_results)
         ):
             self._load_next_page()
+
+    def _on_scroll_range_changed(self, _min: int, max: int) -> None:
+        if max == 0 and self._loaded_count < len(self._all_results):
+            self._check_fill_viewport()
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
