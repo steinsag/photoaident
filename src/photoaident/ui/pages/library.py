@@ -47,6 +47,10 @@ class LibraryPage(QtWidgets.QWidget):
         )
         self.search_button = QtWidgets.QPushButton(self.tr("Search"))
         self.search_button.setDefault(True)
+        self.search_button.setEnabled(False)
+        self.filepath_search_edit.textChanged.connect(
+            lambda text: self.search_button.setEnabled(bool(text.strip()))
+        )
         self.filepath_search_edit.returnPressed.connect(self.search_button.click)
         self.search_button.clicked.connect(self.load_images)
         search_bar_layout.addWidget(self.filepath_search_edit)
