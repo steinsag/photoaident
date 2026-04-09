@@ -942,3 +942,60 @@ def test_changing_sort_combo_reorders_displayed_thumbnails(
     grid._sort_combo.setCurrentIndex(grid._sort_entries.index(SortOrder.FILENAME_ASC))
 
     assert grid._all_results[0].image_id == 2  # /a_img.jpg first
+
+
+def test_scroll_range_changed_triggers_fill_when_maximum_is_zero(
+    qtbot,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
+):
+    """When rangeChanged fires with max==0 and more results exist, load more pages.
+
+    This reproduces the original regression: after a sort-change that causes
+    layout recalculation, the first page may not make the scrollbar scrollable
+    (maximum==0). The rangeChanged handler defers a fill-check so the event loop
+    settles before re-checking the scrollbar state.
+    """
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    results = [
+        SearchResult(i, str(tmp_path / f"img{i}.jpg"), tmp_path / f"t{i}.jpg")
+        for i in range(100)
+    ]
+    grid.set_results(results)
+
+    assert grid._loaded_count == PAGE_SIZE
+    assert grid.scroll_area.verticalScrollBar().maximum() == 0
+
+    grid._on_scroll_range_changed(0, 0)
+    assert grid._loaded_count == PAGE_SIZE
+
+    QtWidgets.QApplication.processEvents()
+    assert grid._loaded_count > PAGE_SIZE
+
+
+def test_scroll_range_changed_does_not_fire_when_maximum_nonzero(
+    qtbot,
+    tmp_path,
+    mock_session_factory,
+    mock_vector_store,
+    tmp_app_paths,
+):
+    """When rangeChanged fires with max>0, no deferred fill is scheduled."""
+    grid = ThumbnailGrid(mock_session_factory, mock_vector_store, tmp_app_paths)
+    qtbot.addWidget(grid)
+
+    results = [
+        SearchResult(i, str(tmp_path / f"img{i}.jpg"), tmp_path / f"t{i}.jpg")
+        for i in range(100)
+    ]
+    grid.set_results(results)
+
+    initial_count = grid._loaded_count
+
+    grid._on_scroll_range_changed(0, 100)
+
+    assert grid._loaded_count == initial_count
