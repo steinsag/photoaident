@@ -146,6 +146,7 @@ class FilterPanel(QtWidgets.QFrame):
         self._update_map_button()
         self._date_range = None
         self._update_time_button()
+        self.search_edit.clear()
         self.person_list_widget.blockSignals(True)
         self.person_list_widget.clearSelection()
         self.person_list_widget.blockSignals(False)
