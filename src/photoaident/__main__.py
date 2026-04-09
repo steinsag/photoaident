@@ -1,3 +1,4 @@
+import argparse  # pragma: no cover
 import logging  # pragma: no cover
 import os
 import platform
@@ -113,8 +114,21 @@ def _fix_macos_app_name() -> None:  # pragma: no cover
         pass  # Non-fatal — silently skip on unexpected environments
 
 
-def _setup_logging() -> None:  # pragma: no cover
-    level = logging.DEBUG if os.environ.get("PHOTOAIDENT_DEBUG") else logging.WARNING
+def _parse_args() -> argparse.Namespace:
+    """Parse command-line arguments, ignoring unknown Qt flags."""
+    parser = argparse.ArgumentParser(prog="photoaident", add_help=True)
+    parser.add_argument(
+        "--log-level",
+        default="WARNING",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        metavar="LEVEL",
+        help="Logging verbosity level (default: WARNING)",
+    )
+    args, _ = parser.parse_known_args()
+    return args
+
+
+def _setup_logging(level: str) -> None:  # pragma: no cover
     logging.basicConfig(
         level=level,
         format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
@@ -123,7 +137,8 @@ def _setup_logging() -> None:  # pragma: no cover
 
 
 def main():  # pragma: no cover
-    _setup_logging()
+    args = _parse_args()
+    _setup_logging(args.log_level)
     ensure_nvidia_paths()
     if sys.platform == "darwin":
         _fix_macos_app_name()
