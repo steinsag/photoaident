@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 import pytest
 from PIL import Image as PILImage
 
-from photoaident.utils.image_utils import generate_thumbnail, open_image
+from photoaident.utils.image_utils import (
+    extract_and_save_face_crop,
+    generate_thumbnail,
+    open_image,
+)
 
 # EXIF tag number for Orientation
 _EXIF_ORIENTATION_TAG = 274
@@ -228,3 +232,142 @@ def test_generate_thumbnail_preserves_aspect_ratio(tmp_path):
         ratio_src = 200 / 100
         ratio_thumb = img.width / img.height
         assert abs(ratio_thumb - ratio_src) < 0.1
+
+
+# ===========================================================================
+# extract_and_save_face_crop
+# ===========================================================================
+
+
+def _make_pil_image(size: tuple[int, int] = (300, 300)) -> PILImage.Image:
+    """Return a small solid-red PIL Image."""
+    return PILImage.new("RGB", size, color=(255, 0, 0))
+
+
+def test_extract_and_save_face_crop_success_returns_true(tmp_path):
+    """extract_and_save_face_crop returns True when FaceEmbedder succeeds."""
+    output_path = tmp_path / "out" / "crop.jpg"
+    pil_image = _make_pil_image()
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        return_value=pil_image,
+    ):
+        result = extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(10, 20, 50, 60),
+            output_path=output_path,
+        )
+
+    assert result is True
+
+
+def test_extract_and_save_face_crop_success_creates_jpeg(tmp_path):
+    """extract_and_save_face_crop writes a valid JPEG file at output_path."""
+    output_path = tmp_path / "faces" / "crop.jpg"
+    pil_image = _make_pil_image()
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        return_value=pil_image,
+    ):
+        extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(10, 20, 50, 60),
+            output_path=output_path,
+        )
+
+    assert output_path.exists()
+    with PILImage.open(output_path) as img:
+        assert img.format == "JPEG"
+
+
+def test_extract_and_save_face_crop_creates_intermediate_directories(tmp_path):
+    """extract_and_save_face_crop creates missing parent directories."""
+    output_path = tmp_path / "a" / "b" / "c" / "crop.jpg"
+    assert not output_path.parent.exists()
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        return_value=_make_pil_image(),
+    ):
+        extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(0, 0, 100, 100),
+            output_path=output_path,
+        )
+
+    assert output_path.exists()
+
+
+def test_extract_and_save_face_crop_bbox_conversion(tmp_path):
+    """extract_and_save_face_crop converts (x, y, w, h) to [x, y, x+w, y+h]."""
+    output_path = tmp_path / "crop.jpg"
+    mock_extract = MagicMock(return_value=_make_pil_image())
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        mock_extract,
+    ):
+        extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(10, 20, 50, 60),
+            output_path=output_path,
+        )
+
+    _, xyxy_arg, _ = mock_extract.call_args.args
+    assert xyxy_arg == [10, 20, 60, 80]
+
+
+def test_extract_and_save_face_crop_passes_target_size(tmp_path):
+    """extract_and_save_face_crop forwards target_size to FaceEmbedder."""
+    output_path = tmp_path / "crop.jpg"
+    mock_extract = MagicMock(return_value=_make_pil_image())
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        mock_extract,
+    ):
+        extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(0, 0, 50, 50),
+            output_path=output_path,
+            target_size=(128, 128),
+        )
+
+    _, _, size_arg = mock_extract.call_args.args
+    assert size_arg == (128, 128)
+
+
+def test_extract_and_save_face_crop_exception_returns_false(tmp_path):
+    """extract_and_save_face_crop returns False when FaceEmbedder raises."""
+    output_path = tmp_path / "crop.jpg"
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        side_effect=RuntimeError("ONNX exploded"),
+    ):
+        result = extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(0, 0, 50, 50),
+            output_path=output_path,
+        )
+
+    assert result is False
+
+
+def test_extract_and_save_face_crop_exception_no_file_created(tmp_path):
+    """extract_and_save_face_crop does not create output_path on failure."""
+    output_path = tmp_path / "crop.jpg"
+
+    with patch(
+        "photoaident.core.embeddings.FaceEmbedder.extract_face_crop",
+        side_effect=RuntimeError("ONNX exploded"),
+    ):
+        extract_and_save_face_crop(
+            image_path=tmp_path / "photo.jpg",
+            bbox=(0, 0, 50, 50),
+            output_path=output_path,
+        )
+
+    assert not output_path.exists()

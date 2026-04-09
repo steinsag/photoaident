@@ -96,7 +96,7 @@ class FaceEmbedder:
 
     @staticmethod
     def extract_face_crop(
-        image_path: Path, bbox: list[int], target_size: tuple[int, int] = (224, 224)
+        image_path: Path, bbox: list[int], target_size: tuple[int, int] = (300, 300)
     ) -> Image.Image:
         """Extract and resize a face crop from an image.
 

@@ -231,7 +231,7 @@ class LabellingPage(QtWidgets.QWidget):
         )
 
         self._image_preview.load(face_data.image_path, face_data.bbox)
-        self._face_crop.load(face_data.crop_path)
+        self._face_crop.load(face_data.crop_path, face_data.image_path, face_data.bbox)
         self._set_buttons_enabled(True)
         self._refresh_cluster_selection()
 

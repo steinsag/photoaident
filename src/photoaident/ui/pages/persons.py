@@ -16,6 +16,7 @@ from photoaident.db.database import (
     Person,
 )
 from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
+from photoaident.utils.image_utils import extract_and_save_face_crop
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -47,12 +48,16 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         crop_path: Path,
         cluster_id: int,
         other_clusters: list[tuple[int, str]],
+        image_path: Path,
+        bbox: tuple[int, int, int, int],
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._face_id = face_id
         self._cluster_id = cluster_id
         self._other_clusters = other_clusters
+        self._image_path = image_path
+        self._bbox = bbox
         self.setFixedWidth(140)
         self._setup_ui(crop_path)
 
@@ -65,18 +70,7 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         self._image_label = QtWidgets.QLabel()
         self._image_label.setFixedSize(120, 120)
         self._image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        pixmap = QtGui.QPixmap(str(crop_path))
-        if pixmap.isNull():
-            self._image_label.setText("?")
-        else:
-            self._image_label.setPixmap(
-                pixmap.scaled(
-                    120,
-                    120,
-                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                    QtCore.Qt.TransformationMode.SmoothTransformation,
-                )
-            )
+        self._load_crop(crop_path)
         layout.addWidget(self._image_label)
 
         # Pending action text (hidden by default)
@@ -96,6 +90,25 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         self._move_btn.setEnabled(bool(self._other_clusters))
         self._move_btn.clicked.connect(self._on_move_clicked)
         layout.addWidget(self._move_btn)
+
+    def _load_crop(self, crop_path: Path) -> None:
+        """Load the face crop into the image label, regenerating if missing."""
+        if not crop_path.exists() and self._image_path.exists():
+            extract_and_save_face_crop(self._image_path, self._bbox, crop_path)
+
+        if crop_path.exists():
+            pixmap = QtGui.QPixmap(str(crop_path))
+            if not pixmap.isNull():
+                self._image_label.setPixmap(
+                    pixmap.scaled(
+                        120,
+                        120,
+                        QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                        QtCore.Qt.TransformationMode.SmoothTransformation,
+                    )
+                )
+                return
+        self._image_label.setText(self.tr("No image"))
 
     def set_pending(self, change: _PendingChange | None) -> None:
         """Update the visual state to reflect a staged change (or clear it)."""
@@ -374,11 +387,20 @@ class PersonsPage(QtWidgets.QWidget):
         self,
         session: "Session",
         person_id: int,
-    ) -> tuple[str, list[tuple[int, str, list[tuple[int, Path]]]]] | None:
+    ) -> (
+        tuple[
+            str,
+            list[
+                tuple[int, str, list[tuple[int, Path, Path, tuple[int, int, int, int]]]]
+            ],
+        ]
+        | None
+    ):
         """Query person name and per-cluster face data from DB.
 
         Returns ``(person_name, cluster_data)`` where each entry in
-        ``cluster_data`` is ``(cluster_id, label, [(face_id, crop_path), ...])``,
+        ``cluster_data`` is
+        ``(cluster_id, label, [(face_id, crop_path, image_path, bbox), ...])``,
         or ``None`` if the person no longer exists.
         """
         person = session.get(Person, person_id)
@@ -390,7 +412,7 @@ class PersonsPage(QtWidgets.QWidget):
             session.execute(
                 select(EmbeddingCluster)
                 .where(EmbeddingCluster.person_id == person_id)
-                .options(selectinload(EmbeddingCluster.faces))
+                .options(selectinload(EmbeddingCluster.faces).selectinload(Face.image))
             )
             .scalars()
             .all()
@@ -403,7 +425,9 @@ class PersonsPage(QtWidgets.QWidget):
             label = display_labels.get(age_key, age_key)
             cluster_id_to_label[cluster.id] = label
 
-        cluster_data: list[tuple[int, str, list[tuple[int, Path]]]] = []
+        cluster_data: list[
+            tuple[int, str, list[tuple[int, Path, Path, tuple[int, int, int, int]]]]
+        ] = []
         for age_key in AGE_CLUSTERS:
             matched = [c for c in clusters if c.age_group == age_key]
             if not matched:
@@ -416,7 +440,13 @@ class PersonsPage(QtWidgets.QWidget):
                 if f.state == FaceState.IDENTIFIED and f.deleted_at is None
             ]
             face_paths = [
-                (f.id, self.paths.face_crops_dir / f"{f.id}.jpg") for f in ref_faces
+                (
+                    f.id,
+                    self.paths.face_crops_dir / f"{f.id}.jpg",
+                    Path(f.image.file_path),
+                    (f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h),
+                )
+                for f in ref_faces
             ]
             cluster_data.append((cluster.id, label, face_paths))
 
@@ -469,7 +499,7 @@ class PersonsPage(QtWidgets.QWidget):
         self,
         cluster_id: int,
         label: str,
-        face_paths: list[tuple[int, Path]],
+        face_paths: list[tuple[int, Path, Path, tuple[int, int, int, int]]],
         other_clusters: list[tuple[int, str]],
     ) -> QtWidgets.QGroupBox:
         group = QtWidgets.QGroupBox(label)
@@ -481,12 +511,14 @@ class PersonsPage(QtWidgets.QWidget):
             placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             h_layout.addWidget(placeholder)
         else:
-            for face_id, crop_path in face_paths:
+            for face_id, crop_path, image_path, bbox in face_paths:
                 widget = ReferenceFaceWidget(
                     face_id=face_id,
                     crop_path=crop_path,
                     cluster_id=cluster_id,
                     other_clusters=other_clusters,
+                    image_path=image_path,
+                    bbox=bbox,
                 )
                 widget.remove_requested.connect(self._on_remove_requested)
                 widget.move_requested.connect(self._on_move_requested)

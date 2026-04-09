@@ -718,6 +718,10 @@ To get started, please select your photo collection folder.</translation>
         <translation>Move to…</translation>
     </message>
     <message>
+        <source>No image</source>
+        <translation>No image</translation>
+    </message>
+    <message>
         <source>Will be removed</source>
         <translation>Will be removed</translation>
     </message>

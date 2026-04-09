@@ -720,6 +720,10 @@ Bitte wähle zunächst den Ordner deiner Fotosammlung aus.</translation>
         <translation>Verschieben nach…</translation>
     </message>
     <message>
+        <source>No image</source>
+        <translation>Kein Bild</translation>
+    </message>
+    <message>
         <source>Will be removed</source>
         <translation>Wird entfernt</translation>
     </message>
