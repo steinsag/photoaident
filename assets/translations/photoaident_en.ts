@@ -435,6 +435,10 @@ Please close it before starting a new one.</translation>
         <translation>Search</translation>
     </message>
     <message>
+        <source>Reset</source>
+        <translation>Reset</translation>
+    </message>
+    <message>
         <source>Select a person, location, or time range to start searching.</source>
         <translation>Select a person, location, or time range to start searching.</translation>
     </message>

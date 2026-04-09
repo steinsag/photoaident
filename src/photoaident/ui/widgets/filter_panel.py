@@ -140,6 +140,16 @@ class FilterPanel(QtWidgets.QFrame):
             for item in self.person_list_widget.selectedItems()
         ]
 
+    def clear_all_filters(self) -> None:
+        """Clear all active filters and update UI without emitting change signals."""
+        self._gps_bbox = None
+        self._update_map_button()
+        self._date_range = None
+        self._update_time_button()
+        self.person_list_widget.blockSignals(True)
+        self.person_list_widget.clearSelection()
+        self.person_list_widget.blockSignals(False)
+
     def _populate_person_list(self) -> None:
         """Reload the person list from the database, preserving current selection."""
         selected_ids = set(self.selected_person_ids())

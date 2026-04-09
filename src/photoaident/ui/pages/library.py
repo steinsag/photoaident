@@ -51,10 +51,15 @@ class LibraryPage(QtWidgets.QWidget):
         self.filepath_search_edit.textChanged.connect(
             lambda text: self.search_button.setEnabled(bool(text.strip()))
         )
+        self.filepath_search_edit.textChanged.connect(self._update_reset_button)
         self.filepath_search_edit.returnPressed.connect(self.search_button.click)
         self.search_button.clicked.connect(self.load_images)
+        self.reset_button = QtWidgets.QPushButton(self.tr("Reset"))
+        self.reset_button.setEnabled(False)
+        self.reset_button.clicked.connect(self._reset_all_filters)
         search_bar_layout.addWidget(self.filepath_search_edit)
         search_bar_layout.addWidget(self.search_button)
+        search_bar_layout.addWidget(self.reset_button)
         center_layout.addLayout(search_bar_layout)
 
         # Image grid
@@ -91,8 +96,20 @@ class LibraryPage(QtWidgets.QWidget):
             or bool(self.filepath_search_edit.text().strip())
         )
 
+    def _update_reset_button(self) -> None:
+        """Enable or disable the Reset button based on whether any filter is active."""
+        self.reset_button.setEnabled(self._has_filters())
+
+    def _reset_all_filters(self) -> None:
+        """Clear all active search filters and reload images."""
+        self.filter_panel.clear_all_filters()
+        self.filepath_search_edit.clear()
+        self.load_images()
+
     def load_images(self) -> None:
         """Fetch search results and update the UI accordingly."""
+        self._update_reset_button()
+
         if not self._has_filters():
             self.grid.clear()
             self.grid.setVisible(False)
