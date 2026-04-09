@@ -39,19 +39,19 @@ class LibraryPage(QtWidgets.QWidget):
         center_layout = QtWidgets.QVBoxLayout(center_area)
         center_layout.setContentsMargins(0, 0, 0, 0)
 
-        # File path/name search with 300 ms debounce
+        # File path/name search with explicit Search button
+        search_bar_layout = QtWidgets.QHBoxLayout()
         self.filepath_search_edit = QtWidgets.QLineEdit()
         self.filepath_search_edit.setPlaceholderText(
             self.tr("Search by file name or path")
         )
-        self._keyword_debounce_timer = QtCore.QTimer(self)
-        self._keyword_debounce_timer.setSingleShot(True)
-        self._keyword_debounce_timer.setInterval(300)
-        self._keyword_debounce_timer.timeout.connect(self.load_images)
-        self.filepath_search_edit.textChanged.connect(
-            lambda _: self._keyword_debounce_timer.start()
-        )
-        center_layout.addWidget(self.filepath_search_edit)
+        self.search_button = QtWidgets.QPushButton(self.tr("Search"))
+        self.search_button.setDefault(True)
+        self.filepath_search_edit.returnPressed.connect(self.search_button.click)
+        self.search_button.clicked.connect(self.load_images)
+        search_bar_layout.addWidget(self.filepath_search_edit)
+        search_bar_layout.addWidget(self.search_button)
+        center_layout.addLayout(search_bar_layout)
 
         # Image grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self._paths)

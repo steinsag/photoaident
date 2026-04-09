@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -522,7 +522,6 @@ def test_keyword_search_passes_query_to_search(
     qtbot.addWidget(page)
 
     page.filepath_search_edit.setText("New York")
-    page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
@@ -542,7 +541,6 @@ def test_keyword_search_empty_passes_none(
     # Need at least one other filter active so load_images actually calls search
     page.filter_panel._date_range = DateRange(start_year=2020)
     page.filepath_search_edit.clear()
-    page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
@@ -552,13 +550,16 @@ def test_keyword_search_empty_passes_none(
         assert mock_search.call_args[1]["filename_query"] is None
 
 
-def test_keyword_search_debounce_timer_configured(
+def test_search_button_triggers_load_images(
     qtbot, session_factory, tmp_app_paths, vector_store
 ):
-    """The debounce timer exists, is single-shot, and has a 300 ms interval."""
+    """Clicking the Search button triggers load_images."""
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    assert hasattr(page, "_keyword_debounce_timer")
-    assert page._keyword_debounce_timer.isSingleShot()
-    assert page._keyword_debounce_timer.interval() == 300
+    page.filepath_search_edit.setText("beach")
+    with patch("photoaident.ui.pages.library.search_images") as mock_search:
+        mock_search.return_value = []
+        qtbot.mouseClick(page.search_button, QtCore.Qt.MouseButton.LeftButton)
+        mock_search.assert_called_once()
+        assert mock_search.call_args[1]["filename_query"] == "beach"
