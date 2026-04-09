@@ -2,7 +2,7 @@
 
 from unittest.mock import patch
 
-from PySide6 import QtWidgets
+from PySide6 import QtCore, QtWidgets
 
 from photoaident.core.date_range import DateRange
 from photoaident.core.geo import GpsBoundingBox
@@ -522,7 +522,6 @@ def test_keyword_search_passes_query_to_search(
     qtbot.addWidget(page)
 
     page.filepath_search_edit.setText("New York")
-    page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
@@ -542,7 +541,6 @@ def test_keyword_search_empty_passes_none(
     # Need at least one other filter active so load_images actually calls search
     page.filter_panel._date_range = DateRange(start_year=2020)
     page.filepath_search_edit.clear()
-    page._keyword_debounce_timer.stop()  # prevent delayed fire inside patch context
 
     with patch("photoaident.ui.pages.library.search_images") as mock_search:
         mock_search.return_value = []
@@ -552,13 +550,153 @@ def test_keyword_search_empty_passes_none(
         assert mock_search.call_args[1]["filename_query"] is None
 
 
-def test_keyword_search_debounce_timer_configured(
+def test_search_button_triggers_load_images(
     qtbot, session_factory, tmp_app_paths, vector_store
 ):
-    """The debounce timer exists, is single-shot, and has a 300 ms interval."""
+    """Clicking the Search button triggers load_images."""
     page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
     qtbot.addWidget(page)
 
-    assert hasattr(page, "_keyword_debounce_timer")
-    assert page._keyword_debounce_timer.isSingleShot()
-    assert page._keyword_debounce_timer.interval() == 300
+    page.filepath_search_edit.setText("beach")
+    with patch("photoaident.ui.pages.library.search_images") as mock_search:
+        mock_search.return_value = []
+        qtbot.mouseClick(page.search_button, QtCore.Qt.MouseButton.LeftButton)
+        mock_search.assert_called_once()
+        assert mock_search.call_args[1]["filename_query"] == "beach"
+
+
+# --- Reset button tests ---
+
+
+def test_reset_button_initially_disabled(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset button is disabled when no filters are active."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    assert not page.reset_button.isEnabled()
+
+
+def test_reset_button_enabled_with_text_search(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset button becomes enabled when text is entered in the search field."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.filepath_search_edit.setText("vacation")
+    assert page.reset_button.isEnabled()
+
+    page.filepath_search_edit.clear()
+    assert not page.reset_button.isEnabled()
+
+
+def test_reset_button_enabled_with_person_selected(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset button becomes enabled when a person is selected."""
+    with session_factory() as session:
+        session.add(Person(name="Alice"))
+        session.commit()
+
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.filter_panel.person_list_widget.item(0).setSelected(True)
+    assert page.reset_button.isEnabled()
+
+
+def test_reset_button_enabled_with_gps_filter(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset button becomes enabled when a GPS bounding box is set."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.filter_panel._gps_bbox = GpsBoundingBox(
+        south=52.0, west=13.0, north=53.0, east=14.0
+    )
+    page.load_images()
+    assert page.reset_button.isEnabled()
+
+
+def test_reset_button_enabled_with_date_filter(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset button becomes enabled when a date range is set."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.filter_panel._date_range = DateRange(start_year=2020)
+    page.load_images()
+    assert page.reset_button.isEnabled()
+
+
+def test_reset_button_clears_all_filters(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Clicking Reset clears text search, GPS, date, and person filters."""
+    with session_factory() as session:
+        session.add(Person(name="Alice"))
+        session.commit()
+
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    # Activate all filter types
+    page.filepath_search_edit.setText("vacation")
+    page.filter_panel._gps_bbox = GpsBoundingBox(
+        south=52.0, west=13.0, north=53.0, east=14.0
+    )
+    page.filter_panel._date_range = DateRange(start_year=2020)
+    page.filter_panel.person_list_widget.item(0).setSelected(True)
+
+    assert page._has_filters()
+
+    qtbot.mouseClick(page.reset_button, QtCore.Qt.MouseButton.LeftButton)
+
+    assert page.filepath_search_edit.text() == ""
+    assert page.filter_panel.gps_bbox() is None
+    assert page.filter_panel.date_range() is None
+    assert page.filter_panel.selected_person_ids() == []
+
+
+def test_reset_button_disabled_after_reset(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset button is disabled again after clicking it."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.filter_panel._date_range = DateRange(start_year=2020)
+    page.load_images()
+    assert page.reset_button.isEnabled()
+
+    qtbot.mouseClick(page.reset_button, QtCore.Qt.MouseButton.LeftButton)
+    assert not page.reset_button.isEnabled()
+
+
+def test_reset_button_updates_map_and_time_buttons(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Reset clears the visual state of the map and time filter buttons."""
+    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
+    qtbot.addWidget(page)
+
+    page.filter_panel._gps_bbox = GpsBoundingBox(
+        south=10.0, west=10.0, north=20.0, east=20.0
+    )
+    page.filter_panel._update_map_button()
+    page.filter_panel._date_range = DateRange(start_year=2021)
+    page.filter_panel._update_time_button()
+    page._update_reset_button()  # sync enabled state after direct state mutation
+
+    assert not page.filter_panel.clear_location_btn.isHidden()
+    assert not page.filter_panel.clear_time_btn.isHidden()
+    assert page.reset_button.isEnabled()
+
+    qtbot.mouseClick(page.reset_button, QtCore.Qt.MouseButton.LeftButton)
+
+    assert page.filter_panel.clear_location_btn.isHidden()
+    assert page.filter_panel.clear_time_btn.isHidden()

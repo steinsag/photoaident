@@ -433,6 +433,14 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
         <translation>Nach Dateiname oder Pfad suchen</translation>
     </message>
     <message>
+        <source>Search</source>
+        <translation>Suchen</translation>
+    </message>
+    <message>
+        <source>Reset</source>
+        <translation>Zurücksetzen</translation>
+    </message>
+    <message>
         <source>Select a person, location, or time range to start searching.</source>
         <translation>Person, Standort oder Zeitraum auswählen, um die Suche zu starten.</translation>
     </message>

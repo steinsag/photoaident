@@ -39,19 +39,27 @@ class LibraryPage(QtWidgets.QWidget):
         center_layout = QtWidgets.QVBoxLayout(center_area)
         center_layout.setContentsMargins(0, 0, 0, 0)
 
-        # File path/name search with 300 ms debounce
+        # File path/name search with explicit Search button
+        search_bar_layout = QtWidgets.QHBoxLayout()
         self.filepath_search_edit = QtWidgets.QLineEdit()
         self.filepath_search_edit.setPlaceholderText(
             self.tr("Search by file name or path")
         )
-        self._keyword_debounce_timer = QtCore.QTimer(self)
-        self._keyword_debounce_timer.setSingleShot(True)
-        self._keyword_debounce_timer.setInterval(300)
-        self._keyword_debounce_timer.timeout.connect(self.load_images)
+        self.search_button = QtWidgets.QPushButton(self.tr("Search"))
+        self.search_button.setEnabled(False)
         self.filepath_search_edit.textChanged.connect(
-            lambda _: self._keyword_debounce_timer.start()
+            lambda text: self.search_button.setEnabled(bool(text.strip()))
         )
-        center_layout.addWidget(self.filepath_search_edit)
+        self.filepath_search_edit.textChanged.connect(self._update_reset_button)
+        self.filepath_search_edit.returnPressed.connect(self.search_button.click)
+        self.search_button.clicked.connect(self.load_images)
+        self.reset_button = QtWidgets.QPushButton(self.tr("Reset"))
+        self.reset_button.setEnabled(False)
+        self.reset_button.clicked.connect(self._reset_all_filters)
+        search_bar_layout.addWidget(self.filepath_search_edit)
+        search_bar_layout.addWidget(self.search_button)
+        search_bar_layout.addWidget(self.reset_button)
+        center_layout.addLayout(search_bar_layout)
 
         # Image grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self._paths)
@@ -87,8 +95,20 @@ class LibraryPage(QtWidgets.QWidget):
             or bool(self.filepath_search_edit.text().strip())
         )
 
+    def _update_reset_button(self) -> None:
+        """Enable or disable the Reset button based on whether any filter is active."""
+        self.reset_button.setEnabled(self._has_filters())
+
+    def _reset_all_filters(self) -> None:
+        """Clear all active search filters and reload images."""
+        self.filter_panel.clear_all_filters()
+        self.filepath_search_edit.clear()
+        self.load_images()
+
     def load_images(self) -> None:
         """Fetch search results and update the UI accordingly."""
+        self._update_reset_button()
+
         if not self._has_filters():
             self.grid.clear()
             self.grid.setVisible(False)
