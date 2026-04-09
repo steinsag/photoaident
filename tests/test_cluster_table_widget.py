@@ -47,7 +47,7 @@ def test_populate_sets_score_text_for_scored_cluster(qtbot):
     adult_row = AGE_CLUSTERS.index("adult")
     score_item = widget._table.item(adult_row, 1)
     assert score_item is not None
-    assert score_item.text() == "0.875"
+    assert score_item.text() == "88%"
 
 
 def test_populate_sets_dash_for_unscored_cluster(qtbot):
