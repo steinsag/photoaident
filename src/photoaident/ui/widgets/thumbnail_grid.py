@@ -314,10 +314,11 @@ class ThumbnailGrid(QtWidgets.QWidget):
 
         self._all_results: list[SearchResult] = []
         self._loaded_count: int = 0
+        self._loading_in_progress: bool = False
 
-        self.scroll_area.verticalScrollBar().valueChanged.connect(
-            self._on_scroll_changed
-        )
+        vbar = self.scroll_area.verticalScrollBar()
+        vbar.valueChanged.connect(self._on_scroll_changed)
+        vbar.rangeChanged.connect(self._on_scroll_range_changed)
 
         self.image_selected.connect(self._on_image_selected)
 
@@ -429,13 +430,21 @@ class ThumbnailGrid(QtWidgets.QWidget):
         self.results_changed.emit(len(self._all_results))
 
     def _load_next_page(self):
-        batch = self._all_results[self._loaded_count : self._loaded_count + PAGE_SIZE]
-        for result in batch:
-            self.add_thumbnail(result.image_id, result.file_path, result.thumb_path)
-        self._loaded_count += len(batch)
-        self._update_scroll_hint()
-        self.page_loaded.emit(self._loaded_count, len(self._all_results))
-        QtCore.QTimer.singleShot(0, self._check_fill_viewport)
+        if self._loading_in_progress:
+            return
+        self._loading_in_progress = True
+        try:
+            batch = self._all_results[
+                self._loaded_count : self._loaded_count + PAGE_SIZE
+            ]
+            for result in batch:
+                self.add_thumbnail(result.image_id, result.file_path, result.thumb_path)
+            self._loaded_count += len(batch)
+            self._update_scroll_hint()
+            self.page_loaded.emit(self._loaded_count, len(self._all_results))
+            QtCore.QTimer.singleShot(0, self._check_fill_viewport)
+        finally:
+            self._loading_in_progress = False
 
     def _check_fill_viewport(self):
         if not shiboken6.isValid(self):
@@ -463,6 +472,10 @@ class ThumbnailGrid(QtWidgets.QWidget):
             and self._loaded_count < len(self._all_results)
         ):
             self._load_next_page()
+
+    def _on_scroll_range_changed(self, _min: int, max_value: int) -> None:
+        if max_value == 0 and self._loaded_count < len(self._all_results):
+            QtCore.QTimer.singleShot(0, self._check_fill_viewport)
 
     def resizeEvent(self, event: QtGui.QResizeEvent):
         super().resizeEvent(event)
