@@ -45,6 +45,12 @@ class FaceCropWidget(QtWidgets.QLabel):
 
         if crop_path.exists():
             pix = QtGui.QPixmap(str(crop_path))
+            if pix.isNull() and image_path is not None and bbox is not None:
+                # Corrupt or unreadable cache file — remove and regenerate once.
+                crop_path.unlink(missing_ok=True)
+                if image_path.exists():
+                    extract_and_save_face_crop(image_path, bbox, crop_path)
+                pix = QtGui.QPixmap(str(crop_path)) if crop_path.exists() else pix
             if not pix.isNull():
                 self.setPixmap(
                     pix.scaled(

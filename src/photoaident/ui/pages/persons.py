@@ -98,6 +98,11 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
 
         if crop_path.exists():
             pixmap = QtGui.QPixmap(str(crop_path))
+            if pixmap.isNull() and self._image_path.exists():
+                # Corrupt or unreadable cache file — remove and regenerate once.
+                crop_path.unlink(missing_ok=True)
+                extract_and_save_face_crop(self._image_path, self._bbox, crop_path)
+                pixmap = QtGui.QPixmap(str(crop_path)) if crop_path.exists() else pixmap
             if not pixmap.isNull():
                 self._image_label.setPixmap(
                     pixmap.scaled(

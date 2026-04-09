@@ -214,3 +214,41 @@ def test_load_no_regeneration_when_crop_already_exists(qtbot, tmp_path):
 
     mock_extract.assert_not_called()
     assert not widget.pixmap().isNull()
+
+
+def test_load_corrupt_crop_regenerates_when_image_path_given(qtbot, tmp_path):
+    """load() deletes a corrupt crop and regenerates it when image_path/bbox given."""
+    crop_path = tmp_path / "faces" / "crop.jpg"
+    crop_path.parent.mkdir()
+    crop_path.write_bytes(b"not a jpeg")
+    image_path = tmp_path / "photo.jpg"
+    _write_real_jpeg(image_path)
+
+    with patch(
+        "photoaident.ui.widgets.face_crop_widget.extract_and_save_face_crop",
+        side_effect=_make_extract_side_effect(),
+    ) as mock_extract:
+        widget = FaceCropWidget()
+        qtbot.addWidget(widget)
+        widget.load(crop_path, image_path=image_path, bbox=(10, 20, 50, 60))
+
+    mock_extract.assert_called_once_with(image_path, (10, 20, 50, 60), crop_path)
+    assert not widget.pixmap().isNull()
+    assert widget.text() == ""
+
+
+def test_load_corrupt_crop_shows_placeholder_without_image_path(qtbot, tmp_path):
+    """load() falls back to placeholder for a corrupt crop when no image_path given."""
+    crop_path = tmp_path / "crop.jpg"
+    crop_path.write_bytes(b"not a jpeg")
+
+    with patch(
+        "photoaident.ui.widgets.face_crop_widget.extract_and_save_face_crop"
+    ) as mock_extract:
+        widget = FaceCropWidget()
+        qtbot.addWidget(widget)
+        widget.load(crop_path)
+
+    mock_extract.assert_not_called()
+    assert widget.pixmap().isNull()
+    assert widget.text() == widget.tr("No image")

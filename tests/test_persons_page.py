@@ -544,6 +544,64 @@ def test_reference_face_widget_valid_crop(tmp_path: Path, qtbot):
     assert not widget._image_label.pixmap().isNull()
 
 
+def test_reference_face_widget_corrupt_crop_regenerates(tmp_path: Path, qtbot):
+    """ReferenceFaceWidget deletes a corrupt crop and regenerates it from image_path."""
+    from PIL import Image as PILImage
+
+    crop_path = tmp_path / "face.jpg"
+    crop_path.write_bytes(b"not a jpeg")
+    image_path = tmp_path / "photo.jpg"
+    PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(image_path)
+
+    def _side_effect(_img, _bbox, output_path):
+        PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(output_path)
+        return True
+
+    with patch(
+        "photoaident.ui.pages.persons.extract_and_save_face_crop",
+        side_effect=_side_effect,
+    ) as mock_extract:
+        widget = ReferenceFaceWidget(
+            face_id=3,
+            crop_path=crop_path,
+            cluster_id=1,
+            other_clusters=[],
+            image_path=image_path,
+            bbox=(5, 10, 40, 80),
+        )
+        qtbot.addWidget(widget)
+
+    mock_extract.assert_called_once_with(image_path, (5, 10, 40, 80), crop_path)
+    assert widget._image_label.text() == ""
+    assert not widget._image_label.pixmap().isNull()
+
+
+def test_reference_face_widget_corrupt_crop_no_source_shows_placeholder(
+    tmp_path: Path, qtbot
+):
+    """ReferenceFaceWidget shows placeholder for corrupt crop when source is absent."""
+    crop_path = tmp_path / "face.jpg"
+    crop_path.write_bytes(b"not a jpeg")
+    image_path = tmp_path / "nonexistent_photo.jpg"
+    assert not image_path.exists()
+
+    with patch(
+        "photoaident.ui.pages.persons.extract_and_save_face_crop"
+    ) as mock_extract:
+        widget = ReferenceFaceWidget(
+            face_id=4,
+            crop_path=crop_path,
+            cluster_id=1,
+            other_clusters=[],
+            image_path=image_path,
+            bbox=(0, 0, 50, 50),
+        )
+        qtbot.addWidget(widget)
+
+    mock_extract.assert_not_called()
+    assert widget._image_label.text() == widget.tr("No image")
+
+
 def test_reference_face_remove_button_emits_signal(tmp_path: Path, qtbot):
     """Clicking _remove_btn emits remove_requested with the correct face_id."""
     crop_path = tmp_path / "missing.jpg"
