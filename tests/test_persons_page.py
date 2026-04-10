@@ -510,11 +510,16 @@ def test_reference_face_widget_missing_crop(tmp_path: Path, qtbot):
     assert not crop_path.exists()
 
     widget = ReferenceFaceWidget(
-        face_id=1, crop_path=crop_path, cluster_id=1, other_clusters=[]
+        face_id=1,
+        crop_path=crop_path,
+        cluster_id=1,
+        other_clusters=[],
+        image_path=tmp_path / "photo.jpg",
+        bbox=(0, 0, 50, 50),
     )
     qtbot.addWidget(widget)
 
-    assert widget._image_label.text() == "?"
+    assert widget._image_label.text() == widget.tr("No image")
 
 
 def test_reference_face_widget_valid_crop(tmp_path: Path, qtbot):
@@ -525,7 +530,12 @@ def test_reference_face_widget_valid_crop(tmp_path: Path, qtbot):
     PILImage.new("RGB", (120, 120), color=(128, 64, 32)).save(crop_path)
 
     widget = ReferenceFaceWidget(
-        face_id=2, crop_path=crop_path, cluster_id=1, other_clusters=[]
+        face_id=2,
+        crop_path=crop_path,
+        cluster_id=1,
+        other_clusters=[],
+        image_path=tmp_path / "photo.jpg",
+        bbox=(0, 0, 50, 50),
     )
     qtbot.addWidget(widget)
 
@@ -534,11 +544,70 @@ def test_reference_face_widget_valid_crop(tmp_path: Path, qtbot):
     assert not widget._image_label.pixmap().isNull()
 
 
+def test_reference_face_widget_corrupt_crop_regenerates(tmp_path: Path, qtbot):
+    """ReferenceFaceWidget heals a corrupt crop when image_path/bbox are provided."""
+    from PIL import Image as PILImage
+
+    crop_path = tmp_path / "face.jpg"
+    crop_path.write_bytes(b"not a jpeg")
+    image_path = tmp_path / "photo.jpg"
+    PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(image_path)
+
+    def _ensure_side_effect(out_crop_path, _image_path, _bbox):
+        PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(out_crop_path)
+        return True
+
+    with patch(
+        "photoaident.ui.widgets.face_crop_widget.ensure_face_crop",
+        side_effect=_ensure_side_effect,
+    ) as mock_ensure:
+        widget = ReferenceFaceWidget(
+            face_id=3,
+            crop_path=crop_path,
+            cluster_id=1,
+            other_clusters=[],
+            image_path=image_path,
+            bbox=(5, 10, 40, 80),
+        )
+        qtbot.addWidget(widget)
+
+    mock_ensure.assert_called_once_with(crop_path, image_path, (5, 10, 40, 80))
+    assert widget._image_label.text() == ""
+    assert not widget._image_label.pixmap().isNull()
+
+
+def test_reference_face_widget_corrupt_crop_no_source_shows_placeholder(
+    tmp_path: Path, qtbot
+):
+    """ReferenceFaceWidget shows placeholder for corrupt crop when source is absent."""
+    crop_path = tmp_path / "face.jpg"
+    crop_path.write_bytes(b"not a jpeg")
+    image_path = tmp_path / "nonexistent_photo.jpg"
+    assert not image_path.exists()
+
+    widget = ReferenceFaceWidget(
+        face_id=4,
+        crop_path=crop_path,
+        cluster_id=1,
+        other_clusters=[],
+        image_path=image_path,
+        bbox=(0, 0, 50, 50),
+    )
+    qtbot.addWidget(widget)
+
+    assert widget._image_label.text() == widget.tr("No image")
+
+
 def test_reference_face_remove_button_emits_signal(tmp_path: Path, qtbot):
     """Clicking _remove_btn emits remove_requested with the correct face_id."""
     crop_path = tmp_path / "missing.jpg"
     widget = ReferenceFaceWidget(
-        face_id=42, crop_path=crop_path, cluster_id=1, other_clusters=[]
+        face_id=42,
+        crop_path=crop_path,
+        cluster_id=1,
+        other_clusters=[],
+        image_path=tmp_path / "photo.jpg",
+        bbox=(0, 0, 50, 50),
     )
     qtbot.addWidget(widget)
 
@@ -558,6 +627,8 @@ def test_reference_face_move_button_emits_signal(tmp_path: Path, qtbot):
         crop_path=crop_path,
         cluster_id=1,
         other_clusters=[(2, "Infant"), (3, "Youngster")],
+        image_path=tmp_path / "photo.jpg",
+        bbox=(0, 0, 50, 50),
     )
     qtbot.addWidget(widget)
 

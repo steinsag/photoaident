@@ -3,7 +3,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -15,6 +15,7 @@ from photoaident.db.database import (
     FaceState,
     Person,
 )
+from photoaident.ui.widgets.face_crop_widget import FaceCropWidget
 from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
 
 if TYPE_CHECKING:
@@ -35,6 +36,21 @@ class _PendingChange:
     new_cluster_id: int | None  # only for MOVE
 
 
+@dataclass
+class _FaceEntry:
+    face_id: int
+    crop_path: Path
+    image_path: Path
+    bbox: tuple[int, int, int, int]
+
+
+@dataclass
+class _ClusterSection:
+    cluster_id: int
+    label: str
+    faces: list[_FaceEntry]
+
+
 class ReferenceFaceWidget(QtWidgets.QWidget):
     """Small tile showing one identified face with remove/move actions."""
 
@@ -47,12 +63,16 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         crop_path: Path,
         cluster_id: int,
         other_clusters: list[tuple[int, str]],
+        image_path: Path,
+        bbox: tuple[int, int, int, int],
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._face_id = face_id
         self._cluster_id = cluster_id
         self._other_clusters = other_clusters
+        self._image_path = image_path
+        self._bbox = bbox
         self.setFixedWidth(140)
         self._setup_ui(crop_path)
 
@@ -62,21 +82,8 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         layout.setSpacing(2)
 
         # Face crop image
-        self._image_label = QtWidgets.QLabel()
-        self._image_label.setFixedSize(120, 120)
-        self._image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        pixmap = QtGui.QPixmap(str(crop_path))
-        if pixmap.isNull():
-            self._image_label.setText("?")
-        else:
-            self._image_label.setPixmap(
-                pixmap.scaled(
-                    120,
-                    120,
-                    QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                    QtCore.Qt.TransformationMode.SmoothTransformation,
-                )
-            )
+        self._image_label = FaceCropWidget(size=120)
+        self._image_label.load(crop_path, self._image_path, self._bbox)
         layout.addWidget(self._image_label)
 
         # Pending action text (hidden by default)
@@ -374,12 +381,11 @@ class PersonsPage(QtWidgets.QWidget):
         self,
         session: "Session",
         person_id: int,
-    ) -> tuple[str, list[tuple[int, str, list[tuple[int, Path]]]]] | None:
+    ) -> tuple[str, list[_ClusterSection]] | None:
         """Query person name and per-cluster face data from DB.
 
-        Returns ``(person_name, cluster_data)`` where each entry in
-        ``cluster_data`` is ``(cluster_id, label, [(face_id, crop_path), ...])``,
-        or ``None`` if the person no longer exists.
+        Returns ``(person_name, sections)`` or ``None`` if the person no longer
+        exists.
         """
         person = session.get(Person, person_id)
         if person is None:
@@ -390,7 +396,7 @@ class PersonsPage(QtWidgets.QWidget):
             session.execute(
                 select(EmbeddingCluster)
                 .where(EmbeddingCluster.person_id == person_id)
-                .options(selectinload(EmbeddingCluster.faces))
+                .options(selectinload(EmbeddingCluster.faces).selectinload(Face.image))
             )
             .scalars()
             .all()
@@ -400,27 +406,37 @@ class PersonsPage(QtWidgets.QWidget):
         cluster_id_to_label: dict[int, str] = {}
         for cluster in clusters:
             age_key = cluster.age_group or cluster.label or ""
-            label = display_labels.get(age_key, age_key)
-            cluster_id_to_label[cluster.id] = label
+            cluster_id_to_label[cluster.id] = display_labels.get(age_key, age_key)
 
-        cluster_data: list[tuple[int, str, list[tuple[int, Path]]]] = []
+        sections: list[_ClusterSection] = []
         for age_key in AGE_CLUSTERS:
             matched = [c for c in clusters if c.age_group == age_key]
             if not matched:
                 continue
             cluster = matched[0]
-            label = cluster_id_to_label[cluster.id]
             ref_faces = [
                 f
                 for f in cluster.faces
                 if f.state == FaceState.IDENTIFIED and f.deleted_at is None
             ]
-            face_paths = [
-                (f.id, self.paths.face_crops_dir / f"{f.id}.jpg") for f in ref_faces
+            face_entries = [
+                _FaceEntry(
+                    face_id=f.id,
+                    crop_path=self.paths.face_crops_dir / f"{f.id}.jpg",
+                    image_path=Path(f.image.file_path),
+                    bbox=(f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h),
+                )
+                for f in ref_faces
             ]
-            cluster_data.append((cluster.id, label, face_paths))
+            sections.append(
+                _ClusterSection(
+                    cluster_id=cluster.id,
+                    label=cluster_id_to_label[cluster.id],
+                    faces=face_entries,
+                )
+            )
 
-        return person_name, cluster_data
+        return person_name, sections
 
     def _load_person(self, person_id: int) -> None:
         self._selected_person_id = person_id
@@ -451,46 +467,43 @@ class PersonsPage(QtWidgets.QWidget):
                 if w is not None:
                     w.deleteLater()
 
-        for cluster_id, label, face_paths in cluster_data:
-            # Other clusters for the move menu = all clusters except current
+        for section in cluster_data:
             other_clusters = [
-                (cid, clabel)
-                for cid, clabel in [(d[0], d[1]) for d in cluster_data]
-                if cid != cluster_id
+                (s.cluster_id, s.label)
+                for s in cluster_data
+                if s.cluster_id != section.cluster_id
             ]
-            group = self._build_cluster_section(
-                cluster_id, label, face_paths, other_clusters
-            )
+            group = self._build_cluster_section(section, other_clusters)
             self._clusters_layout.insertWidget(self._clusters_layout.count() - 1, group)
 
         self._update_action_buttons()
 
     def _build_cluster_section(
         self,
-        cluster_id: int,
-        label: str,
-        face_paths: list[tuple[int, Path]],
+        section: _ClusterSection,
         other_clusters: list[tuple[int, str]],
     ) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox(label)
+        group = QtWidgets.QGroupBox(section.label)
         h_layout = QtWidgets.QHBoxLayout(group)
         h_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
 
-        if not face_paths:
+        if not section.faces:
             placeholder = QtWidgets.QLabel(self.tr("(No faces)"))
             placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             h_layout.addWidget(placeholder)
         else:
-            for face_id, crop_path in face_paths:
+            for entry in section.faces:
                 widget = ReferenceFaceWidget(
-                    face_id=face_id,
-                    crop_path=crop_path,
-                    cluster_id=cluster_id,
+                    face_id=entry.face_id,
+                    crop_path=entry.crop_path,
+                    cluster_id=section.cluster_id,
                     other_clusters=other_clusters,
+                    image_path=entry.image_path,
+                    bbox=entry.bbox,
                 )
                 widget.remove_requested.connect(self._on_remove_requested)
                 widget.move_requested.connect(self._on_move_requested)
-                self._face_widgets[face_id] = widget
+                self._face_widgets[entry.face_id] = widget
                 h_layout.addWidget(widget)
 
         return group
