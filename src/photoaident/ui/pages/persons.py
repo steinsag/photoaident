@@ -3,7 +3,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from PySide6 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtWidgets
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
@@ -15,8 +15,8 @@ from photoaident.db.database import (
     FaceState,
     Person,
 )
+from photoaident.ui.widgets.face_crop_widget import FaceCropWidget
 from photoaident.ui.widgets.new_person_dialog import NewPersonDialog
-from photoaident.utils.image_utils import extract_and_save_face_crop
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session, sessionmaker
@@ -82,10 +82,8 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         layout.setSpacing(2)
 
         # Face crop image
-        self._image_label = QtWidgets.QLabel()
-        self._image_label.setFixedSize(120, 120)
-        self._image_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self._load_crop(crop_path)
+        self._image_label = FaceCropWidget(size=120)
+        self._image_label.load(crop_path, self._image_path, self._bbox)
         layout.addWidget(self._image_label)
 
         # Pending action text (hidden by default)
@@ -105,30 +103,6 @@ class ReferenceFaceWidget(QtWidgets.QWidget):
         self._move_btn.setEnabled(bool(self._other_clusters))
         self._move_btn.clicked.connect(self._on_move_clicked)
         layout.addWidget(self._move_btn)
-
-    def _load_crop(self, crop_path: Path) -> None:
-        """Load the face crop into the image label, regenerating if missing."""
-        if not crop_path.exists() and self._image_path.exists():
-            extract_and_save_face_crop(self._image_path, self._bbox, crop_path)
-
-        if crop_path.exists():
-            pixmap = QtGui.QPixmap(str(crop_path))
-            if pixmap.isNull() and self._image_path.exists():
-                # Corrupt or unreadable cache file — remove and regenerate once.
-                crop_path.unlink(missing_ok=True)
-                extract_and_save_face_crop(self._image_path, self._bbox, crop_path)
-                pixmap = QtGui.QPixmap(str(crop_path)) if crop_path.exists() else pixmap
-            if not pixmap.isNull():
-                self._image_label.setPixmap(
-                    pixmap.scaled(
-                        120,
-                        120,
-                        QtCore.Qt.AspectRatioMode.KeepAspectRatio,
-                        QtCore.Qt.TransformationMode.SmoothTransformation,
-                    )
-                )
-                return
-        self._image_label.setText(self.tr("No image"))
 
     def set_pending(self, change: _PendingChange | None) -> None:
         """Update the visual state to reflect a staged change (or clear it)."""

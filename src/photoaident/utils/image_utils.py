@@ -104,3 +104,53 @@ def extract_and_save_face_crop(
             exc_info=True,
         )
         return False
+
+
+def ensure_face_crop(
+    crop_path: Path,
+    image_path: Path | None,
+    bbox: tuple[int, int, int, int] | None,
+) -> bool:
+    """Ensure a valid face crop JPEG exists at crop_path.
+
+    Regenerates from image_path + bbox when the file is missing or corrupt
+    and the source image is available.  Corruption is detected via PIL so
+    this function has no Qt dependency.
+
+    Args:
+        crop_path: Where the cached face crop should live.
+        image_path: Path to the original source image (for regeneration).
+        bbox: (x, y, w, h) bounding box as stored in the database.
+
+    Returns:
+        True if a valid crop file exists after this call, False otherwise.
+    """
+    if crop_path.exists() and _is_valid_image(crop_path):
+        return True
+
+    if crop_path.exists():
+        crop_path.unlink(missing_ok=True)
+
+    return _try_regenerate(crop_path, image_path, bbox)
+
+
+def _is_valid_image(path: Path) -> bool:
+    """Return True if path can be fully decoded by PIL."""
+    try:
+        with Image.open(path) as img:
+            img.load()
+        return True
+    except Exception:
+        return False
+
+
+def _try_regenerate(
+    crop_path: Path,
+    image_path: Path | None,
+    bbox: tuple[int, int, int, int] | None,
+) -> bool:
+    """Attempt to regenerate the crop file; return True if the file now exists."""
+    if image_path is None or bbox is None or not image_path.exists():
+        return False
+    extract_and_save_face_crop(image_path, bbox, crop_path)
+    return crop_path.exists()

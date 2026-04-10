@@ -545,7 +545,7 @@ def test_reference_face_widget_valid_crop(tmp_path: Path, qtbot):
 
 
 def test_reference_face_widget_corrupt_crop_regenerates(tmp_path: Path, qtbot):
-    """ReferenceFaceWidget deletes a corrupt crop and regenerates it from image_path."""
+    """ReferenceFaceWidget heals a corrupt crop when image_path/bbox are provided."""
     from PIL import Image as PILImage
 
     crop_path = tmp_path / "face.jpg"
@@ -553,14 +553,14 @@ def test_reference_face_widget_corrupt_crop_regenerates(tmp_path: Path, qtbot):
     image_path = tmp_path / "photo.jpg"
     PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(image_path)
 
-    def _side_effect(_img, _bbox, output_path):
-        PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(output_path)
+    def _ensure_side_effect(out_crop_path, _image_path, _bbox):
+        PILImage.new("RGB", (80, 60), color=(0, 200, 0)).save(out_crop_path)
         return True
 
     with patch(
-        "photoaident.ui.pages.persons.extract_and_save_face_crop",
-        side_effect=_side_effect,
-    ) as mock_extract:
+        "photoaident.ui.widgets.face_crop_widget.ensure_face_crop",
+        side_effect=_ensure_side_effect,
+    ) as mock_ensure:
         widget = ReferenceFaceWidget(
             face_id=3,
             crop_path=crop_path,
@@ -571,7 +571,7 @@ def test_reference_face_widget_corrupt_crop_regenerates(tmp_path: Path, qtbot):
         )
         qtbot.addWidget(widget)
 
-    mock_extract.assert_called_once_with(image_path, (5, 10, 40, 80), crop_path)
+    mock_ensure.assert_called_once_with(crop_path, image_path, (5, 10, 40, 80))
     assert widget._image_label.text() == ""
     assert not widget._image_label.pixmap().isNull()
 
@@ -585,20 +585,16 @@ def test_reference_face_widget_corrupt_crop_no_source_shows_placeholder(
     image_path = tmp_path / "nonexistent_photo.jpg"
     assert not image_path.exists()
 
-    with patch(
-        "photoaident.ui.pages.persons.extract_and_save_face_crop"
-    ) as mock_extract:
-        widget = ReferenceFaceWidget(
-            face_id=4,
-            crop_path=crop_path,
-            cluster_id=1,
-            other_clusters=[],
-            image_path=image_path,
-            bbox=(0, 0, 50, 50),
-        )
-        qtbot.addWidget(widget)
+    widget = ReferenceFaceWidget(
+        face_id=4,
+        crop_path=crop_path,
+        cluster_id=1,
+        other_clusters=[],
+        image_path=image_path,
+        bbox=(0, 0, 50, 50),
+    )
+    qtbot.addWidget(widget)
 
-    mock_extract.assert_not_called()
     assert widget._image_label.text() == widget.tr("No image")
 
 
