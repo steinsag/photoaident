@@ -36,6 +36,21 @@ class _PendingChange:
     new_cluster_id: int | None  # only for MOVE
 
 
+@dataclass
+class _FaceEntry:
+    face_id: int
+    crop_path: Path
+    image_path: Path
+    bbox: tuple[int, int, int, int]
+
+
+@dataclass
+class _ClusterSection:
+    cluster_id: int
+    label: str
+    faces: list[_FaceEntry]
+
+
 class ReferenceFaceWidget(QtWidgets.QWidget):
     """Small tile showing one identified face with remove/move actions."""
 
@@ -392,21 +407,11 @@ class PersonsPage(QtWidgets.QWidget):
         self,
         session: "Session",
         person_id: int,
-    ) -> (
-        tuple[
-            str,
-            list[
-                tuple[int, str, list[tuple[int, Path, Path, tuple[int, int, int, int]]]]
-            ],
-        ]
-        | None
-    ):
+    ) -> tuple[str, list[_ClusterSection]] | None:
         """Query person name and per-cluster face data from DB.
 
-        Returns ``(person_name, cluster_data)`` where each entry in
-        ``cluster_data`` is
-        ``(cluster_id, label, [(face_id, crop_path, image_path, bbox), ...])``,
-        or ``None`` if the person no longer exists.
+        Returns ``(person_name, sections)`` or ``None`` if the person no longer
+        exists.
         """
         person = session.get(Person, person_id)
         if person is None:
@@ -427,35 +432,37 @@ class PersonsPage(QtWidgets.QWidget):
         cluster_id_to_label: dict[int, str] = {}
         for cluster in clusters:
             age_key = cluster.age_group or cluster.label or ""
-            label = display_labels.get(age_key, age_key)
-            cluster_id_to_label[cluster.id] = label
+            cluster_id_to_label[cluster.id] = display_labels.get(age_key, age_key)
 
-        cluster_data: list[
-            tuple[int, str, list[tuple[int, Path, Path, tuple[int, int, int, int]]]]
-        ] = []
+        sections: list[_ClusterSection] = []
         for age_key in AGE_CLUSTERS:
             matched = [c for c in clusters if c.age_group == age_key]
             if not matched:
                 continue
             cluster = matched[0]
-            label = cluster_id_to_label[cluster.id]
             ref_faces = [
                 f
                 for f in cluster.faces
                 if f.state == FaceState.IDENTIFIED and f.deleted_at is None
             ]
-            face_paths = [
-                (
-                    f.id,
-                    self.paths.face_crops_dir / f"{f.id}.jpg",
-                    Path(f.image.file_path),
-                    (f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h),
+            face_entries = [
+                _FaceEntry(
+                    face_id=f.id,
+                    crop_path=self.paths.face_crops_dir / f"{f.id}.jpg",
+                    image_path=Path(f.image.file_path),
+                    bbox=(f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h),
                 )
                 for f in ref_faces
             ]
-            cluster_data.append((cluster.id, label, face_paths))
+            sections.append(
+                _ClusterSection(
+                    cluster_id=cluster.id,
+                    label=cluster_id_to_label[cluster.id],
+                    faces=face_entries,
+                )
+            )
 
-        return person_name, cluster_data
+        return person_name, sections
 
     def _load_person(self, person_id: int) -> None:
         self._selected_person_id = person_id
@@ -486,48 +493,43 @@ class PersonsPage(QtWidgets.QWidget):
                 if w is not None:
                     w.deleteLater()
 
-        for cluster_id, label, face_paths in cluster_data:
-            # Other clusters for the move menu = all clusters except current
+        for section in cluster_data:
             other_clusters = [
-                (cid, clabel)
-                for cid, clabel in [(d[0], d[1]) for d in cluster_data]
-                if cid != cluster_id
+                (s.cluster_id, s.label)
+                for s in cluster_data
+                if s.cluster_id != section.cluster_id
             ]
-            group = self._build_cluster_section(
-                cluster_id, label, face_paths, other_clusters
-            )
+            group = self._build_cluster_section(section, other_clusters)
             self._clusters_layout.insertWidget(self._clusters_layout.count() - 1, group)
 
         self._update_action_buttons()
 
     def _build_cluster_section(
         self,
-        cluster_id: int,
-        label: str,
-        face_paths: list[tuple[int, Path, Path, tuple[int, int, int, int]]],
+        section: _ClusterSection,
         other_clusters: list[tuple[int, str]],
     ) -> QtWidgets.QGroupBox:
-        group = QtWidgets.QGroupBox(label)
+        group = QtWidgets.QGroupBox(section.label)
         h_layout = QtWidgets.QHBoxLayout(group)
         h_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
 
-        if not face_paths:
+        if not section.faces:
             placeholder = QtWidgets.QLabel(self.tr("(No faces)"))
             placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
             h_layout.addWidget(placeholder)
         else:
-            for face_id, crop_path, image_path, bbox in face_paths:
+            for entry in section.faces:
                 widget = ReferenceFaceWidget(
-                    face_id=face_id,
-                    crop_path=crop_path,
-                    cluster_id=cluster_id,
+                    face_id=entry.face_id,
+                    crop_path=entry.crop_path,
+                    cluster_id=section.cluster_id,
                     other_clusters=other_clusters,
-                    image_path=image_path,
-                    bbox=bbox,
+                    image_path=entry.image_path,
+                    bbox=entry.bbox,
                 )
                 widget.remove_requested.connect(self._on_remove_requested)
                 widget.move_requested.connect(self._on_move_requested)
-                self._face_widgets[face_id] = widget
+                self._face_widgets[entry.face_id] = widget
                 h_layout.addWidget(widget)
 
         return group
