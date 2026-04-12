@@ -217,6 +217,14 @@ Item {
         onWidthChanged:  { updateBbox(); root._applyPendingBboxIfReady() }
         onHeightChanged: { updateBbox(); root._applyPendingBboxIfReady() }
 
+        // Re-trigger bbox extraction once the map backend becomes ready.
+        // Without this, the initial updateBbox() calls (from Component.onCompleted
+        // or onWidthChanged/onHeightChanged) may fire before the coordinate system
+        // is fully initialised, leaving south/west/north/east at their 0.0 defaults
+        // and causing an empty result when the user accepts the dialog without
+        // panning or zooming first.
+        onMapReadyChanged: { if (mapReady) updateBbox() }
+
         function updateBbox() {
             // Bbox extraction is only needed for selection overlays.
             if (!root.showOverlay) return
@@ -224,6 +232,9 @@ Item {
             // map centre/zoom are still converging and extracting now would
             // overwrite the initial bbox with a transient intermediate value.
             if (root.pendingBbox) return
+            // Skip when the map has no size yet — toCoordinate() returns invalid
+            // coordinates and would corrupt south/west/north/east with zeros.
+            if (map.width <= 0 || map.height <= 0) return
             // Use the inner 70% of the viewport as the search area.
             // Qt.point() constructs new value-type objects to avoid mutating
             // the result of fromCoordinate() in place (unreliable across versions).
@@ -234,6 +245,9 @@ Item {
             var bottomRight = Qt.point(centerPt.x + rectW / 2, centerPt.y + rectH / 2)
             var coordTopLeft = map.toCoordinate(topLeft)
             var coordBottomRight = map.toCoordinate(bottomRight)
+            // Skip if the map's coordinate system isn't ready yet — invalid
+            // coordinates would overwrite correct values with NaN-derived zeros.
+            if (!coordTopLeft.isValid || !coordBottomRight.isValid) return
             root.north = coordTopLeft.latitude
             root.south = coordBottomRight.latitude
             root.west = coordTopLeft.longitude
