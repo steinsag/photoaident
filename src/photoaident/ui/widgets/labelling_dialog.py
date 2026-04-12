@@ -284,8 +284,12 @@ class LabellingDialog(QtWidgets.QDialog):
         best_person_id = self._find_best_person_id()
         if best_person_id is not None:
             self._person_widget.select_by_id(best_person_id)
-        else:
-            self._refresh_cluster_selection()
+        # Unconditionally sync _selected_person from the widget and refresh
+        # cluster scores for this face.  Qt suppresses currentItemChanged when
+        # the same item is re-selected, so we cannot rely on the signal alone
+        # when the best-match person is the same across consecutive faces.
+        self._selected_person = self._person_widget.current_person()
+        self._refresh_cluster_selection()
 
     def _advance_to_next(self) -> None:
         """Remove the current face from the list and show the next unidentified face."""

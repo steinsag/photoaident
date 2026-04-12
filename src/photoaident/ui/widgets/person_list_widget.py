@@ -68,6 +68,13 @@ class PersonListWidget(QtWidgets.QWidget):
         """Deselect all items and emit person_selected(None)."""
         self._list_widget.setCurrentRow(-1)
 
+    def current_person(self) -> Person | None:
+        """Return the currently selected Person, or None if nothing is selected."""
+        item = self._list_widget.currentItem()
+        if item is None:
+            return None
+        return item.data(QtCore.Qt.ItemDataRole.UserRole)  # type: ignore[return-value]
+
     def current_filter_text(self) -> str:
         """Return the current search field text."""
         return self._search_edit.text()
