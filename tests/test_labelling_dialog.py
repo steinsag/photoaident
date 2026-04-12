@@ -1006,3 +1006,149 @@ def test_face_info_label_cleared_in_empty_state(
     qtbot.addWidget(dialog)
 
     assert dialog._face_info_label.text() == ""
+
+
+# ===========================================================================
+# Auto-preselect best person + cluster
+# ===========================================================================
+
+
+def test_preselect_best_person_and_cluster_on_open(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """Opening the dialog auto-selects the person whose cluster mean best matches
+    the face embedding, and pre-selects the best-scoring age cluster, so Confirm
+    is enabled without any user interaction."""
+    # Create an unidentified face whose embedding points along axis 1 (unit_emb(1))
+    img_id = _insert_image(session_factory, "/presel.jpg", "preselhash")
+    face_emb = _unit_emb(1)
+    with session_factory() as session:
+        face = Face(
+            image_id=img_id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=40,
+            bbox_h=40,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        session.add(face)
+        session.flush()
+        vector_store.add(face.id, face_emb)
+        session.commit()
+
+    # Person A — cluster mean along axis 0 (orthogonal to face_emb)
+    _, cluster_a_id = _insert_person_with_cluster(session_factory, "Alice", "adult")
+    with session_factory() as session:
+        ca = session.get(EmbeddingCluster, cluster_a_id)
+        ca.mean_embedding = serialize_embedding(_unit_emb(0))
+        session.commit()
+
+    # Person B — cluster mean along axis 1 (identical direction to face_emb → score 1.0)
+    person_b_id, cluster_b_id = _insert_person_with_cluster(
+        session_factory, "Bob", "adult"
+    )
+    with session_factory() as session:
+        cb = session.get(EmbeddingCluster, cluster_b_id)
+        cb.mean_embedding = serialize_embedding(_unit_emb(1))
+        session.commit()
+
+    dialog = _make_dialog(session_factory, tmp_app_paths, vector_store, img_id)
+    qtbot.addWidget(dialog)
+
+    # Bob should be auto-selected because his cluster mean is closest to face_emb
+    assert dialog._selected_person is not None
+    assert dialog._selected_person.id == person_b_id
+    # Best-matching cluster (adult) should also be selected, enabling Confirm
+    assert dialog._selected_cluster is not None
+    assert dialog.confirm_btn.isEnabled()
+
+
+def test_no_preselection_when_no_cluster_means(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """When no cluster means have been persisted yet, the dialog opens with no
+    person or cluster pre-selected (existing fall-through behaviour)."""
+    face_id, image_id = _insert_face(session_factory)
+    vector_store.add(face_id, _ones_norm_emb())
+
+    # Person exists but has no identified faces → mean_embedding is NULL
+    _insert_person_with_cluster(session_factory, "Zara", "adult")
+
+    dialog = _make_dialog(session_factory, tmp_app_paths, vector_store, image_id)
+    qtbot.addWidget(dialog)
+
+    assert dialog._selected_person is None
+    assert dialog._selected_cluster is None
+    assert not dialog.confirm_btn.isEnabled()
+
+
+def test_preselect_recomputed_on_face_advance(
+    qtbot, session_factory, tmp_app_paths, vector_store
+):
+    """After advancing to the next face, preselection is re-evaluated for that
+    face's embedding, not the previous face's."""
+    image_id = _insert_image(session_factory, "/advpre.jpg", "advprehash")
+
+    # Face 1 — embedding along axis 0; shown first (lower bbox_x)
+    with session_factory() as session:
+        face1 = Face(
+            image_id=image_id,
+            bbox_x=0,
+            bbox_y=0,
+            bbox_w=40,
+            bbox_h=40,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        session.add(face1)
+        session.flush()
+        face1_id = face1.id
+        vector_store.add(face1_id, _unit_emb(0))
+        session.commit()
+
+    # Face 2 — embedding along axis 1; shown second (higher bbox_x)
+    with session_factory() as session:
+        face2 = Face(
+            image_id=image_id,
+            bbox_x=50,
+            bbox_y=0,
+            bbox_w=40,
+            bbox_h=40,
+            detection_confidence=0.9,
+            state=FaceState.UNIDENTIFIED,
+            model_version="test",
+        )
+        session.add(face2)
+        session.flush()
+        face2_id = face2.id
+        vector_store.add(face2_id, _unit_emb(1))
+        session.commit()
+
+    # Person B — cluster mean along axis 1, only close to face 2
+    person_b_id, cluster_b_id = _insert_person_with_cluster(
+        session_factory, "Bob2", "adult"
+    )
+    with session_factory() as session:
+        cb = session.get(EmbeddingCluster, cluster_b_id)
+        cb.mean_embedding = serialize_embedding(_unit_emb(1))
+        session.commit()
+
+    dialog = _make_dialog(session_factory, tmp_app_paths, vector_store, image_id)
+    qtbot.addWidget(dialog)
+
+    # Face 1 is shown first; no cluster mean is close (axis 0 vs axis 1 = score 0)
+    # But B is still the best available option, so it gets preselected
+    assert dialog._current_face_id == face1_id
+
+    # Mark face 1 anonymous → dialog advances to face 2
+    dialog._mark_anonymous()
+
+    assert dialog._current_face_id == face2_id
+    # Face 2 embedding aligns perfectly with Bob2's cluster mean
+    assert dialog._selected_person is not None
+    assert dialog._selected_person.id == person_b_id
+    assert dialog._selected_cluster is not None
+    assert dialog.confirm_btn.isEnabled()

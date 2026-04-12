@@ -10,6 +10,7 @@ from PySide6 import QtWidgets
 from sqlalchemy import select
 from sqlalchemy.orm import contains_eager, selectinload
 
+from photoaident.core.search_person import find_best_person_for_face
 from photoaident.db.cluster_means import deserialize_embedding, recompute_cluster_mean
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.db.database import (
@@ -277,6 +278,17 @@ class LabellingDialog(QtWidgets.QDialog):
         self._image_preview.load(entry.image_path, entry.bbox)
         self._face_crop.load(entry.crop_path, entry.image_path, entry.bbox)
         self._set_buttons_enabled(True)
+        self._person_widget.clear_selection()
+        self._cluster_widget.clear_data()
+        self._search_edit.clear()
+        best_person_id = self._find_best_person_id()
+        if best_person_id is not None:
+            self._person_widget.select_by_id(best_person_id)
+        # Unconditionally sync _selected_person from the widget and refresh
+        # cluster scores for this face.  Qt suppresses currentItemChanged when
+        # the same item is re-selected, so we cannot rely on the signal alone
+        # when the best-match person is the same across consecutive faces.
+        self._selected_person = self._person_widget.current_person()
         self._refresh_cluster_selection()
 
     def _advance_to_next(self) -> None:
@@ -371,6 +383,14 @@ class LabellingDialog(QtWidgets.QDialog):
 
         self._person_widget.add_person_sorted(loaded)
         self._person_widget.select_by_id(new_person_id)
+
+    def _find_best_person_id(self) -> int | None:
+        """Return the person_id whose cluster mean best matches the current face."""
+        if self._current_face_id is None:
+            return None
+        return find_best_person_for_face(
+            self._current_face_id, self._session_factory, self._vector_store
+        )
 
     def _compute_cluster_scores(
         self, cluster_by_age: dict[str, EmbeddingCluster]

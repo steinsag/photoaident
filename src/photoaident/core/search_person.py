@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -10,6 +11,8 @@ from sqlalchemy import select
 from photoaident.db.cluster_means import deserialize_embedding
 from photoaident.db.database import EmbeddingCluster, Face, Person
 from photoaident.db.vector_store import FACE_MATCH_THRESHOLD
+
+logger = logging.getLogger(__name__)
 
 _SQLITE_IN_LIMIT = 900  # SQLite bound-parameter limit is 999; stay safely below it
 
@@ -207,6 +210,53 @@ def _load_person_cluster_means(
         person_means.append((person_id, mean_vec))
 
     return person_names, person_means
+
+
+def find_best_person_for_face(
+    face_id: int,
+    session_factory: "sessionmaker",
+    vector_store: "VectorStore",
+) -> int | None:
+    """Return the person_id whose cluster mean best matches the face embedding.
+
+    Loads all persisted cluster means in a single DB query and computes cosine
+    similarity against the face embedding retrieved from *vector_store*.  Returns
+    ``None`` when no cluster means are available or the face has no embedding.
+
+    Args:
+        face_id: Database Face.id of the face to match.
+        session_factory: SQLAlchemy session factory.
+        vector_store: FAISS vector store holding face embeddings.
+
+    Returns:
+        The ``person_id`` of the best-matching person, or ``None``.
+    """
+    try:
+        embedding = vector_store.get_embedding(face_id)
+    except IndexError:
+        return None
+
+    _, person_means = _load_person_cluster_means(session_factory)
+    if not person_means:
+        return None
+
+    means_matrix = np.stack([emb for _, emb in person_means])  # (M, D)
+
+    if (
+        hasattr(vector_store, "dimension")
+        and vector_store.dimension != means_matrix.shape[1]
+    ):
+        logger.error(
+            "find_best_person_for_face: VectorStore dimension (%d) does not match "
+            "persisted cluster means dimension (%d) — skipping match",
+            vector_store.dimension,
+            means_matrix.shape[1],
+        )
+        return None
+
+    scores = embedding @ means_matrix.T  # (M,)
+    best_idx = int(np.argmax(scores))
+    return person_means[best_idx][0]
 
 
 def resolve_faces_to_persons(

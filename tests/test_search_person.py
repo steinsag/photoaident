@@ -8,6 +8,7 @@ import photoaident.core.search as search_module
 from photoaident.core.search import search_images
 from photoaident.core.search_person import (
     _intersect_and_rank,
+    find_best_person_for_face,
     resolve_faces_to_persons,
     _find_images_by_person,
 )
@@ -405,3 +406,62 @@ def test_resolve_faces_stale_face_id(search_db, vector_store):
     # face_id 9999 does not exist in vector store → IndexError path → maps to None
     result = resolve_faces_to_persons([9999], search_db, vector_store, threshold=0.0)
     assert result == {9999: None}
+
+
+# ===========================================================================
+# find_best_person_for_face
+# ===========================================================================
+
+
+def test_find_best_person_for_face_returns_closest(search_db, vector_store):
+    """Returns the person_id whose cluster mean is closest to the face embedding."""
+    person_a_id, cluster_a_id = _add_person_cluster(search_db)
+    _add_identified_face(
+        search_db, vector_store, person_a_id, cluster_a_id, _unit_emb(0)
+    )
+
+    person_b_id, cluster_b_id = _add_person_cluster(search_db)
+    _add_identified_face(
+        search_db, vector_store, person_b_id, cluster_b_id, _unit_emb(1)
+    )
+
+    _, face_id = _add_unidentified_face(search_db, vector_store, _unit_emb(1))
+
+    result = find_best_person_for_face(face_id, search_db, vector_store)
+    assert result == person_b_id
+
+
+def test_find_best_person_for_face_no_cluster_means(search_db, vector_store):
+    """Returns None when no cluster means have been persisted."""
+    _, face_id = _add_unidentified_face(search_db, vector_store, _unit_emb(0))
+    # No persons/clusters in DB → no means → None
+    result = find_best_person_for_face(face_id, search_db, vector_store)
+    assert result is None
+
+
+def test_find_best_person_for_face_missing_embedding(search_db, vector_store):
+    """Returns None when the face has no embedding in the vector store."""
+    person_id, cluster_id = _add_person_cluster(search_db)
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, _unit_emb(0))
+
+    result = find_best_person_for_face(99999, search_db, vector_store)
+    assert result is None
+
+
+def test_find_best_person_for_face_dimension_mismatch(search_db, vector_store, caplog):
+    """Returns None and logs an error when dimensions differ."""
+    import logging
+
+    person_id, cluster_id = _add_person_cluster(search_db)
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, _unit_emb(0))
+
+    _, face_id = _add_unidentified_face(search_db, vector_store, _unit_emb(0))
+
+    # Simulate a mismatched dimension on the vector store
+    vector_store.dimension = vector_store.dimension + 1
+
+    with caplog.at_level(logging.ERROR, logger="photoaident.core.search_person"):
+        result = find_best_person_for_face(face_id, search_db, vector_store)
+
+    assert result is None
+    assert any("dimension" in record.message for record in caplog.records)
