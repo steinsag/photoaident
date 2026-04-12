@@ -10,6 +10,7 @@ from PySide6 import QtWidgets
 from sqlalchemy import select
 from sqlalchemy.orm import contains_eager, selectinload
 
+from photoaident.core.search_person import find_best_person_for_face
 from photoaident.db.cluster_means import deserialize_embedding, recompute_cluster_mean
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.db.database import (
@@ -277,7 +278,11 @@ class LabellingDialog(QtWidgets.QDialog):
         self._image_preview.load(entry.image_path, entry.bbox)
         self._face_crop.load(entry.crop_path, entry.image_path, entry.bbox)
         self._set_buttons_enabled(True)
-        self._refresh_cluster_selection()
+        best_person_id = self._find_best_person_id()
+        if best_person_id is not None:
+            self._person_widget.select_by_id(best_person_id)
+        else:
+            self._refresh_cluster_selection()
 
     def _advance_to_next(self) -> None:
         """Remove the current face from the list and show the next unidentified face."""
@@ -371,6 +376,14 @@ class LabellingDialog(QtWidgets.QDialog):
 
         self._person_widget.add_person_sorted(loaded)
         self._person_widget.select_by_id(new_person_id)
+
+    def _find_best_person_id(self) -> int | None:
+        """Return the person_id whose cluster mean best matches the current face."""
+        if self._current_face_id is None:
+            return None
+        return find_best_person_for_face(
+            self._current_face_id, self._session_factory, self._vector_store
+        )
 
     def _compute_cluster_scores(
         self, cluster_by_age: dict[str, EmbeddingCluster]
