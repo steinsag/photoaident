@@ -20,14 +20,13 @@ from photoaident.ui.onboarding_dialog import OnboardingDialog
 
 
 def test_navigation_shortcuts(qtbot, tmp_app_paths):
-    """Test that Alt+1 to Alt+4 shortcuts switch to the correct page."""
+    """Test that Alt+1 to Alt+3 shortcuts switch to the correct page."""
     window = _make_window(tmp_app_paths, qtbot)
 
     # Verify shortcuts are set correctly
     assert window._page_btn_search.shortcut().toString() == "Alt+1"
     assert window._page_btn_browse.shortcut().toString() == "Alt+2"
     assert window._page_btn_persons.shortcut().toString() == "Alt+3"
-    assert window._page_btn_label.shortcut().toString() == "Alt+4"
 
     # Initial page should be 0 (Search)
     assert window._stacked_pages.currentIndex() == 0
@@ -41,11 +40,6 @@ def test_navigation_shortcuts(qtbot, tmp_app_paths):
     window._page_btn_persons.animateClick()
     qtbot.wait(100)
     assert window._stacked_pages.currentIndex() == 2
-
-    # Switch to Labelling (Alt+4)
-    window._page_btn_label.animateClick()
-    qtbot.wait(100)
-    assert window._stacked_pages.currentIndex() == 3
 
     # Switch back to Search (Alt+1)
     window._page_btn_search.animateClick()
@@ -61,7 +55,6 @@ def test_app_setup(qtbot, tmp_app_paths):
 
     assert window.windowTitle() == "PhotoAIdent"
     assert window._library_page is not None
-    assert window._labelling_page is not None
 
 
 def test_startup_triggers_inventory_scan_when_collection_path_set(qtbot, tmp_app_paths):
@@ -424,51 +417,6 @@ def test_update_indexing_status_formats_label_and_reloads(
 
     window._update_indexing_status(100, 100, 7)
     assert len(reloads) == 2  # indexed == total → reload
-
-
-# ---------------------------------------------------------------------------
-# _switch_page labelling branch
-# ---------------------------------------------------------------------------
-
-
-def test_switch_page_to_label_refreshes_labelling_page(
-    tmp_app_paths, qtbot, monkeypatch
-):
-    """_switch_page(3) calls labelling_page.refresh()."""
-    window = _make_window(tmp_app_paths, qtbot)
-    refreshed: list[bool] = []
-    monkeypatch.setattr(
-        window._labelling_page, "refresh", lambda: refreshed.append(True)
-    )
-
-    window._switch_page(3)
-
-    assert window._stacked_pages.currentIndex() == 3
-    assert len(refreshed) == 1
-
-
-# ---------------------------------------------------------------------------
-# go_to_labelling
-# ---------------------------------------------------------------------------
-
-
-def test_go_to_labelling_navigates_and_passes_priority(
-    tmp_app_paths, qtbot, monkeypatch
-):
-    """go_to_labelling switches to page 3 and forwards the image id."""
-    window = _make_window(tmp_app_paths, qtbot)
-    refreshed_with: list[int | None] = []
-    monkeypatch.setattr(
-        window._labelling_page,
-        "refresh",
-        lambda priority_image_id=None: refreshed_with.append(priority_image_id),
-    )
-
-    window.go_to_labelling(42)
-
-    assert window._stacked_pages.currentIndex() == 3
-    assert window._page_btn_label.isChecked()
-    assert refreshed_with == [42]
 
 
 # ---------------------------------------------------------------------------

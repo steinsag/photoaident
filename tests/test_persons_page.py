@@ -408,9 +408,9 @@ def test_refresh_reloads_list(tmp_app_paths, qtbot):
 
 
 def test_mainwindow_has_persons_page(tmp_app_paths, qtbot):
-    """MainWindow.stacked has 4 pages (Library, Label, Persons, Browse)."""
+    """MainWindow.stacked has 3 pages (Library, Browse, Persons)."""
     window = _make_window(tmp_app_paths, qtbot)
-    assert window._stacked_pages.count() == 4
+    assert window._stacked_pages.count() == 3
 
 
 def test_switch_to_persons_page(tmp_app_paths, qtbot):

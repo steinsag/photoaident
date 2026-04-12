@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 class BrowsePage(QtWidgets.QWidget):
     """Browse page: explore photo collection by folder using Miller columns."""
 
-    navigate_to_labelling = QtCore.Signal(int)
     navigate_to_browse = QtCore.Signal(str)  # file_path
 
     COLUMN_WIDTH = 200
@@ -73,7 +72,6 @@ class BrowsePage(QtWidgets.QWidget):
 
         # Bottom: thumbnail grid
         self.grid = ThumbnailGrid(self.session_factory, self.vector_store, self.paths)
-        self.grid.navigate_to_labelling.connect(self.navigate_to_labelling)
         self.grid.navigate_to_browse.connect(self.navigate_to_browse)
         self.grid.set_sort_locked(SortOrder.FILENAME_ASC)
         splitter.addWidget(self.grid)

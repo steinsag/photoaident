@@ -7,16 +7,16 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 from PySide6 import QtWidgets
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import contains_eager, selectinload
 
 from photoaident.db.cluster_means import deserialize_embedding, recompute_cluster_mean
+from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.db.database import (
     EmbeddingCluster,
     Face,
     FaceState,
     Image,
-    ImageMetadata,
     Person,
 )
 from photoaident.db.vector_store import VectorStore
@@ -29,44 +29,59 @@ from photoaident.ui.widgets.person_list_widget import PersonListWidget
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from sqlalchemy.orm import Session, sessionmaker
+    from sqlalchemy.orm import sessionmaker
 
     from photoaident.paths import AppPaths
 
 
 @dataclass(frozen=True, slots=True)
-class FaceData:
-    """Data for the currently displayed face."""
+class _FaceEntry:
+    """Data for a single unidentified face shown in the labelling dialog."""
 
     face_id: int
-    crop_path: Path | None
+    crop_path: Path
     image_path: Path
     bbox: tuple[int, int, int, int]
     taken_at: datetime | None
 
 
-class LabellingPage(QtWidgets.QWidget):
-    """Page for labelling unidentified faces one by one."""
+class LabellingDialog(QtWidgets.QDialog):
+    """Modal dialog for labelling all unidentified faces of a single image."""
 
     def __init__(
         self,
+        image_id: int,
         session_factory: "sessionmaker",
         paths: "AppPaths",
         vector_store: VectorStore,
         parent: QtWidgets.QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.session_factory = session_factory
-        self.paths = paths
-        self.vector_store = vector_store
-        self._current_face_id: int | None = None
-        self._skipped: set[int] = set()
-        self._skipped_images: set[int] = set()
-        self._priority_image_id: int | None = None
+        self.setWindowTitle(self.tr("Label Faces"))
+        self.setMinimumSize(900, 700)
+
+        self._image_id = image_id
+        self._session_factory = session_factory
+        self._paths = paths
+        self._vector_store = vector_store
+
+        self._face_data: list[_FaceEntry] = []
+        self._current_idx: int | None = None
         self._query_embedding: np.ndarray | None = None
         self._selected_person: Person | None = None
         self._selected_cluster: EmbeddingCluster | None = None
+
         self._setup_ui()
+        self._load_persons()
+        self._load_faces()
+        restore_widget_geometry(self, self._paths.window_state_file)
+
+    @property
+    def _current_face_id(self) -> int | None:
+        """Return the face ID of the currently displayed face."""
+        if self._current_idx is None or not self._face_data:
+            return None
+        return self._face_data[self._current_idx].face_id
 
     def _setup_ui(self) -> None:
         root_layout = QtWidgets.QVBoxLayout(self)
@@ -97,10 +112,6 @@ class LabellingPage(QtWidgets.QWidget):
 
         btn_col = QtWidgets.QVBoxLayout()
         btn_col.setSpacing(6)
-
-        self.skip_image_btn = QtWidgets.QPushButton(self.tr("Skip Image"))
-        self.skip_image_btn.clicked.connect(self._skip_image)
-        btn_col.addWidget(self.skip_image_btn)
 
         self.skip_btn = QtWidgets.QPushButton(self.tr("Skip Face"))
         self.skip_btn.clicked.connect(self._skip_face)
@@ -152,6 +163,14 @@ class LabellingPage(QtWidgets.QWidget):
 
         root_layout.addWidget(person_group)
 
+        # Close button row
+        close_row = QtWidgets.QHBoxLayout()
+        close_row.addStretch()
+        close_btn = QtWidgets.QPushButton(self.tr("Close"))
+        close_btn.clicked.connect(self.accept)
+        close_row.addWidget(close_btn)
+        root_layout.addLayout(close_row)
+
         self._set_buttons_enabled(False)
         self._update_confirm_button()
 
@@ -180,127 +199,96 @@ class LabellingPage(QtWidgets.QWidget):
         return self._face_crop
 
     # ------------------------------------------------------------------
-    # Public interface
-    # ------------------------------------------------------------------
-
-    def refresh(self, priority_image_id: int | None = None) -> None:
-        """Reload count + first face. Called when page becomes visible."""
-        self._skipped.clear()
-        self._skipped_images.clear()
-        self._priority_image_id = priority_image_id
-        self._load_persons()
-        self._load_next_face()
-
-    # ------------------------------------------------------------------
     # Private: face loading pipeline
     # ------------------------------------------------------------------
 
-    def _load_next_face(self) -> None:
-        with self.session_factory() as session:
-            self._maybe_clear_priority(session)
-            face_data = self._extract_next_face_data(session)
+    def _load_faces(self) -> None:
+        """Load all unidentified faces for the image and show the first one."""
+        with self._session_factory() as session:
+            stmt = (
+                select(Face)
+                .join(Face.image)
+                .outerjoin(Image.metadata_rel)
+                .options(contains_eager(Face.image).contains_eager(Image.metadata_rel))
+                .where(
+                    Face.image_id == self._image_id,
+                    Face.state == FaceState.UNIDENTIFIED,
+                    Face.deleted_at.is_(None),
+                )
+                .order_by(Face.bbox_x, Face.bbox_y)
+            )
+            faces = session.execute(stmt).unique().scalars().all()
+            self._face_data = [
+                _FaceEntry(
+                    face_id=f.id,
+                    crop_path=self._paths.face_crops_dir / f"{f.id}.jpg",
+                    image_path=Path(f.image.file_path),
+                    bbox=(f.bbox_x, f.bbox_y, f.bbox_w, f.bbox_h),
+                    taken_at=(
+                        f.image.metadata_rel.taken_at if f.image.metadata_rel else None
+                    ),
+                )
+                for f in faces
+            ]
 
-        if face_data is None:
-            self._current_face_id = None
-            self._query_embedding = None
-            self._show_empty_state()
+        if not self._face_data:
+            self._show_completion_state()
             return
 
-        self._current_face_id = face_data.face_id
+        self._current_idx = 0
+        self._show_face(0)
+
+    def _show_face(self, idx: int) -> None:
+        """Display the face at idx in the preview/crop widgets."""
+        self._current_idx = idx
+        entry = self._face_data[idx]
 
         # Fetch embedding for similarity scoring
         self._query_embedding = None
         try:
-            self._query_embedding = self.vector_store.get_embedding(face_data.face_id)
+            self._query_embedding = self._vector_store.get_embedding(entry.face_id)
         except Exception:
             logger.warning(
                 "Failed to retrieve embedding for face %s",
-                face_data.face_id,
+                entry.face_id,
                 exc_info=True,
             )
 
-        if face_data.taken_at is not None:
-            taken_str = face_data.taken_at.strftime("%Y-%m-%d %H:%M")
+        total = len(self._face_data)
+        face_num = idx + 1
+
+        if entry.taken_at is not None:
+            taken_str = entry.taken_at.strftime("%Y-%m-%d %H:%M")
         else:
             taken_str = self.tr("Unknown date")
-        path_escaped = html.escape(str(face_data.image_path))
+        path_escaped = html.escape(str(entry.image_path))
         taken_escaped = html.escape(taken_str)
+        progress_escaped = html.escape(
+            self.tr("Face {current} of {total}").format(current=face_num, total=total)
+        )
+        label_file_path = html.escape(self.tr("File Path"))
+        label_taken_at = html.escape(self.tr("Taken At"))
         self._face_info_label.setText(
-            f"<b>{html.escape(self.tr('File Path'))}:</b> {path_escaped}<br>"
-            f"<b>{html.escape(self.tr('Taken At'))}:</b> {taken_escaped}"
+            f"<b>{label_file_path}:</b> {path_escaped}<br>"
+            f"<b>{label_taken_at}:</b> {taken_escaped}<br>"
+            f"<b>{progress_escaped}</b>"
         )
 
-        self._image_preview.load(face_data.image_path, face_data.bbox)
-        self._face_crop.load(face_data.crop_path, face_data.image_path, face_data.bbox)
+        self._image_preview.load(entry.image_path, entry.bbox)
+        self._face_crop.load(entry.crop_path, entry.image_path, entry.bbox)
         self._set_buttons_enabled(True)
         self._refresh_cluster_selection()
 
-    def _maybe_clear_priority(self, session: "Session") -> None:
-        if self._priority_image_id is None:
+    def _advance_to_next(self) -> None:
+        """Remove the current face from the list and show the next unidentified face."""
+        if self._current_idx is None or not self._face_data:
             return
-        if self._priority_image_id in self._skipped_images:
-            self._priority_image_id = None
-            return
-        q = select(func.count(Face.id)).where(
-            Face.state == FaceState.UNIDENTIFIED,
-            Face.deleted_at.is_(None),
-            Face.image_id == self._priority_image_id,
-        )
-        if self._skipped:
-            q = q.where(Face.id.not_in(list(self._skipped)))
-        if (session.scalar(q) or 0) == 0:
-            self._priority_image_id = None
-
-    def _count_total_unidentified(self, session: "Session") -> int:
-        return (
-            session.scalar(
-                select(func.count(Face.id)).where(
-                    Face.state == FaceState.UNIDENTIFIED,
-                    Face.deleted_at.is_(None),
-                )
-            )
-            or 0
-        )
-
-    def _build_next_face_stmt(self):
-        stmt = (
-            select(Face)
-            .join(Face.image)
-            .outerjoin(Image.metadata_rel)
-            .options(contains_eager(Face.image).contains_eager(Image.metadata_rel))
-            .where(
-                Face.state == FaceState.UNIDENTIFIED,
-                Face.deleted_at.is_(None),
-            )
-            .order_by(
-                ImageMetadata.taken_at.asc().nulls_last(),
-                Image.indexed_at.asc(),
-            )
-            .limit(1)
-        )
-        if self._priority_image_id is not None:
-            stmt = stmt.where(Face.image_id == self._priority_image_id)
-        elif self._skipped_images:
-            stmt = stmt.where(Face.image_id.not_in(list(self._skipped_images)))
-        if self._skipped:
-            stmt = stmt.where(Face.id.not_in(list(self._skipped)))
-        return stmt
-
-    def _extract_next_face_data(self, session: "Session") -> FaceData | None:
-        face = (
-            session.execute(self._build_next_face_stmt()).unique().scalar_one_or_none()
-        )
-        if face is None:
-            return None
-        face_id = face.id
-        metadata = face.image.metadata_rel
-        return FaceData(
-            face_id=face_id,
-            crop_path=self.paths.face_crops_dir / f"{face_id}.jpg",
-            image_path=Path(face.image.file_path),
-            bbox=(face.bbox_x, face.bbox_y, face.bbox_w, face.bbox_h),
-            taken_at=metadata.taken_at if metadata is not None else None,
-        )
+        del self._face_data[self._current_idx]
+        remaining = len(self._face_data)
+        if remaining == 0:
+            self._show_completion_state()
+        else:
+            self._show_face(min(self._current_idx, remaining - 1))
 
     # ------------------------------------------------------------------
     # Private: person list
@@ -313,7 +301,7 @@ class LabellingPage(QtWidgets.QWidget):
         )
         self._selected_person = None
         self._selected_cluster = None
-        with self.session_factory() as session:
+        with self._session_factory() as session:
             persons = (
                 session.execute(
                     select(Person)
@@ -325,8 +313,6 @@ class LabellingPage(QtWidgets.QWidget):
             )
             session.expunge_all()
             self._person_widget.set_persons(list(persons))
-        # Restore the previously selected person if it is still in the filtered
-        # list (useful when labelling many faces for the same person in a row).
         if prev_person_id is not None:
             self._person_widget.select_by_id(prev_person_id)
         self._update_confirm_button()
@@ -368,14 +354,14 @@ class LabellingPage(QtWidgets.QWidget):
         self._update_confirm_button()
 
     def _on_new_person_requested(self) -> None:
-        dlg = NewPersonDialog(self.session_factory, parent=self)
+        dlg = NewPersonDialog(self._session_factory, parent=self)
         if dlg.exec() != QtWidgets.QDialog.DialogCode.Accepted:
             return
         new_person_id = dlg.created_person_id()
         if new_person_id is None:
             return
 
-        with self.session_factory() as session:
+        with self._session_factory() as session:
             loaded = session.execute(
                 select(Person)
                 .where(Person.id == new_person_id)
@@ -421,20 +407,14 @@ class LabellingPage(QtWidgets.QWidget):
     # Private: UI helpers
     # ------------------------------------------------------------------
 
-    def _show_empty_state(self) -> None:
-        with self.session_factory() as session:
-            total_unidentified = self._count_total_unidentified(session)
-        if total_unidentified == 0:
-            msg = self.tr("All done! No unidentified faces remain.")
-        else:
-            msg = self.tr(
-                "All remaining faces skipped this session. "
-                "Restart the app to review them again."
-            )
+    def _show_completion_state(self) -> None:
+        """Disable action widgets and show a completion message."""
+        self._current_idx = None
+        self._query_embedding = None
         self._face_info_label.clear()
         self._image_preview.clear()
         self._face_crop.clear()
-        self._face_crop.setText(msg)
+        self._face_crop.setText(self.tr("All done! No unidentified faces remain."))
         self._person_widget.set_persons([])
         self._selected_person = None
         self._selected_cluster = None
@@ -443,7 +423,6 @@ class LabellingPage(QtWidgets.QWidget):
         self._update_confirm_button()
 
     def _set_buttons_enabled(self, enabled: bool) -> None:
-        self.skip_image_btn.setEnabled(enabled)
         self.skip_btn.setEnabled(enabled)
         self.anonymous_btn.setEnabled(enabled)
 
@@ -459,16 +438,17 @@ class LabellingPage(QtWidgets.QWidget):
             return
         person = self._selected_person
         cluster = self._selected_cluster
-        with self.session_factory() as session:
-            face = session.get(Face, self._current_face_id)
+        face_id = self._current_face_id
+        with self._session_factory() as session:
+            face = session.get(Face, face_id)
             if face is not None:
                 face.state = FaceState.IDENTIFIED
                 face.person_id = person.id
                 face.cluster_id = cluster.id
                 face.labelled_at = datetime.now(timezone.utc)
                 session.commit()
-        recompute_cluster_mean(cluster.id, self.session_factory, self.vector_store)
-        self._load_next_face()
+        recompute_cluster_mean(cluster.id, self._session_factory, self._vector_store)
+        self._advance_to_next()
 
     def _on_cancel(self) -> None:
         """Clear the current person/cluster selection."""
@@ -481,41 +461,28 @@ class LabellingPage(QtWidgets.QWidget):
     def _mark_anonymous(self) -> None:
         if self._current_face_id is None:
             return
-        with self.session_factory() as session:
-            face = session.get(Face, self._current_face_id)
+        face_id = self._current_face_id
+        with self._session_factory() as session:
+            face = session.get(Face, face_id)
             if face is not None:
                 face.state = FaceState.ANONYMOUS
                 face.labelled_at = datetime.now(timezone.utc)
                 session.commit()
-        self._load_next_face()
+        self._advance_to_next()
 
     def _skip_face(self) -> None:
-        if self._current_face_id is None:
+        if self._current_idx is None:
             return
-        self._skipped.add(self._current_face_id)
-        self._load_next_face()
+        next_idx = self._current_idx + 1
+        if next_idx < len(self._face_data):
+            self._show_face(next_idx)
+        else:
+            self._show_completion_state()
 
-    def _skip_image(self) -> None:
-        if self._current_face_id is None:
-            return
-        with self.session_factory() as session:
-            face = session.get(Face, self._current_face_id)
-            if face is None:
-                self._load_next_face()
-                return
-            image_id = face.image_id
-            self._skipped_images.add(image_id)
-            face_ids = list(
-                session.scalars(
-                    select(Face.id).where(
-                        Face.image_id == image_id,
-                        Face.state == FaceState.UNIDENTIFIED,
-                        Face.deleted_at.is_(None),
-                    )
-                )
-            )
-            self._skipped.update(face_ids)
-        self._load_next_face()
+    def done(self, result: int) -> None:
+        """Save geometry before closing."""
+        save_widget_geometry(self, self._paths.window_state_file)
+        super().done(result)
 
     # ------------------------------------------------------------------
     # Backward-compatible method aliases

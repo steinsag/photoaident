@@ -348,21 +348,6 @@ def test_browse_page_permission_error_returns_empty(qtbot, monkeypatch, tmp_app_
     assert page._get_subfolders(collection) == []
 
 
-# ---------------------------------------------------------------------------
-# 13. navigate_to_labelling signal is emitted when grid requests navigation
-# ---------------------------------------------------------------------------
-
-
-def test_browse_page_navigate_to_labelling_signal(qtbot, tmp_app_paths):
-    """BrowsePage.navigate_to_labelling signal is emitted when the grid emits it."""
-    page = _make_browse_page(tmp_app_paths, qtbot)
-
-    with qtbot.waitSignal(page.navigate_to_labelling, timeout=1000) as blocker:
-        page.grid.navigate_to_labelling.emit(42)
-
-    assert blocker.args == [42]
-
-
 # ===========================================================================
 # eventFilter — non-KeyPress events fall through to super
 # ===========================================================================

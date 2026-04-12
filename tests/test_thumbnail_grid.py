@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -223,8 +222,8 @@ def test_label_button_enabled_with_unidentified_face(
     assert widget._overlay.label_btn.isEnabled()
 
 
-def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
-    """Clicking label_btn causes the grid to emit navigate_to_labelling."""
+def test_label_btn_opens_labelling_dialog(qtbot, sample_image, tmp_app_paths):
+    """Clicking label_btn opens LabellingDialog for the image."""
     session_factory = _make_session_factory(tmp_app_paths)
 
     with session_factory() as session:
@@ -252,13 +251,11 @@ def test_navigate_to_labelling_from_overlay(qtbot, sample_image, tmp_app_paths):
     thumb = grid.thumbnails[0]
     thumb._overlay.show()
 
-    received: list[int] = []
-    grid.navigate_to_labelling.connect(received.append)
-
-    with qtbot.waitSignal(grid.navigate_to_labelling):
+    with patch("photoaident.ui.widgets.thumbnail_grid.LabellingDialog") as MockDlg:
+        MockDlg.return_value.exec.return_value = None
         qtbot.mouseClick(thumb._overlay.label_btn, QtCore.Qt.MouseButton.LeftButton)
-
-    assert received == [img_id]
+        MockDlg.assert_called_once()
+        assert MockDlg.call_args[0][0] == img_id
 
 
 def test_thumbnail_grid_init(
@@ -760,10 +757,10 @@ def test_on_image_selected_without_image_in_db_is_noop(
         MockDlg.assert_not_called()
 
 
-def test_navigate_to_labelling_signal_forwarded(
+def test_image_detail_dialog_opened_on_image_selected(
     qtbot, tmp_app_paths, mock_vector_store
 ):
-    """navigate_to_labelling from ImageDetailDialog is forwarded by the grid."""
+    """_on_image_selected opens ImageDetailDialog with the correct image."""
     session_factory = _make_session_factory(tmp_app_paths)
 
     with session_factory() as session:
@@ -777,7 +774,6 @@ def test_navigate_to_labelling_signal_forwarded(
     grid = ThumbnailGrid(session_factory, mock_vector_store, tmp_app_paths)
     qtbot.addWidget(grid)
 
-    # Populate _all_results so _on_image_selected can find the image
     grid._all_results = [
         SearchResult(
             image_id=img_id,
@@ -786,26 +782,13 @@ def test_navigate_to_labelling_signal_forwarded(
         )
     ]
 
-    received: list[int] = []
-    grid.navigate_to_labelling.connect(received.append)
-
     with patch("photoaident.ui.widgets.thumbnail_grid.ImageDetailDialog") as MockDlg:
         MockDlg.return_value.exec.return_value = None
-        # Capture the slot connected to navigate_to_labelling
-        captured_slots: list[Callable] = []
-
-        def capture_connect(slot: Callable) -> None:
-            captured_slots.append(slot)
-
-        MockDlg.return_value.navigate_to_labelling.connect.side_effect = capture_connect
         grid._on_image_selected(img_id)
 
-        assert (
-            len(captured_slots) == 1
-        ), "Expected exactly one slot connected to navigate_to_labelling"
-        captured_slots[0](img_id)
-
-    assert received == [img_id]
+        MockDlg.assert_called_once()
+        call_kwargs = MockDlg.call_args[1]
+        assert call_kwargs["current_index"] == 0
 
 
 # ---------------------------------------------------------------------------

@@ -21,7 +21,6 @@ from photoaident.settings import Settings
 from photoaident.ui.about_dialog import AboutDialog
 from photoaident.ui.onboarding_dialog import OnboardingDialog
 from photoaident.ui.pages.browse import BrowsePage
-from photoaident.ui.pages.labelling import LabellingPage
 from photoaident.ui.pages.library import LibraryPage
 from photoaident.ui.pages.persons import PersonsPage
 from photoaident.ui.preferences_dialog import PreferencesDialog
@@ -135,9 +134,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self._library_page = LibraryPage(
             self._session_factory, self._paths, self._vector_store
         )
-        self._labelling_page = LabellingPage(
-            self._session_factory, self._paths, self._vector_store
-        )
         self._persons_page = PersonsPage(
             self._session_factory, self._paths, self._vector_store
         )
@@ -145,17 +141,14 @@ class MainWindow(QtWidgets.QMainWindow):
             self._session_factory, self._paths, self._settings, self._vector_store
         )
 
-        self._library_page.navigate_to_labelling.connect(self.go_to_labelling)
         self._library_page.navigate_to_browse.connect(self.go_to_browse)
-        self._browse_page.navigate_to_labelling.connect(self.go_to_labelling)
         self._browse_page.navigate_to_browse.connect(self.go_to_browse)
 
-        # Stacked widget holding the pages (Search=0, Browse=1, Persons=2, Labelling=3)
+        # Stacked widget holding the pages (Search=0, Browse=1, Persons=2)
         self._stacked_pages = QtWidgets.QStackedWidget()
         self._stacked_pages.addWidget(self._library_page)  # index 0 (Search)
         self._stacked_pages.addWidget(self._browse_page)  # index 1
         self._stacked_pages.addWidget(self._persons_page)  # index 2
-        self._stacked_pages.addWidget(self._labelling_page)  # index 3
 
         # Sidebar navigation buttons
         self._page_btn_search = self._make_nav_button(self.tr("Search"), "search.svg")
@@ -170,17 +163,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self._page_btn_persons.clicked.connect(lambda: self._switch_page(2))
         self._page_btn_persons.setShortcut(QtGui.QKeySequence("Alt+3"))
 
-        self._page_btn_label = self._make_nav_button(self.tr("Labelling"), "label.svg")
-        self._page_btn_label.clicked.connect(lambda: self._switch_page(3))
-        self._page_btn_label.setShortcut(QtGui.QKeySequence("Alt+4"))
-
         nav_group = QtWidgets.QButtonGroup(self)
         nav_group.setExclusive(True)
         for _btn in [
             self._page_btn_search,
             self._page_btn_browse,
             self._page_btn_persons,
-            self._page_btn_label,
         ]:
             nav_group.addButton(_btn)
 
@@ -190,7 +178,6 @@ class MainWindow(QtWidgets.QMainWindow):
         sidebar_layout.addWidget(self._page_btn_search)
         sidebar_layout.addWidget(self._page_btn_browse)
         sidebar_layout.addWidget(self._page_btn_persons)
-        sidebar_layout.addWidget(self._page_btn_label)
         sidebar_layout.addStretch()
 
         sidebar = QtWidgets.QWidget()
@@ -363,7 +350,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._page_btn_search,
             self._page_btn_browse,
             self._page_btn_persons,
-            self._page_btn_label,
         ]
         for i, btn in enumerate(buttons):
             btn.setChecked(i == index)
@@ -376,13 +362,6 @@ class MainWindow(QtWidgets.QMainWindow):
             self._browse_page.refresh()
         elif index == 2:
             self._persons_page.refresh()
-        elif index == 3:
-            self._labelling_page.refresh()
-
-    def go_to_labelling(self, priority_image_id: int) -> None:
-        """Navigate to the Labelling page, prioritising faces from the given image."""
-        self._activate_page(3)
-        self._labelling_page.refresh(priority_image_id=priority_image_id)
 
     def go_to_browse(self, file_path: str) -> None:
         """Navigate to the Browse page with the image's folder pre-selected.

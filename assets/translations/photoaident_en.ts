@@ -386,18 +386,18 @@ Please close it before starting a new one.</translation>
     </message>
 </context>
 <context>
-    <name>LabellingPage</name>
+    <name>LabellingDialog</name>
     <message>
-        <source>Mark Anonymous</source>
-        <translation>Mark Anonymous</translation>
-    </message>
-    <message>
-        <source>Skip Image</source>
-        <translation>Skip Image</translation>
+        <source>Label Faces</source>
+        <translation>Label Faces</translation>
     </message>
     <message>
         <source>Skip Face</source>
         <translation>Skip Face</translation>
+    </message>
+    <message>
+        <source>Mark Anonymous</source>
+        <translation>Mark Anonymous</translation>
     </message>
     <message>
         <source>Select Person</source>
@@ -412,16 +412,28 @@ Please close it before starting a new one.</translation>
         <translation>Confirm</translation>
     </message>
     <message>
+        <source>Close</source>
+        <translation>Close</translation>
+    </message>
+    <message>
         <source>Unknown date</source>
         <translation>Unknown date</translation>
     </message>
     <message>
-        <source>All done! No unidentified faces remain.</source>
-        <translation>All done! No unidentified faces remain.</translation>
+        <source>Face {current} of {total}</source>
+        <translation>Face {current} of {total}</translation>
     </message>
     <message>
-        <source>All remaining faces skipped this session. Restart the app to review them again.</source>
-        <translation>All remaining faces skipped this session. Restart the app to review them again.</translation>
+        <source>File Path</source>
+        <translation>File Path</translation>
+    </message>
+    <message>
+        <source>Taken At</source>
+        <translation>Taken At</translation>
+    </message>
+    <message>
+        <source>All done! No unidentified faces remain.</source>
+        <translation>All done! No unidentified faces remain.</translation>
     </message>
 </context>
 <context>
@@ -452,10 +464,6 @@ Please close it before starting a new one.</translation>
     <message>
         <source>Search</source>
         <translation>Search</translation>
-    </message>
-    <message>
-        <source>Labelling</source>
-        <translation>Labelling</translation>
     </message>
     <message>
         <source>Persons</source>
