@@ -278,6 +278,9 @@ class LabellingDialog(QtWidgets.QDialog):
         self._image_preview.load(entry.image_path, entry.bbox)
         self._face_crop.load(entry.crop_path, entry.image_path, entry.bbox)
         self._set_buttons_enabled(True)
+        self._person_widget.clear_selection()
+        self._cluster_widget.clear_data()
+        self._search_edit.clear()
         best_person_id = self._find_best_person_id()
         if best_person_id is not None:
             self._person_widget.select_by_id(best_person_id)
