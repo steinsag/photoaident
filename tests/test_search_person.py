@@ -446,3 +446,22 @@ def test_find_best_person_for_face_missing_embedding(search_db, vector_store):
 
     result = find_best_person_for_face(99999, search_db, vector_store)
     assert result is None
+
+
+def test_find_best_person_for_face_dimension_mismatch(search_db, vector_store, caplog):
+    """Returns None and logs an error when dimensions differ."""
+    import logging
+
+    person_id, cluster_id = _add_person_cluster(search_db)
+    _add_identified_face(search_db, vector_store, person_id, cluster_id, _unit_emb(0))
+
+    _, face_id = _add_unidentified_face(search_db, vector_store, _unit_emb(0))
+
+    # Simulate a mismatched dimension on the vector store
+    vector_store.dimension = vector_store.dimension + 1
+
+    with caplog.at_level(logging.ERROR, logger="photoaident.core.search_person"):
+        result = find_best_person_for_face(face_id, search_db, vector_store)
+
+    assert result is None
+    assert any("dimension" in record.message for record in caplog.records)
