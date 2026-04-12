@@ -70,7 +70,6 @@ class LabellingDialog(QtWidgets.QDialog):
         self._query_embedding: np.ndarray | None = None
         self._selected_person: Person | None = None
         self._selected_cluster: EmbeddingCluster | None = None
-        self._any_changes: bool = False
 
         self._setup_ui()
         self._load_persons()
@@ -285,11 +284,11 @@ class LabellingDialog(QtWidgets.QDialog):
         if self._current_idx is None or not self._face_data:
             return
         del self._face_data[self._current_idx]
-        if self._face_data:
-            next_idx = min(self._current_idx, len(self._face_data) - 1)
-            self._show_face(next_idx)
-        else:
+        remaining = len(self._face_data)
+        if remaining == 0:
             self._show_completion_state()
+        else:
+            self._show_face(min(self._current_idx, remaining - 1))
 
     # ------------------------------------------------------------------
     # Private: person list
@@ -448,7 +447,6 @@ class LabellingDialog(QtWidgets.QDialog):
                 face.cluster_id = cluster.id
                 face.labelled_at = datetime.now(timezone.utc)
                 session.commit()
-        self._any_changes = True
         recompute_cluster_mean(cluster.id, self._session_factory, self._vector_store)
         self._advance_to_next()
 
@@ -470,7 +468,6 @@ class LabellingDialog(QtWidgets.QDialog):
                 face.state = FaceState.ANONYMOUS
                 face.labelled_at = datetime.now(timezone.utc)
                 session.commit()
-        self._any_changes = True
         self._advance_to_next()
 
     def _skip_face(self) -> None:
