@@ -334,10 +334,10 @@ def test_label_faces_button_disabled_when_no_unidentified_faces(
     assert not label_btn.isEnabled()
 
 
-def test_label_faces_button_emits_signal(
+def test_label_faces_button_opens_labelling_dialog(
     qtbot, tmp_path, session_factory, vector_store, tmp_app_paths
 ):
-    """Clicking the label button emits navigate_to_labelling with the image id."""
+    """Clicking the label button opens LabellingDialog for the current image."""
     db_image = _make_db_image(
         tmp_path,
         700,
@@ -349,15 +349,14 @@ def test_label_faces_button_emits_signal(
     dialog = _create_dialog(db_image, session_factory, vector_store, tmp_app_paths)
     qtbot.add_widget(dialog)
 
-    emitted_ids: list[int] = []
-    dialog.navigate_to_labelling.connect(emitted_ids.append)
-
     label_btn = _find_button(dialog, "Label")
     assert label_btn is not None
 
-    qtbot.mouseClick(label_btn, QtCore.Qt.MouseButton.LeftButton)
-
-    assert emitted_ids == [700]
+    with patch("photoaident.ui.widgets.image_detail_dialog.LabellingDialog") as MockDlg:
+        MockDlg.return_value.exec.return_value = None
+        qtbot.mouseClick(label_btn, QtCore.Qt.MouseButton.LeftButton)
+        MockDlg.assert_called_once()
+        assert MockDlg.call_args[0][0] == 700
 
 
 # ===========================================================================

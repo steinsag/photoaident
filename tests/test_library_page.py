@@ -396,17 +396,6 @@ def test_load_images_empty_per_person_scores(
         assert len(page.grid.thumbnails) == 0
 
 
-def test_navigate_to_labelling(qtbot, session_factory, tmp_app_paths, vector_store):
-    """LibraryPage.navigate_to_labelling signal is emitted when the grid emits it."""
-    page = LibraryPage(session_factory, tmp_app_paths, vector_store=vector_store)
-    qtbot.addWidget(page)
-
-    with qtbot.waitSignal(page.navigate_to_labelling, timeout=1000) as blocker:
-        page.grid.navigate_to_labelling.emit(123)
-
-    assert blocker.args == [123]
-
-
 # --- Date filter tests ---
 
 

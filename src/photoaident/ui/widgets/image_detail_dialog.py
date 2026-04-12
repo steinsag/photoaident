@@ -11,6 +11,7 @@ from sqlalchemy.orm import joinedload
 from photoaident.core.search import SearchResult
 from photoaident.core.search_person import resolve_faces_to_persons
 from photoaident.db.database import Face, FaceState, Image as DBImage
+from photoaident.ui.widgets.labelling_dialog import LabellingDialog
 from photoaident.ui.widgets.map_widget import MapWidget
 from photoaident.ui.window_state import restore_widget_geometry, save_widget_geometry
 from photoaident.utils.file_manager import reveal_in_file_manager
@@ -94,7 +95,6 @@ class ImageDetailDialog(QtWidgets.QDialog):
     navigate between images with Previous / Next buttons or arrow keys.
     """
 
-    navigate_to_labelling = QtCore.Signal(int)  # image_id
     navigate_to_browse = QtCore.Signal(str)  # file_path
 
     _RESIZE_DEBOUNCE_MS = 50
@@ -905,9 +905,19 @@ class ImageDetailDialog(QtWidgets.QDialog):
             self.navigate_to_browse.emit(str(self._image_data.file_path))
 
     def _on_label_faces_clicked(self) -> None:
-        if self._image_data is not None:
-            self.accept()
-            self.navigate_to_labelling.emit(self._image_data.id)
+        if self._image_data is None:
+            return
+
+        dlg = LabellingDialog(
+            self._image_data.id,
+            self._session_factory,
+            self._paths,
+            self._vector_store,
+            parent=self,
+        )
+        dlg.exec()
+        # Refresh face overlay colours after labelling
+        self._show_current_image()
 
     def _on_show_in_file_manager_clicked(self) -> None:
         if self._image_data is not None:

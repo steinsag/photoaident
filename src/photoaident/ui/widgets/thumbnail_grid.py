@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from photoaident.core.search import SearchResult, SortOrder, sort_results
 from photoaident.db.database import Face, FaceState
 from photoaident.ui.widgets.image_detail_dialog import ImageDetailDialog
+from photoaident.ui.widgets.labelling_dialog import LabellingDialog
 from photoaident.utils.file_manager import reveal_in_file_manager
 from photoaident.utils.image_utils import generate_thumbnail
 from photoaident.utils.resource_path import icon_path as _icon_path
@@ -243,7 +244,6 @@ class ThumbnailGrid(QtWidgets.QWidget):
     """A scrollable grid of thumbnails with infinite scroll."""
 
     image_selected = QtCore.Signal(int)
-    navigate_to_labelling = QtCore.Signal(int)
     navigate_to_browse = QtCore.Signal(str)  # file_path
     results_changed = QtCore.Signal(int)  # total result count, emitted on set_results()
     page_loaded = QtCore.Signal(int, int)  # (loaded_so_far, total)
@@ -339,9 +339,20 @@ class ThumbnailGrid(QtWidgets.QWidget):
             paths=self._paths,
             parent=self,
         )
-        dialog.navigate_to_labelling.connect(self.navigate_to_labelling.emit)
         dialog.navigate_to_browse.connect(self.navigate_to_browse.emit)
         dialog.exec()
+
+    def _open_labelling_dialog(self, image_id: int) -> None:
+        """Open the LabellingDialog for the given image."""
+
+        dlg = LabellingDialog(
+            image_id,
+            self._session_factory,
+            self._paths,
+            self._vector_store,
+            parent=self,
+        )
+        dlg.exec()
 
     def _clear_display(self) -> None:
         """Remove all displayed thumbnail widgets and reset pagination counter."""
@@ -367,7 +378,7 @@ class ThumbnailGrid(QtWidgets.QWidget):
     ):
         thumb = ThumbnailWidget(image_id, file_path, thumb_path, self._session_factory)
         thumb.clicked.connect(self.image_selected.emit)
-        thumb.label_clicked.connect(self.navigate_to_labelling.emit)
+        thumb.label_clicked.connect(self._open_labelling_dialog)
 
         idx = len(self.thumbnails)
         row = idx // self.cols

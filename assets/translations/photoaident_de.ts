@@ -386,18 +386,18 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     </message>
 </context>
 <context>
-    <name>LabellingPage</name>
+    <name>LabellingDialog</name>
     <message>
-        <source>Mark Anonymous</source>
-        <translation>Als anonym markieren</translation>
-    </message>
-    <message>
-        <source>Skip Image</source>
-        <translation>Bild überspringen</translation>
+        <source>Label Faces</source>
+        <translation>Gesichter beschriften</translation>
     </message>
     <message>
         <source>Skip Face</source>
         <translation>Gesicht überspringen</translation>
+    </message>
+    <message>
+        <source>Mark Anonymous</source>
+        <translation>Als anonym markieren</translation>
     </message>
     <message>
         <source>Select Person</source>
@@ -412,18 +412,28 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
         <translation>Bestätigen</translation>
     </message>
     <message>
+        <source>Close</source>
+        <translation>Schließen</translation>
+    </message>
+    <message>
         <source>Unknown date</source>
         <translation>Unbekanntes Datum</translation>
     </message>
     <message>
-        <source>All done! No unidentified faces remain.</source>
-        <translation>Fertig! Keine unbekannten Gesichter mehr vorhanden.</translation>
+        <source>Face {current} of {total}</source>
+        <translation>Gesicht {current} von {total}</translation>
     </message>
     <message>
-        <source>All remaining faces skipped this session. Restart the app to review them again.</source>
-        <translation>Alle verbleibenden Gesichter wurden in dieser Sitzung übersprungen. Starten Sie die App neu, um
-                sie erneut zu überprüfen.
-            </translation>
+        <source>File Path</source>
+        <translation>Dateipfad</translation>
+    </message>
+    <message>
+        <source>Taken At</source>
+        <translation>Bilddatum</translation>
+    </message>
+    <message>
+        <source>All done! No unidentified faces remain.</source>
+        <translation>Fertig! Keine unbekannten Gesichter mehr vorhanden.</translation>
     </message>
 </context>
 <context>
@@ -454,10 +464,6 @@ Bitte schließen Sie diese, bevor Sie eine neue starten.</translation>
     <message>
         <source>Search</source>
         <translation>Suchen</translation>
-    </message>
-    <message>
-        <source>Labelling</source>
-        <translation>Beschriften</translation>
     </message>
     <message>
         <source>Persons</source>
