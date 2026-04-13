@@ -9,7 +9,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = { text = "Apache" }
 dependencies = [
-    "pyside6>=6.10.2",
+    "pyside6>=6.11.0",
     "insightface>=0.7.3",
     "faiss-cpu>=1.9.0",
     "Pillow>=10.0.0",
