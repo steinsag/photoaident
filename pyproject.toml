@@ -38,7 +38,7 @@ cpu_coreml = [
     "onnxruntime>=1.24.0",
 ]
 cuda = [
-    "onnxruntime-gpu[cuda,cudnn]>=1.24.0",
+    "onnxruntime-gpu[cuda,cudnn]>=1.24.4",
 ]
 openvino = [
     "onnxruntime-openvino>=1.24.0; platform_machine == 'x86_64'",
