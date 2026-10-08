@@ -167,36 +167,40 @@ def main():  # pragma: no cover
         )
         sys.exit(1)
 
-    apply_migrations(f"sqlite:///{paths.db_path}")
-
-    app = QtWidgets.QApplication(sys.argv)
-    app.setApplicationName(APP_NAME)
-    app.setOrganizationName(APP_NAME)
-    app.setOrganizationDomain("photoaident.app")
-
-    from photoaident.app import load_translations
-
-    load_translations(app)
-
+    window = None
     try:
-        window = MainWindow(paths)
-    except CorruptIndexError as exc:
-        msg = QtWidgets.QApplication.translate(
-            "CorruptIndexError",
-            "The FAISS index file is corrupt and cannot be loaded.\n\n"
-            "File: {path}\n\n"
-            "The face index cannot be recovered. "
-            "Restore the data directory from a backup if you have one. "
-            "Without a backup, all person assignments and labels are lost — "
-            "you would need to delete both this file and the database to start over.",
-        ).format(path=exc.faiss_path)
-        QtWidgets.QMessageBox.critical(None, APP_NAME, msg)
-        sys.exit(1)
-    window.show()
+        apply_migrations(f"sqlite:///{paths.db_path}")
 
-    try:
+        app = QtWidgets.QApplication(sys.argv)
+        app.setApplicationName(APP_NAME)
+        app.setOrganizationName(APP_NAME)
+        app.setOrganizationDomain("photoaident.app")
+
+        from photoaident.app import load_translations
+
+        load_translations(app)
+
+        try:
+            window = MainWindow(paths)
+        except CorruptIndexError as exc:
+            msg = QtWidgets.QApplication.translate(
+                "CorruptIndexError",
+                "The FAISS index file is corrupt and cannot be loaded.\n\n"
+                "File: {path}\n\n"
+                "The face index cannot be recovered. "
+                "Restore the data directory from a backup if you have one. "
+                "Without a backup, all person assignments and labels are lost — "
+                "you would need to delete both this file and the database "
+                "to start over.",
+            ).format(path=exc.faiss_path)
+            QtWidgets.QMessageBox.critical(None, APP_NAME, msg)
+            sys.exit(1)
+        window.show()
+
         sys.exit(app.exec())
     finally:
+        if window is not None:
+            window.shutdown()
         lock.release()
 
 

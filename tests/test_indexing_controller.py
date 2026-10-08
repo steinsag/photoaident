@@ -1,7 +1,8 @@
 """Tests for IndexingController.
 
-Strategy: inject mock tasks/threads directly into private attrs; call private
-methods to simulate task-completion signals; never start real threads.
+Unit tests inject mock tasks and threads and simulate task-completion signals.
+The shutdown integration test starts a real writer thread to verify join order,
+GUI responsiveness, and instance-lock exclusion.
 """
 
 from pathlib import Path
@@ -258,3 +259,134 @@ def test_start_inventory_noop_when_busy(tmp_path):
         controller.start_inventory("some/path")
 
     mock_start.assert_not_called()
+
+
+def test_shutdown_blocks_all_new_tasks_and_late_signals(tmp_path):
+    """No public entry point or queued completion restarts writers after shutdown."""
+    controller, _ = _make_controller(tmp_path)
+    controller.shutdown(tmp_path / "faiss.index")
+    with (
+        patch("photoaident.core.indexing_controller.InventoryTask") as inventory,
+        patch("photoaident.core.indexing_controller.IndexingTask") as indexing,
+    ):
+        controller.start_pipeline("photos")
+        controller.start_inventory("photos")
+        controller.start_indexing_only()
+        controller._on_inventory_finished(5)
+        controller._on_inventory_finished_with_reporting(5)
+        controller._on_indexing_finished()
+        controller._start_inventory("photos")
+        controller._start_indexing()
+    inventory.assert_not_called()
+    indexing.assert_not_called()
+
+
+def test_shutdown_waits_for_real_writer_before_unlock(tmp_path, qapp):
+    """Cancellation is cooperative; GUI events and lock exclusion survive joining."""
+    import threading
+    from PySide6 import QtCore
+    from photoaident.utils.instance_lock import InstanceLock
+
+    controller, vector_store = _make_controller(tmp_path)
+    ready, finish = threading.Event(), threading.Event()
+    calls = []
+    owner = InstanceLock(tmp_path / "photoaident.lock")
+    contender = InstanceLock(tmp_path / "photoaident.lock")
+
+    class Writer(QtCore.QThread):
+        def run(self) -> None:
+            ready.set()
+            finish.wait()
+            calls.append("write-finished")
+
+    writer = Writer()
+    writer.finished.connect(writer.deleteLater)
+    task = MagicMock()
+    task.cancel.side_effect = lambda: calls.append("cancel")
+    controller._indexing_task = task
+    controller._indexing_thread = writer
+    vector_store.save.side_effect = lambda path: calls.append("saved")
+    probes = []
+
+    def probe() -> None:
+        probes.append(contender.acquire())
+        controller._on_inventory_finished(1)
+        controller.start_indexing_only()
+        calls.append("gui-responsive")
+        finish.set()
+
+    assert owner.acquire()
+    writer.start()
+    assert ready.wait(5)
+    QtCore.QTimer.singleShot(100, probe)
+    try:
+        controller.shutdown(tmp_path / "faiss.index")
+        assert probes == [False]
+        assert calls == ["cancel", "gui-responsive", "write-finished", "saved"]
+        assert not contender.acquire()
+        owner.release()
+        assert contender.acquire()
+        controller.shutdown(tmp_path / "faiss.index")
+        vector_store.save.assert_called_once()
+    finally:
+        finish.set()
+        writer.wait()
+        owner.release()
+        contender.release()
+
+
+def test_shutdown_cancels_and_joins_both_writers(tmp_path):
+    """Every writer finishes before the final FAISS save."""
+    controller, vector_store = _make_controller(tmp_path)
+    calls = []
+    for name in ("inventory", "indexing"):
+        task, thread = MagicMock(), MagicMock()
+        task.cancel.side_effect = lambda name=name: calls.append("cancel-" + name)
+        thread.wait.side_effect = (
+            lambda timeout, name=name: calls.append("joined-" + name) or True
+        )
+        setattr(controller, "_" + name + "_task", task)
+        setattr(controller, "_" + name + "_thread", thread)
+    vector_store.save.side_effect = lambda path: calls.append("save")
+    controller.shutdown(tmp_path / "faiss.index")
+    assert calls == [
+        "cancel-inventory",
+        "cancel-indexing",
+        "joined-inventory",
+        "joined-indexing",
+        "save",
+    ]
+
+
+def test_shutdown_reentrant_events_do_not_join_twice(tmp_path):
+    """A nested close callback cannot repeat cleanup while the outer join runs."""
+    controller, vector_store = _make_controller(tmp_path)
+    controller._indexing_task = MagicMock()
+    thread = MagicMock()
+    controller._indexing_thread = thread
+    thread.wait.side_effect = [False, True]
+    with patch(
+        "photoaident.core.indexing_controller.QtCore.QCoreApplication.processEvents",
+        side_effect=lambda *args: controller.shutdown(tmp_path / "faiss.index"),
+    ):
+        controller.shutdown(tmp_path / "faiss.index")
+    assert thread.wait.call_count == 2
+    vector_store.save.assert_called_once()
+
+
+def test_shutdown_can_resume_after_join_exception(tmp_path):
+    """An interrupted join must not mark active writers as already stopped."""
+    controller, vector_store = _make_controller(tmp_path)
+    controller._indexing_task = MagicMock()
+    thread = MagicMock()
+    controller._indexing_thread = thread
+    thread.wait.side_effect = [RuntimeError("join interrupted"), True]
+    import pytest
+
+    with pytest.raises(RuntimeError, match="join interrupted"):
+        controller.shutdown(tmp_path / "faiss.index")
+    assert not controller._shutdown_complete
+    vector_store.save.assert_not_called()
+    controller.shutdown(tmp_path / "faiss.index")
+    assert controller._shutdown_complete
+    vector_store.save.assert_called_once()
