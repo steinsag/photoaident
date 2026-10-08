@@ -77,6 +77,7 @@ class MainWindow(QtWidgets.QMainWindow):
         enable_onboarding: bool = True,
     ):
         super().__init__()
+        self._closing = False
         self._paths = paths
         self._settings = Settings.load(self._paths.config_file)
         self._onboarding_enabled = enable_onboarding
@@ -486,10 +487,23 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_gpu_status_ready(self, msg: str) -> None:
         self._status_bar.showMessage(msg, 5000)
 
-    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
-        save_widget_geometry(self, self._paths.window_state_file, save_state=True)
+    def shutdown(self) -> None:
+        """Stop all data writers before the application releases its lock."""
         self._indexing_controller.shutdown(self._paths.faiss_path)
-        event.accept()
+
+    def closeEvent(self, event: QtGui.QCloseEvent) -> None:
+        if self._closing:
+            event.ignore()
+            return
+        self._closing = True
+        self.setEnabled(False)
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.CursorShape.WaitCursor)
+        try:
+            save_widget_geometry(self, self._paths.window_state_file, save_state=True)
+            self.shutdown()
+            event.accept()
+        finally:
+            QtWidgets.QApplication.restoreOverrideCursor()
 
     def _set_app_icon(self) -> None:
         icon = QtGui.QIcon()

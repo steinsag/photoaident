@@ -639,3 +639,33 @@ def _reset_indexing_controller(ctrl) -> None:
             ctrl._indexing_thread.wait(3000)
         ctrl._indexing_task = None
         ctrl._indexing_thread = None
+
+
+def test_close_event_prevents_reentry_and_preserves_shutdown_order(
+    qtbot, tmp_app_paths
+):
+    """Close stays disabled during shutdown and rejects nested close events."""
+    from unittest.mock import patch
+    from PySide6 import QtGui
+
+    window = _make_window(tmp_app_paths, qtbot)
+    events = []
+    nested = QtGui.QCloseEvent()
+
+    def shutdown() -> None:
+        assert not window.isEnabled()
+        events.append("shutdown")
+        window.closeEvent(nested)
+        assert not nested.isAccepted()
+
+    with (
+        patch(
+            "photoaident.app.save_widget_geometry",
+            side_effect=lambda *a, **k: events.append("geometry"),
+        ),
+        patch.object(window, "shutdown", side_effect=shutdown),
+    ):
+        event = QtGui.QCloseEvent()
+        window.closeEvent(event)
+    assert event.isAccepted()
+    assert events == ["geometry", "shutdown"]
