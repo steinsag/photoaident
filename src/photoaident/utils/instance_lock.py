@@ -1,55 +1,56 @@
-import fcntl
-import os
+import logging
 from pathlib import Path
-from typing import TextIO
+
+from PySide6.QtCore import QLockFile
+
+logger = logging.getLogger(__name__)
 
 
 class InstanceLock:
-    """Manages a file-based lock to prevent multiple instances of the app."""
+    """Hold a non-recursive application lock without requiring a Qt event loop."""
 
-    def __init__(self, lock_path: Path):
+    def __init__(self, lock_path: Path) -> None:
         self.lock_path = lock_path
-        self._lock_file: TextIO | None = None
+        self._resolved_path = lock_path.absolute()
+        self._lock = QLockFile(str(self._resolved_path))
+        # A live application may index photos for hours.
+        self._lock.setStaleLockTime(0)
 
     def acquire(self) -> bool:
-        """Try to acquire the lock.
-
-        Returns:
-            True if successful, False if already locked.
-        """
-        try:
-            # Ensure parent directory exists
-            self.lock_path.parent.mkdir(parents=True, exist_ok=True)
-
-            # Open the lock file
-            self._lock_file = open(self.lock_path, "w")
-
-            # Try to get an exclusive lock (non-blocking)
-            fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-            # Write current PID to the lock file for debugging
-            self._lock_file.write(str(os.getpid()))
-            self._lock_file.flush()
-
-            return True
-        except (IOError, OSError):
-            if self._lock_file:
-                self._lock_file.close()
-                self._lock_file = None
+        """Acquire immediately, returning False on contention or filesystem errors."""
+        if self._lock.isLocked():
             return False
+        try:
+            self._resolved_path.parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            logger.warning(
+                "Cannot create lock directory for %s", self.lock_path, exc_info=True
+            )
+            return False
+        # Legacy PID-only files lack Qt owner metadata. Do not ask Qt to
+        # interpret a truncated PID as evidence that such an owner is dead.
+        try:
+            with self._resolved_path.open("rb") as existing:
+                metadata = [existing.readline(4096) for _ in range(3)]
+            if any(not line.endswith(b"\n") for line in metadata):
+                logger.warning(
+                    "Unrecognized instance lock metadata: %s", self.lock_path
+                )
+                return False
+        except FileNotFoundError:
+            pass
+        except OSError:
+            logger.warning(
+                "Cannot read instance lock %s", self.lock_path, exc_info=True
+            )
+            return False
+        if self._lock.tryLock(0):
+            return True
+        error = self._lock.error()
+        if error != QLockFile.LockError.LockFailedError:
+            logger.warning("Cannot acquire instance lock %s: %s", self.lock_path, error)
+        return False
 
     def release(self) -> None:
-        """Release the lock."""
-        if self._lock_file:
-            try:
-                fcntl.flock(self._lock_file, fcntl.LOCK_UN)
-            except (IOError, OSError):
-                pass
-            finally:
-                self._lock_file.close()
-                self._lock_file = None
-                # Optionally delete the file, but flock is usually enough
-                try:
-                    self.lock_path.unlink(missing_ok=True)
-                except (IOError, OSError):
-                    pass
+        """Release only this instance's ownership; repeated calls are harmless."""
+        self._lock.unlock()
