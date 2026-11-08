@@ -42,6 +42,9 @@ class IndexingController(QtCore.QObject):
         self._paths = paths
         self._filepath_date_pattern = filepath_date_pattern
 
+        self._shutting_down = False
+        self._shutdown_complete = False
+        self._shutdown_in_progress = False
         self._inventory_task: InventoryTask | None = None
         self._inventory_thread: QtCore.QThread | None = None
         self._indexing_task: IndexingTask | None = None
@@ -67,7 +70,7 @@ class IndexingController(QtCore.QObject):
 
         No-op when already busy.
         """
-        if self.is_busy:
+        if self._shutting_down or self.is_busy:
             return
         self._start_inventory(collection_path)
 
@@ -76,7 +79,7 @@ class IndexingController(QtCore.QObject):
 
         No-op when indexing is already running.
         """
-        if self._indexing_task is not None:
+        if self._shutting_down or self._indexing_task is not None:
             return
         self._start_indexing()
 
@@ -85,7 +88,7 @@ class IndexingController(QtCore.QObject):
 
         No-op when already busy.
         """
-        if self.is_busy:
+        if self._shutting_down or self.is_busy:
             return
         self._inventory_task = InventoryTask(collection_path, self._session_factory)
         self._inventory_thread = QtCore.QThread()
@@ -101,6 +104,8 @@ class IndexingController(QtCore.QObject):
         self._inventory_thread.start()
 
     def _on_inventory_finished_with_reporting(self, count: int) -> None:
+        if self._shutting_down:
+            return
         self._teardown_inventory()
         self.inventory_finished.emit(count)
 
@@ -110,45 +115,60 @@ class IndexingController(QtCore.QObject):
             self._inventory_task.cancel()
 
     def shutdown(self, faiss_path: Path) -> None:
-        """Cancel all running tasks and persist the FAISS index.
-
-        Call from ``closeEvent``; swallows exceptions to avoid blocking shutdown.
-        """
+        """Cancel writers and join them before returning, keeping Qt responsive."""
+        if self._shutdown_complete or self._shutdown_in_progress:
+            return
+        self._shutting_down = True
+        self._shutdown_in_progress = True
         try:
-            if self._inventory_task is not None:
-                self._inventory_task.cancel()
-            if self._inventory_thread is not None:
-                self._inventory_thread.quit()
+            had_indexing = self._indexing_task is not None
+            threads = [
+                thread
+                for thread in (self._inventory_thread, self._indexing_thread)
+                if thread is not None
+            ]
+            # Keep thread wrappers alive while processing queued events during joins.
+            for thread in threads:
+                thread.finished.disconnect(thread.deleteLater)
+            for task in (self._inventory_task, self._indexing_task):
+                if task is not None:
+                    try:
+                        task.cancel()
+                    except Exception:
+                        logger.warning(
+                            "Task cancellation failed; waiting for completion",
+                            exc_info=True,
+                        )
+            for thread in threads:
+                thread.quit()
+            for thread in threads:
+                while not thread.wait(50):
+                    QtCore.QCoreApplication.processEvents(
+                        QtCore.QEventLoop.ProcessEventsFlag.ExcludeUserInputEvents, 50
+                    )
+                thread.deleteLater()
+            self._inventory_thread = None
+            self._indexing_thread = None
+            self._inventory_task = None
+            self._indexing_task = None
+            if had_indexing:
+                try:
+                    self._vector_store.save(faiss_path)
+                except Exception:
+                    logger.warning(
+                        "Failed to save FAISS index on shutdown", exc_info=True
+                    )
 
-            if self._indexing_task is not None:
-                self._indexing_task.cancel()
-            if self._indexing_thread is not None:
-                self._indexing_thread.quit()
-
-            # Wait for threads to stop.
-            if self._inventory_thread is not None:
-                self._inventory_thread.wait(1000)
-
-            indexing_stopped = True
-            if self._indexing_thread is not None:
-                # Give it a bit more time than inventory
-                indexing_stopped = self._indexing_thread.wait(2000)
-        except Exception:
-            logger.debug("Error during task cancellation", exc_info=True)
-            indexing_stopped = False
-
-        if self._indexing_task is not None and indexing_stopped:
-            try:
-                self._vector_store.save(faiss_path)
-            except Exception:
-                logger.warning("Failed to save FAISS index on shutdown", exc_info=True)
-        elif self._indexing_task is not None:
-            logger.warning("Indexing thread did not stop in time; skipping FAISS save")
+            self._shutdown_complete = True
+        finally:
+            self._shutdown_in_progress = False
 
     # ------------------------------------------------------------------
     # Private — inventory
 
     def _start_inventory(self, collection_path: str) -> None:
+        if self._shutting_down:
+            return
         self._inventory_task = InventoryTask(collection_path, self._session_factory)
         self._inventory_thread = QtCore.QThread()
         self._inventory_task.moveToThread(self._inventory_thread)
@@ -158,6 +178,8 @@ class IndexingController(QtCore.QObject):
         self._inventory_thread.start()
 
     def _on_inventory_finished(self, _: int) -> None:
+        if self._shutting_down:
+            return
         self._teardown_inventory()
         self._start_indexing()
 
@@ -172,6 +194,8 @@ class IndexingController(QtCore.QObject):
     # Private — indexing
 
     def _start_indexing(self) -> None:
+        if self._shutting_down:
+            return
         self._indexing_task = IndexingTask(
             self._session_factory,
             self._vector_store,
@@ -188,6 +212,8 @@ class IndexingController(QtCore.QObject):
         self._indexing_thread.start()
 
     def _on_indexing_finished(self) -> None:
+        if self._shutting_down:
+            return
         self._teardown_indexing()
         self.indexing_finished.emit()
 
